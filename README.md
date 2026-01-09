@@ -14,5 +14,4 @@
   &nbsp;&nbsp;•&nbsp;&nbsp;
   <a href="https://neurons-me.github.io/GUI/storybook-static/" style="text-decoration:none" target="_blank">Storybook</a>
   &nbsp;&nbsp;•&nbsp;&nbsp;
-  <a href="https://neurons-me.github.io/" style="text-decoration:none" target="_blank">neurons.me</a>
 </p>
