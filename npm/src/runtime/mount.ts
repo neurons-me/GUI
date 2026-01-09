@@ -62,7 +62,30 @@ export function mount(
     cache.set(host, root);
   }
 
-  const el = renderWithGUI(tree, gui, { ...opt, React });
+  let el = renderWithGUI(tree, gui, { ...opt, React });
+
+  // Some components rely on `useInsetsContext`, which requires an `InsetsProvider` above.
+  // In UMD mode we try to discover providers from the exposed `window.GUI` surface.
+  const InsetsProvider =
+    (gui && (gui.InsetsProvider || gui.insetsProvider)) ||
+    (gui?.Contexts && (gui.Contexts.InsetsProvider || gui.Contexts.insetsProvider)) ||
+    (gui?.contexts && (gui.contexts.InsetsProvider || gui.contexts.insetsProvider)) ||
+    (gui?.Theme && (gui.Theme.InsetsProvider || gui.Theme.insetsProvider)) ||
+    (gui?.theme && (gui.theme.InsetsProvider || gui.theme.insetsProvider));
+
+  // If your GUI has a top-level theme/provider (common in this.GUI), wrap with it as well.
+  const GuiProvider =
+    (gui && (gui.GuiProvider || gui.GUIProvider)) ||
+    (gui?.Theme && (gui.Theme.GuiProvider || gui.Theme.GUIProvider)) ||
+    (gui?.theme && (gui.theme.GuiProvider || gui.theme.GUIProvider));
+
+  if (InsetsProvider) {
+    el = React.createElement(InsetsProvider as any, null, el);
+  }
+  if (GuiProvider) {
+    el = React.createElement(GuiProvider as any, null, el);
+  }
+
   root.render(el);
 
   return {

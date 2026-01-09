@@ -22,6 +22,9 @@ export default defineConfig({
     // `ReferenceError: React is not defined` in any component that only imports hooks.
     react({ jsxRuntime: 'automatic' })
   ],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
+  },
   resolve: {
     alias: {
       '@/gui/atoms': resolve(__dirname, 'src/gui/atoms'),
@@ -98,7 +101,15 @@ export default defineConfig({
           'react/jsx-dev-runtime': 'ReactJSXRuntime',
         },
         exports: 'named',
-        banner: '/* this.GUI — Neurons.me embeddable UI system */',
+        banner: `;(function(){
+          try {
+            var g = (typeof globalThis !== 'undefined') ? globalThis : (typeof window !== 'undefined' ? window : this);
+            if (!g.process) g.process = { env: {} };
+            if (!g.process.env) g.process.env = {};
+            if (!g.process.env.NODE_ENV) g.process.env.NODE_ENV = 'production';
+          } catch (e) {}
+        })();
+        /* this.GUI — Neurons.me embeddable UI system */`,
       },
     },
   },

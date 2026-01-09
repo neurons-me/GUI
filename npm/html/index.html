@@ -1,38 +1,180 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>UMD exports</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>this.GUI — Runtime</title>
+    <link
+      rel="icon"
+      href="https://res.cloudinary.com/dkwnxf6gm/image/upload/v1761276578/this.gui.npm.png"
+    />
+
+    <!-- Local CSS (preferred for repo demo). If you want CDN, swap to jsDelivr like your standalone. -->
+    <link rel="stylesheet" href="../dist/this.gui.css" />
+
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      /* Keep the demo resilient even if CSS bundle is missing */
+      #root {
+        min-height: 100vh;
+      }
+    </style>
   </head>
+
   <body>
-    <pre id="out">loading…</pre>
+    <div id="root"></div>
+
+    <!-- React UMD globals (required by runtime mount) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- si tu UMD necesita JSX runtime -->
     <script src="https://unpkg.com/react@18/umd/react-jsx-runtime.production.min.js"></script>
-    <!-- TU UMD (primero prueba el CDN o el dist servido por server) -->
-    <script src="this.gui.umd.js"></script>
+
+    <!-- Local UMD build -->
+    <script src="./this.gui.umd.js"></script>
+
     <script>
       (function () {
-        const out = document.getElementById("out");
         const GUI = window.GUI;
+        const rootEl = document.getElementById('root');
+
+        if (!rootEl) return;
 
         if (!GUI) {
-          out.textContent = "❌ window.GUI no existe (UMD no cargó o no expuso global).";
+          rootEl.innerHTML =
+            '<div style="font-family:ui-sans-serif,system-ui;padding:24px">❌ window.GUI not found</div>';
+          return;
+        }
+        if (typeof GUI.mount !== 'function') {
+          rootEl.innerHTML =
+            '<div style="font-family:ui-sans-serif,system-ui;padding:24px">❌ window.GUI exists, but GUI.mount is missing</div>';
           return;
         }
 
-        const keys = Object.keys(GUI).sort();
-        const defaultKeys = GUI.default && typeof GUI.default === "object"
-          ? Object.keys(GUI.default).sort()
-          : null;
+        // Sidebar config (same shape as your standalone example)
+        const leftSidebarConfig = {
+          initialView: 'rail',
+          elements: [
+            { type: 'link', props: { label: 'Home', icon: 'home', href: 'https://neurons-me.github.io/' } },
+            { type: 'link', props: { label: 'all.this', icon: 'hub', href: 'https://neurons-me.github.io/all.this' } },
+            { type: 'link', props: { label: '.GUI', icon: 'widgets', href: 'https://neurons-me.github.io/this.GUI' } },
+            { type: 'link', props: { label: 'Themes', icon: 'palette', href: 'https://neurons-me.github.io/themes.html' } },
+            { type: 'link', props: { label: 'Storybook', icon: 'auto_stories', href: 'https://neurons-me.github.io/storybook-static/' } },
+            { type: 'link', props: { label: 'GitHub', icon: 'code', href: 'https://github.com/neurons-me/this.GUI' } },
+            { type: 'link', props: { label: 'npm', icon: 'package_2', href: 'https://www.npmjs.com/package/this.gui' } },
+          ],
+        };
 
-        out.textContent =
-          "✅ window.GUI existe\n\n" +
-          "window.GUI keys (" + keys.length + "):\n" + keys.join(", ") + "\n\n" +
-          (defaultKeys
-            ? ("window.GUI.default keys (" + defaultKeys.length + "):\n" + defaultKeys.join(", "))
-            : "window.GUI.default: (none)");
+        // We build the spec first, then inject the JSON string into CodeBlock.
+        // This keeps the page “renderer-first” (GuiNode → renderWithGUI → ReactDOM).
+        const spec = {
+          type: 'Layout',
+          props: {
+            leftSidebarConfig,
+          },
+          children: [
+            {
+              type: 'Page',
+              props: { title: 'this.GUI — Runtime (JSON → renderer → UI)' },
+              children: [
+                {
+                  type: 'Box',
+                  props: {
+                    sx: {
+                      mt: 2,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      gap: 2,
+                      alignItems: 'start',
+                    },
+                  },
+                  children: [
+                    {
+                      type: 'CodeBlock',
+                      props: {
+                        title: 'spec.json',
+                        language: 'json',
+                        variant: 'dark',
+                        showLineNumbers: true,
+                        wrapLongLines: true,
+                        // placeholder (filled below)
+                        code: '',
+                      },
+                    },
+                    {
+                      type: 'Box',
+                      props: {
+                        sx: {
+                          p: 2,
+                          borderRadius: 2,
+                          border: '1px dashed rgba(0,0,0,0.25)',
+                          background: 'rgba(255,255,255,0.6)',
+                        },
+                      },
+                      children: [
+                        {
+                          type: 'Typography',
+                          props: { variant: 'subtitle2', sx: { mb: 1 } },
+                          children: ['Rendered components (from JSON)'],
+                        },
+                        {
+                          type: 'Button',
+                          props: { variant: 'contained' },
+                          children: ['Button'],
+                        },
+                        {
+                          type: 'Box',
+                          props: { sx: { mt: 1.5 } },
+                          children: [
+                            {
+                              type: 'TextField',
+                              props: { label: 'Input', placeholder: 'Type here…', fullWidth: true },
+                            },
+                          ],
+                        },
+                        {
+                          type: 'Typography',
+                          props: { variant: 'caption', sx: { display: 'block', mt: 1.5, opacity: 0.8 } },
+                          children: [
+                            'This panel proves the renderer is mapping "type" → window.GUI exports (Atoms/Molecules/etc.).',
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+
+        // Inject JSON into the CodeBlock node (first child in the grid)
+        try {
+          const json = JSON.stringify(spec, null, 2);
+          const codeBlockNode =
+            spec?.children?.[0]?.children?.[0]?.children?.[0];
+          if (codeBlockNode && codeBlockNode.type === 'CodeBlock') {
+            codeBlockNode.props.code = json;
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Mount via this.GUI runtime (providers are handled by mount.ts)
+        try {
+          GUI.mount(spec, '#root');
+        } catch (err) {
+          const msg = err && err.message ? err.message : String(err);
+          rootEl.innerHTML =
+            '<div style="font-family:ui-sans-serif,system-ui;padding:24px">❌ mount failed: ' +
+            msg +
+            '</div>';
+        }
       })();
     </script>
   </body>

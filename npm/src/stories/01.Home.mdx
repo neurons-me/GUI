@@ -38,8 +38,7 @@ export const EnsureMaterialSymbols = () => {
     const link = document.createElement('link');
     link.setAttribute('data-gui-material-symbols', '1');
     link.rel = 'stylesheet';
-    link.href =
-      'https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap';
+    link.href = `${import.meta.env.BASE_URL}material-symbols.css`;
     document.head.appendChild(link);
   }, []);
 
@@ -77,7 +76,7 @@ export default function Home() {
         .GUI
       </Typography>
       <Typography sx={{ maxWidth: 640, fontSize: '1.1rem', lineHeight: 1.4, mb: 3 }}>
-        Designed by neurons.me in Veracruz.
+        Designed in Veracruz.
       </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
         <Button 

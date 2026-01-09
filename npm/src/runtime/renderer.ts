@@ -53,10 +53,11 @@ function isPrimitive(v: any): v is GuiPrimitive {
 }
 
 /**
- * Build a lookup chain that matches how your UMD surface currently looks:
- * - root exports: GUI.Box, GUI.Layout, ...
+ * Build a lookup registry from the GUI UMD surface.
+ * Expected shape (single namespace, no `default` wrapper):
+ * - root exports: GUI.Button, GUI.Layout, GUI.mount, ...
  * - registries: GUI.Atoms, GUI.Molecules, GUI.Components, GUI.Widgets
- * - lowercase aliases in default: GUI.default?.atoms / molecules / components / widgets
+ * - lowercase aliases (optional): GUI.atoms / molecules / components / widgets / menus / hooks / contexts
  */
 export function inferRegistryFromGUI(gui: any): GuiRegistryLike {
   const out: GuiRegistryLike = {};
@@ -64,7 +65,7 @@ export function inferRegistryFromGUI(gui: any): GuiRegistryLike {
   // 1) Root keys (prefer these first)
   for (const k of Object.keys(gui)) out[k] = gui[k];
   // 2) Capital registries
-  const caps = ['Atoms', 'Molecules', 'Components', 'Widgets', 'Theme', 'QRouter', 'QRegistry'] as const;
+  const caps = ['Atoms', 'Molecules', 'Components', 'Widgets'] as const;
   for (const key of caps) {
     const reg = gui[key];
     if (reg && typeof reg === 'object') {
@@ -82,25 +83,6 @@ export function inferRegistryFromGUI(gui: any): GuiRegistryLike {
       for (const k of Object.keys(reg)) {
         if (out[k] == null) out[k] = reg[k];
       }
-    }
-  }
-
-  // 3) default.* registries
-  const d = gui.default;
-  if (d && typeof d === 'object') {
-    const lower = ['atoms', 'molecules', 'components', 'widgets', 'theme', 'router', 'qrouter', 'qregistry', 'contexts', 'hooks'] as const;
-    for (const key of lower) {
-      const reg = (d as any)[key];
-      if (reg && typeof reg === 'object') {
-        for (const k of Object.keys(reg)) {
-          if (out[k] == null) out[k] = reg[k];
-        }
-      }
-    }
-
-    // also include default surface itself
-    for (const k of Object.keys(d)) {
-      if (out[k] == null) out[k] = (d as any)[k];
     }
   }
 
