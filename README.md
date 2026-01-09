@@ -10,9 +10,9 @@
 ---
 
 <p align="center">
-  <a href="https://neurons-me.github.io/this.GUI/" target="_blank">🌐 Website</a>
+  <a href="https://neurons-me.github.io/GUI/" style="text-decoration:none" target="_blank">Website</a>
   &nbsp;&nbsp;•&nbsp;&nbsp;
-  <a href="https://neurons-me.github.io/storybook-static/" target="_blank">📘 Storybook</a>
+  <a href="https://neurons-me.github.io/GUI/storybook-static/" style="text-decoration:none" target="_blank">Storybook</a>
   &nbsp;&nbsp;•&nbsp;&nbsp;
-  <a href="https://neurons-me.github.io/" target="_blank">🧠 neurons.me</a>
+  <a href="https://neurons-me.github.io/" style="text-decoration:none" target="_blank">neurons.me</a>
 </p>
