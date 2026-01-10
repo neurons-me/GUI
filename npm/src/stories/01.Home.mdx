@@ -75,9 +75,10 @@ export default function Home() {
       <Typography variant="h2" sx={{ fontWeight: 700, letterSpacing: '-0.04em', mb: 1 }}>
         .GUI
       </Typography>
-      <Typography sx={{ maxWidth: 640, fontSize: '1.1rem', lineHeight: 1.4, mb: 3 }}>
-        Designed in Veracruz.
+      <Typography variant="h4" sx={{ fontWeight: 500, opacity: 0.85, mb: 2 }}>
+      Composable, Declarative and Imperative.
       </Typography>
+   
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
         <Button 
         variant="contained" 
@@ -620,6 +621,9 @@ export default function Home() {
         </CardContent>
       </Card>
     </Box>
+         <Typography sx={{ maxWidth: 640, fontSize: '1.1rem', lineHeight: 1.4, mb: 3 }}>
+        Designed in Veracruz.
+      </Typography>
   </Box>
     </GuiProvider>
   );

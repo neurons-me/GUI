@@ -56,9 +56,23 @@ export default defineConfig({
           },
           name: 'GUI',
           fileName: (format, entryName) => {
-            const name = entryName === 'index' ? 'this.gui' : entryName;
-            if (format === 'cjs') return `${name}.cjs`;
-            return `${name}.${format}.js`;
+            // IMPORTANT: These filenames must match package.json "main/module/exports".
+            // Root entry
+            if (entryName === 'index') {
+              if (format === 'es') return 'this.gui.es.js';
+              if (format === 'cjs') return 'this.gui.cjs';
+              return `this.gui.${format}.js`;
+            }
+
+            // Subpath entries
+            if (entryName === 'atoms') {
+              if (format === 'es') return 'atoms/index.js';
+              if (format === 'cjs') return 'atoms/index.cjs';
+              return `atoms/index.${format}.js`;
+            }
+            // Fallback for any future entrypoints
+            if (format === 'cjs') return `${entryName}.cjs`;
+            return `${entryName}.${format}.js`;
           },
           formats: ['es', 'cjs'],
         },

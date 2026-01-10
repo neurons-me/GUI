@@ -113,6 +113,7 @@ export const Widgets = {
   HighLighter,
   HighLightsDrawer,
 } as const;
+
 export const Components = {
   Blockchain,
   IdentityNoise,

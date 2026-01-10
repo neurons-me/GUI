@@ -1,3 +1,4 @@
+//src/runtime/renderer.ts
 // this.GUI — runtime renderer
 // Turns a small JSON-ish spec into React elements using a registry from window.GUI.
 //

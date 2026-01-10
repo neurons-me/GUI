@@ -1,3 +1,4 @@
+//src/runtime/mount.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GuiNode, RendererOptions } from './renderer';
 import { renderWithGUI } from './renderer';
