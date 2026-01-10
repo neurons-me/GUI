@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://res.cloudinary.com/dkwnxf6gm/image/upload/v1760894993/neurons-pip-io-no-background_yfxaer.png" alt=".GUI logo" width="320"/>
+  <img src="https://res.cloudinary.com/dkwnxf6gm/image/upload/v1760895349/neurons.me-pip_dbdyvu.png" alt=".GUI logo" width="320"/>
 </p>
 <h1 align="center">.GUI</h1>
 
