@@ -11,6 +11,7 @@ import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
+import { playwright } from '@vitest/browser-playwright';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 const cleakerSourceEntry = resolve(dirname, '../../../modules/cleaker/Typescript/src/index.ts');
 const meSourceEntry = resolve(dirname, '../../../me/Typescript/dist/me.es.js');
@@ -455,7 +456,7 @@ export default defineConfig({
         browser: {
           enabled: true,
           headless: true,
-          provider: 'playwright',
+          provider: playwright(),
           instances: [{
             browser: 'chromium'
           }]
