@@ -8,6 +8,12 @@ export type PixelWordmarkProps = {
   /** Multiplier on pixelSize for cell width — >1 widens the whole glyph set without redrawing the bitmap. */
   pixelAspect?: number;
   fg?: string;
+  /** Defaults to ".me" — this component started as the .me mark's own
+   *  renderer (see meMark.ts) before any other bitmap used it; a caller
+   *  drawing a different wordmark (e.g. NetGetMark.tsx's "NETGET") should
+   *  pass its own label so the accessible name matches what's actually
+   *  drawn. */
+  ariaLabel?: string;
   className?: string;
   style?: React.CSSProperties;
   'data-gui-node-id'?: string;
@@ -29,6 +35,7 @@ export default function PixelWordmark({
   pixelSize = 2,
   pixelAspect = 1,
   fg = 'currentColor',
+  ariaLabel = '.me',
   className,
   style,
   'data-gui-node-id': dataGuiNodeId,
@@ -62,7 +69,7 @@ export default function PixelWordmark({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label=".me"
+      aria-label={ariaLabel}
       shapeRendering="crispEdges"
     >
       <g fill={fg}>{rects}</g>

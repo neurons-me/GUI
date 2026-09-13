@@ -139,6 +139,77 @@ export function resolveSemanticRootName(input: {
   return handle || resolver || rootHost;
 }
 
+// ── Effective budget — namespace contract, not live telemetry ────────────────
+// How many blockchain rows a namespace's render is entitled to, negotiated
+// from `.me` intent, surface policy, assigned budget, and current CPU
+// pressure. Lives here (not in HostResources) because it's the
+// namespace's declared contract/policy — pressure feeds it as an input,
+// but the result is a governance number, not a live metric itself.
+
+export type BlockchainLimitSnapshot = {
+  meLimit: number;
+  policyLimit: number;
+  budgetRows: number;
+  pressureCpu: number;
+  baseLimit: number;
+  effectiveLimit: number;
+};
+
+export function normalizePositiveNumber(raw: unknown, fallback: number): number {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+export function normalizePressure(raw: unknown, fallback: number): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+export function getSurfaceBlockchainDefaults(surface: {
+  type?: string | null;
+  status?: { availability?: string | null; syncState?: string | null } | null;
+}) {
+  const type = String(surface?.type || '').trim().toLowerCase();
+  const availability = String(surface?.status?.availability || '').trim().toLowerCase();
+  const syncState = String(surface?.status?.syncState || '').trim().toLowerCase();
+  const online = availability === 'online' || syncState === 'current';
+
+  if (type === 'mobile' || type === 'browser-tab') {
+    return { policyLimit: 48, budgetRows: 24, pressureCpu: online ? 0.4 : 0.65 };
+  }
+
+  if (type === 'server' || type === 'node') {
+    return { policyLimit: 100, budgetRows: 60, pressureCpu: online ? 0.2 : 0.45 };
+  }
+
+  return { policyLimit: 80, budgetRows: 50, pressureCpu: online ? 0.3 : 0.55 };
+}
+
+export function computeBlockchainLimit(input: {
+  meLimit?: number | null;
+  surface?: {
+    type?: string | null;
+    status?: { availability?: string | null; syncState?: string | null } | null;
+    policy?: { gui?: { blockchain?: { limit?: number | null } | null } | null } | null;
+    budget?: { gui?: { blockchain?: { rows?: number | null } | null } | null } | null;
+    pressure?: { cpu?: number | null } | null;
+  } | null;
+}): BlockchainLimitSnapshot {
+  const surface = input.surface || null;
+  const defaults = getSurfaceBlockchainDefaults(surface || {});
+  const meLimit = normalizePositiveNumber(input.meLimit, 120);
+  const policyLimit = normalizePositiveNumber(surface?.policy?.gui?.blockchain?.limit, defaults.policyLimit);
+  const budgetRows = normalizePositiveNumber(surface?.budget?.gui?.blockchain?.rows, defaults.budgetRows);
+  const pressureCpu = normalizePressure(surface?.pressure?.cpu, defaults.pressureCpu);
+  const baseLimit = Math.min(meLimit, policyLimit, budgetRows);
+  const effectiveLimit = Math.max(5, Math.floor(baseLimit * (1 - pressureCpu)));
+
+  return { meLimit, policyLimit, budgetRows, pressureCpu, baseLimit, effectiveLimit };
+}
+
 export function createSurfaceEntry(input: {
   namespaceUrl: string;
   endpoint: string;

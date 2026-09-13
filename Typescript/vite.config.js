@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import mdx from '@mdx-js/rollup';
 import { resolve } from 'path';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +36,136 @@ export default defineConfig({
     // Use the automatic JSX runtime so components don't need `import React`.
     // Storybook renders source TSX directly, so forcing the classic runtime causes
     // `ReferenceError: React is not defined` in any component that only imports hooks.
-    react({ jsxRuntime: 'automatic' })
+    react({ jsxRuntime: 'automatic' }),
+    // demo/ has more than one HTML entry (index.html, claimFlow.html) --
+    // Vite's dev-server SPA fallback only ever serves index.html for an
+    // unmatched path, which breaks claimFlow.main.tsx's own client-side
+    // router (CleakerLanding's BrowserRouter expects to see e.g.
+    // "/keychain/claim" in the URL it loaded from). Dev-only, demo-only:
+    // any request that isn't a real file and isn't already index.html
+    // falls back to claimFlow.html instead of Vite's own default.
+    ...(isDemo ? [{
+      name: 'demo-claim-flow-spa-fallback',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+          const url = req.url || '';
+          // Stands in for the REAL topology's shared backend: netget's
+          // own /main-server-namespace, reachable same-origin from
+          // wherever Cleaker is served because nginx's admin block
+          // routes every configured hostname to the one Express app.
+          // This demo has no such shared process -- two separate Vite
+          // instances on two ports -- so CleakerNetgetClaimView's
+          // returnTo-allowlist fetch needs a same-origin stand-in here,
+          // pointed at whichever port this run's "netget role" is on.
+          if (url.startsWith('/main-server-namespace')) {
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({
+              namespace: 'local.cleaker',
+              mainServerName: process.env.DEMO_NETGET_ORIGIN || 'http://127.0.0.1:5173',
+            }));
+            return;
+          }
+          // gatewaySetupSession.ts's real, production ALLOWED_CLAIM_RETURN_PATHS
+          // only ever allows "/" -- GatewaySetup's one real mount point.
+          // This demo instance IS the netget role when DEMO_ROLE=netget is
+          // set (the netget-role vite instance in the two-port harness),
+          // so its own "/" must serve claimFlow.html too, matching that
+          // real constraint, instead of falling through to index.html
+          // (the unrelated older keychain-only demo).
+          if (url === '/' && process.env.DEMO_ROLE === 'netget') {
+            req.url = '/claimFlow.html?role=netget';
+            return next();
+          }
+          // cleakerHome.main.tsx composes the real CleakerLanding (its own
+          // nested <Routes> for "/", "/users", "/blockchain", "/keychain",
+          // ...) plus "/netget", "/netget/apps", "/netget/apps/:appId" and
+          // "/netget/apps/:appId/pages/:pageId" for administering mounted
+          // apps and editing their pages. CleakerLanding's internal route
+          // matching needs the browser's ACTUAL pathname to be exactly "/"
+          // (and the others exactly themselves) — same reasoning as
+          // claimFlow's own fallback above, just a different route set.
+          // "/netget/apps/*" is prefix-matched (not a fixed list) because
+          // appId/pageId are real route params now, not a hardcoded pair.
+          // Gated behind DEMO_ROLE=cleakerHome so it never shadows "/" for
+          // the other demos (index.html, claimFlow.html) sharing this same
+          // dev server.
+          if (process.env.DEMO_ROLE === 'cleakerHome') {
+            const cleakerHomeExactPaths = ['/', '/users', '/blockchain', '/keychain', '/keychain/claim', '/keychain/admin-sign', '/netget', '/netget/logs', '/netget/apps'];
+            const pathOnly = url.split('?')[0];
+            if (cleakerHomeExactPaths.includes(pathOnly) || pathOnly.startsWith('/netget/apps/')) {
+              const queryIndex = url.indexOf('?');
+              req.url = queryIndex === -1 ? '/cleakerHome.html' : `/cleakerHome.html${url.slice(queryIndex)}`;
+              return next();
+            }
+          }
+          // Disposable stand-in for netget's real mesh registry endpoint
+          // (GET /apps in modules/netget/Typescript/.../backend/routes/
+          // localNetget.js, backed by apps.json + readReportedApps() in
+          // src/runtime/appRegistry.ts). This demo runs no netget backend
+          // process of its own, so "/netget/apps" has nothing real to read
+          // from unless something serves that same shape here — this
+          // middleware mirrors readReportedApps()'s exact reduction
+          // (lastSeenMs/ttlMs -> alive) against a disposable, file-backed
+          // apps.json seeded once with this pilot's one real app ("gui",
+          // pointed at the disposable monad this harness already runs).
+          // It is NOT wired to a live heartbeat (this harness's monad
+          // never calls /apps/report) — the entry is seeded, not reported
+          // — that gap is called out explicitly in cleakerHome.main.tsx's
+          // own top comment and is real future work, not hidden here.
+          if (process.env.DEMO_ROLE === 'cleakerHome' && url.startsWith('/api/netget/apps')) {
+            const registryDir = path.join(os.tmpdir(), 'gui-catalog-harness-netget-data', 'runtime');
+            const registryPath = path.join(registryDir, 'apps.json');
+            if (!fs.existsSync(registryPath)) {
+              fs.mkdirSync(registryDir, { recursive: true });
+              const seeded = {
+                version: 1,
+                updatedAt: new Date().toISOString(),
+                apps: {
+                  gui: {
+                    id: 'gui',
+                    name: 'gui',
+                    host: '127.0.0.1',
+                    port: 8162,
+                    lastSeenMs: Date.now(),
+                    ttlMs: 45_000,
+                    trust: 'owner',
+                    frontendMode: 'dev',
+                    localOnly: true,
+                    metadata: {
+                      monadName: 'gui-catalog-harness-dev',
+                      namespace: 'gui-catalog-harness.local',
+                      endpoint: 'http://127.0.0.1:8162',
+                    },
+                    tags: ['pilot', 'disposable'],
+                  },
+                },
+              };
+              fs.writeFileSync(registryPath, JSON.stringify(seeded, null, 2));
+            }
+            let registry = { apps: {}, updatedAt: null };
+            try {
+              registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            } catch { /* treat unreadable registry as empty, same as readReportedApps() */ }
+            const now = Date.now();
+            const apps = Object.values(registry.apps || {}).map((app) => {
+              const lastSeenMs = Number(app.lastSeenMs || 0);
+              const ttlMs = Number(app.ttlMs || 45_000);
+              return { ...app, alive: lastSeenMs > 0 && now - lastSeenMs <= ttlMs };
+            }).sort((a, b) => a.name.localeCompare(b.name));
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ apps, count: apps.length, updatedAt: registry.updatedAt }));
+            return;
+          }
+          if (url === '/' || url.startsWith('/index.html') || url.startsWith('/claimFlow.html')) return next();
+          if (url.startsWith('/@') || url.startsWith('/src/') || url.startsWith('/node_modules/')) return next();
+          if (/\.[a-zA-Z0-9]+(\?|$)/.test(url)) return next(); // has a file extension -> a real asset request
+          const queryIndex = url.indexOf('?');
+          req.url = queryIndex === -1 ? '/claimFlow.html' : `/claimFlow.html${url.slice(queryIndex)}`;
+          next();
+        });
+      },
+    }] : []),
   ],
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
@@ -290,7 +420,27 @@ export default defineConfig({
       // HMR websocket path stays under /gui/ so the monad can proxy it too.
       path: '/gui/__vite_hmr',
     },
-  } : isDemo ? { open: true } : false,
+  } : isDemo ? {
+    open: true,
+    // CleakerNetgetAdminSignView's /admin-session/challenge and
+    // /admin-session/verify calls target `allowedReturnOrigin` --
+    // which MUST equal returnTo's own origin (this vite instance, the
+    // "netget role" page) for the returnToAuthorized check to pass, per
+    // its real production assumption that netget's frontend and its own
+    // backend are same-origin (true when proxy.js serves both; not true
+    // in this harness, where logs-harness-server.mjs is a separate
+    // process). Proxying just this one path through to DEMO_BACKEND_ORIGIN
+    // makes that assumption hold here too, without changing the real
+    // component. LogsView's OWN /logs and /main-server-namespace calls
+    // are unaffected -- they go directly to the real backend origin via
+    // its `endpoint` prop, cross-origin but CORS-enabled there already.
+    // No-op unless DEMO_BACKEND_ORIGIN is set.
+    ...(process.env.DEMO_BACKEND_ORIGIN ? {
+      proxy: {
+        '/admin-session': process.env.DEMO_BACKEND_ORIGIN,
+      },
+    } : {}),
+  } : false,
   test: {
     projects: [{
       extends: true,

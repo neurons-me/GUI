@@ -21,6 +21,7 @@ import type { RuntimeAdapter } from '@/runtime/adapter';
 import { createMeRuntime, readMeValue } from '@/runtime/run-me';
 import type { MeLike } from '@/react/types';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
+import { deriveWireSecretFromRootBytes, hexToBytes } from '@/core/identity/recoveryPhrase';
 import {
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
   MonadClientError,
@@ -43,10 +44,46 @@ import {
 
 export type CleakerSessionOptions = MonadClientOptions & {
   username: string;
-  password: string;
+  /**
+   * Required for the default (no identityRootHex) path — that's where
+   * `deriveCompoundSeed(username, password)` needs it, both for the
+   * kernel's own `#seed` and for `secretForWire`. Not read at all when
+   * identityRootHex is provided (see that field's own doc comment) —
+   * optional here so a phrase-based caller (registration, day-to-day
+   * vault-backed sign-in, or recovery) never has to invent one.
+   */
+  password?: string;
   /** Root namespace to bind into, e.g. "local.cleaker" or "cleaker.me". */
   namespace: string;
   runtime?: RuntimeAdapter | null;
+  /**
+   * Overrides what BOTH the kernel's identity root (`#seed`) AND the wire
+   * `secret` are derived from. Default (omitted): `#seed` AND `secret`
+   * are both deriveCompoundSeed(username, password) — the identity IS the
+   * password, with no independent backup, exactly as before this field
+   * existed.
+   *
+   * Pass a hex root (e.g. from recoveryPhrase.ts's
+   * deriveIdentityRootHexFromPhrase, itself reconstructible from either a
+   * 12-word phrase or a password-unwrapped local vault) to make BOTH:
+   * - the signed proof (identityHash/publicKey — see prove()) derive from
+   *   this root instead of the password, and
+   * - `secretForWire` derive from this SAME root too (via
+   *   deriveWireSecretFromRootBytes), NOT from username+password anymore.
+   *
+   * That second part is what makes recovery-with-data-access possible
+   * without any server change: `secret` is what the server (modules/
+   * monad's claim/records.ts) scrypt's into the key that encrypts/decrypts
+   * `noise` — fully independent of identityHash/publicKey validation
+   * (verified live). Re-deriving the same root from the phrase later
+   * reproduces the exact same `secret`, which reproduces the exact same
+   * `noise`-decryption key the original claim established — recovery
+   * becomes calling the ALREADY-EXISTING signIn/open endpoint with a
+   * re-derived secret, not a new server capability. The password itself
+   * never factors into anything sent to the server on this path at all;
+   * it only ever unlocks the local vault.
+   */
+  identityRootHex?: string;
 };
 
 // bindKernel's claim()/signIn() throw plain `Error(CODE)` strings (see
@@ -128,26 +165,61 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   if (!username) throw new SeedSessionError('SEED_REQUIRED', 'Username is required to create a cleaker session.');
   if (!rootNamespace) throw new SeedSessionError('NAMESPACE_REQUIRED', 'A root namespace is required to create a cleaker session.');
 
-  // The 2-arg constructor both derives the compound seed AND sets
-  // #activeExpression — required for prove()/bindNamespace() to work at
-  // all (confirmed live: the 1-arg seed-string form createSeedSession.ts
-  // uses never sets it, and prove() throws ACTIVE_EXPRESSION_REQUIRED
-  // without it).
+  const explicitIdentityRootHex = String(options.identityRootHex || '').trim();
+
   // Same `as any` cast signedRequest.ts already uses for this exact import —
   // this package's 'this.me' default export is typed as the factory
   // function (ThisMeInput-based), not the raw ME class's own constructor
-  // overloads, so TS doesn't see the 2-arg (who, secret) form without it.
-  const me = (new (ME as any)(username, password) as unknown as MeLike & {
-    bindNamespace: (root: string) => unknown;
-  });
-  me.bindNamespace(rootNamespace);
+  // overloads, so TS doesn't see either constructor form without it.
+  // The kernel's actual #seed equivalent, kept explicit and separate from
+  // secretForWire below (they're the SAME value in the default path only —
+  // deriveCompoundSeed(username,password) IS what the 2-arg ME constructor
+  // uses as #seed internally too — but genuinely different values on the
+  // identityRootHex path). signPayload further down needs THIS, not
+  // secretForWire, to derive the same branch-proof key prove() would.
+  const kernelSeedHex = explicitIdentityRootHex || deriveCompoundSeed(username, password);
 
-  // The secret sent over the wire must be the SAME derived value the REST
-  // path already uses (deriveCompoundSeed(username, password)), not the raw
-  // password — this is what every existing claim (including real,
-  // already-claimed namespaces) was created with. Passing the raw password
-  // instead would silently fail to decrypt any existing claim's noise.
-  const secretForWire = deriveCompoundSeed(username, password);
+  let me: any;
+  if (explicitIdentityRootHex) {
+    // Explicit root (e.g. phrase-derived): the 1-arg raw-seed constructor,
+    // same form createSeedSession.ts's loginWithSeed already uses — but
+    // THAT path never sets #activeExpression (no username involved at
+    // all), so prove()/bindNamespace() below need it set explicitly via
+    // the '@' identity call (Axiom A1) before anything else touches the
+    // kernel. me.ts's persistSeed() never fires for an explicit seed
+    // either way (see this.me's own seed-persistence fix) — this root
+    // only ever gets stored where THIS session explicitly puts it (see
+    // localIdentityVault.ts), never as a plaintext side effect here.
+    me = new (ME as any)(explicitIdentityRootHex);
+    me['@'](username);
+  } else {
+    // Default: the 2-arg constructor both derives the compound seed AND
+    // sets #activeExpression in one step — required for prove()/
+    // bindNamespace() to work at all (confirmed live: the 1-arg seed-string
+    // form createSeedSession.ts uses never sets it, and prove() throws
+    // ACTIVE_EXPRESSION_REQUIRED without it).
+    me = new (ME as any)(username, password);
+  }
+  (me as unknown as MeLike & { bindNamespace: (root: string) => unknown }).bindNamespace(rootNamespace);
+
+  // Lazy + memoized: deriveWireSecretFromRootBytes is WebCrypto-async, and
+  // this function itself stays synchronous (its existing contract — see
+  // SeedSessionProvider.tsx's callers, none of which await construction).
+  // Computed once, on first actual use (claim/open/sync), not at
+  // construction time.
+  let secretForWirePromise: Promise<string> | null = null;
+  const getSecretForWire = (): Promise<string> => {
+    if (!secretForWirePromise) {
+      secretForWirePromise = explicitIdentityRootHex
+        // See CleakerSessionOptions.identityRootHex's own doc comment for
+        // why this is derived from the ROOT, not from username+password —
+        // that's the entire mechanism that makes recovery-with-data
+        // possible without a server change.
+        ? deriveWireSecretFromRootBytes(hexToBytes(explicitIdentityRootHex))
+        : Promise.resolve(deriveCompoundSeed(username, password));
+    }
+    return secretForWirePromise;
+  };
 
   const runtime = options.runtime || createMeRuntime(me);
   const monad = createMonadClient(options);
@@ -194,7 +266,8 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     }
 
     try {
-      const result = await node.claim({ namespace: semanticNamespace, secret: secretForWire });
+      const secret = await getSecretForWire();
+      const result = await node.claim({ namespace: semanticNamespace, secret });
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
@@ -211,7 +284,8 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     }
 
     try {
-      const result = await node.signIn({ namespace: semanticNamespace, secret: secretForWire });
+      const secret = await getSecretForWire();
+      const result = await node.signIn({ namespace: semanticNamespace, secret });
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
@@ -280,14 +354,14 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     // Same branch-proof key derivation prove() uses internally
     // (deriveBranchProofSeed(seed, expression) -> importEd25519SigningKey),
     // now signing a caller-supplied message instead of prove()'s own fixed
-    // claim/challenge shape. secretForWire and username are already in
+    // claim/challenge shape. kernelSeedHex and username are already in
     // closure scope from session creation -- the raw key never leaves this
     // module, and this derives the exact same key the server already holds
     // the public half of from claim time (see modules/monad's
     // records.ts:rawEd25519PublicKeyToPem, and the cross-package
     // compatibility test in modules/monad's crossPackageSigning.test.ts).
     async signPayload(message: string): Promise<string> {
-      const branchSeed = await deriveBranchProofSeed(secretForWire, username);
+      const branchSeed = await deriveBranchProofSeed(kernelSeedHex, username);
       const { privateKey } = await importEd25519SigningKey(branchSeed);
       return signEd25519Proof(privateKey, message);
     },

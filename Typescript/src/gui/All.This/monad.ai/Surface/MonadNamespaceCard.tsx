@@ -1,15 +1,21 @@
-// MonadNamespaceCard — composes the 3 pieces of a namespace surface:
-// the monad.ai orb, MonadClaims, and MonadMesh. Pure display: all data
-// comes in via props, passed straight through to each sub-component.
-
+// MonadNamespaceCard — composes 2 pieces of a namespace surface: the
+// monad.ai orb (the subtractive-synthesis identicon bubble, "is this
+// physical surface healthy") and MonadMesh (which monads are live/sleeping
+// under it, plus restart-all). Pure display: all data comes in via props.
+//
+// Used to also include MonadClaims (namespace claim/user rows) as a third
+// section here — removed on purpose: claims belong to the NAMESPACE, not to
+// a monad instance, and Cleaker/Users already shows them in full. Stacking
+// a second, compact copy of the same data under an orb+mesh card mixed
+// two unrelated concerns (identity vs. runtime/mesh health) into one
+// component. This card is purely "is this physical monad host alive, and
+// what's running on it" — namespace/user identity lives elsewhere.
 import * as React from 'react';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import Monad from '../monad.ai';
-import MonadClaims, { MonadClaimIdentity } from './MonadClaims';
 import MonadMesh, { MonadMeshAppEntry, MonadMeshSleepingEntry, MonadMeshRestartStatus } from './MonadMesh';
 
-export type MonadNamespaceClaimIdentity = MonadClaimIdentity;
 export type MonadNamespaceAppEntry = MonadMeshAppEntry;
 export type MonadNamespaceSleepingEntry = MonadMeshSleepingEntry;
 export type MonadNamespaceRestartStatus = MonadMeshRestartStatus;
@@ -19,10 +25,6 @@ export interface MonadNamespaceCardProps {
   namespace: string;
   /** Drives the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
-  /** Whether this namespace has been claimed at all. */
-  claimed: boolean;
-  /** Flattened claim rows to render — owner first by convention. */
-  claimRows: MonadNamespaceClaimIdentity[];
   /** Currently live/registered monads. */
   apps: MonadNamespaceAppEntry[];
   /** Known-but-not-running monads (from the catalog) that can be woken. */
@@ -50,8 +52,6 @@ const cardSx = {
 export default function MonadNamespaceCard({
   namespace,
   healthy = null,
-  claimed,
-  claimRows,
   apps,
   sleepingEntries = [],
   waking = {},
@@ -72,20 +72,16 @@ export default function MonadNamespaceCard({
           <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} />
         </Box>
 
-        <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-          <MonadClaims claimed={claimed} claimRows={claimRows} />
-
-          <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1.25 }}>
-            <MonadMesh
-              apps={apps}
-              sleepingEntries={sleepingEntries}
-              waking={waking}
-              onWake={onWake}
-              restartStatus={restartStatus}
-              restartError={restartError}
-              onRestartAll={onRestartAll}
-            />
-          </Box>
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1.5 }}>
+          <MonadMesh
+            apps={apps}
+            sleepingEntries={sleepingEntries}
+            waking={waking}
+            onWake={onWake}
+            restartStatus={restartStatus}
+            restartError={restartError}
+            onRestartAll={onRestartAll}
+          />
         </Box>
       </Box>
     </Box>

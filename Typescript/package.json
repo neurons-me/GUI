@@ -99,7 +99,7 @@
     "build:umd:bootstrap": "UMD=true UMD_TARGET=bootstrap vite build",
     "build:umd:searchbar": "UMD=true UMD_TARGET=searchbar vite build",
     "build:umd": "npm run build:umd:core && npm run build:umd:bootstrap && npm run build:umd:searchbar",
-    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts",
+    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts && tsx tests/registryMetaCoverage.test.ts",
     "pack:local": "npm run build && npm pack",
     "prepublishOnly": "npm run build",
     "dev": "vite",
@@ -123,6 +123,7 @@
     "@mui/icons-material": "^6.5.0",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
+    "@scure/bip39": "^2.4.0",
     "@uiw/react-markdown-preview": "^5.1.5",
     "@uiw/react-md-editor": "^4.0.11",
     "cleaker": "file:../../../modules/cleaker/Typescript",
@@ -150,22 +151,19 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "vitepress": "^1.6.4",
-    "vue": "^3.5.13",
-    "@mui/material": "^6.4.6",
-    "@mui/system": "^6.5.0",
     "@chromatic-com/storybook": "^5.2.1",
     "@eslint/js": "^9.21.0",
     "@mdx-js/loader": "^3.1.0",
     "@mdx-js/react": "^3.1.0",
     "@mdx-js/rollup": "^3.1.0",
+    "@mui/material": "^6.4.6",
+    "@mui/system": "^6.5.0",
     "@storybook/addon-a11y": "^10.4.6",
     "@storybook/addon-docs": "^10.4.6",
     "@storybook/addon-links": "^10.4.6",
     "@storybook/addon-themes": "^10.4.6",
     "@storybook/addon-vitest": "^10.4.6",
     "@storybook/react-vite": "^10.4.6",
-    "storybook": "^10.4.6",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^24.10.4",
     "@types/react": "^18.3.0",
@@ -188,19 +186,22 @@
     "react-dom": "^18.3.1",
     "react-router": "^6.30.1",
     "react-router-dom": "^6.30.1",
+    "storybook": "^10.4.6",
     "supertest": "^7.2.2",
     "tsx": "^4.22.4",
     "typescript": "^5.9.2",
     "vite": "^6.2.0",
     "vite-tsconfig-paths": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.9",
+    "vue": "^3.5.13"
   },
   "peerDependencies": {
+    "@mui/material": "^6.0.0",
+    "@mui/system": "^6.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0",
-    "react-router-dom": "^6.0.0",
-    "@mui/material": "^6.0.0",
-    "@mui/system": "^6.0.0"
+    "react-router-dom": "^6.0.0"
   },
   "peerDependenciesMeta": {
     "react-router-dom": {

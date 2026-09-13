@@ -253,6 +253,8 @@ export const parameters = {
         ['Router', 'Examples & Recipes'],
         'Users',
         ['Users', '.me', ['cleaker', 'monad.ai']],
+        'All.This',
+        ['Cleaker', ['.me', 'Register']],
         'gui',
         'Layout',
         'Theme',

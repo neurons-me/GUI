@@ -28,7 +28,14 @@ export type MeLike =
 export type MeSubscribeBridge = (path: string, callback: () => void) => (() => void) | void;
 
 export type MeRuntimeContextValue = {
-  me: MeLike;
+  /**
+   * null before any identity is authenticated — MeRuntimeProvider now
+   * mounts at a permanently stable tree position (see its own doc comment)
+   * so a session completing does not remount whatever's underneath it;
+   * consumers that require a live kernel must check for null explicitly
+   * (useMeRuntime() does this and throws) rather than assuming one exists.
+   */
+  me: MeLike | null;
   runtime: RuntimeAdapter | null;
   subscribe?: MeSubscribeBridge | null;
 };

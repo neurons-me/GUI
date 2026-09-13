@@ -128,16 +128,6 @@ export { default as Monad } from '@/gui/All.This/monad.ai/monad.ai';
 export type { MonadProps } from '@/gui/All.This/monad.ai/monad.ai';
 export { default as QRme } from '@/gui/All.This/me/QR/QR.me';
 export type { QRmeProps } from '@/gui/All.This/me/QR/QR.me';
-export { default as MonadNamespaceCard } from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
-export type {
-  MonadNamespaceCardProps,
-  MonadNamespaceClaimIdentity,
-  MonadNamespaceAppEntry,
-  MonadNamespaceSleepingEntry,
-  MonadNamespaceRestartStatus,
-} from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
-export { default as MonadClaims } from '@/gui/All.This/monad.ai/Surface/MonadClaims';
-export type { MonadClaimsProps, MonadClaimIdentity } from '@/gui/All.This/monad.ai/Surface/MonadClaims';
 export { default as MonadMesh } from '@/gui/All.This/monad.ai/Surface/MonadMesh';
 export type {
   MonadMeshProps,
@@ -145,6 +135,13 @@ export type {
   MonadMeshSleepingEntry,
   MonadMeshRestartStatus,
 } from '@/gui/All.This/monad.ai/Surface/MonadMesh';
+export { default as MonadNamespaceCard } from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
+export type {
+  MonadNamespaceCardProps,
+  MonadNamespaceAppEntry,
+  MonadNamespaceSleepingEntry,
+  MonadNamespaceRestartStatus,
+} from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
 export { default as HighLighter } from '@/gui/widgets/HighLighter/HighLighter';
 export { default as CodeBlock } from '@/gui/Molecules/CodeBlock/CodeBlock';
 export { default as MarkdownDocument } from '@/gui/Molecules/Documents/MarkdownDocument/MarkdownDocument';
@@ -179,6 +176,16 @@ export {
 } from '@/gui/Molecules/menus/GUI-Tools/GUI-Tools';
 export { default as CleakerGroup } from '@/gui/All.This/Cleaker/Group/CleakerGroup';
 export { default as CleakerUser } from '@/gui/All.This/Cleaker/User/CleakerUser';
+export { default as NetGetMark } from '@/gui/All.This/netget/NetGetMark';
+export { default as GatewaySetup } from '@/gui/All.This/netget/Setup/GatewaySetup';
+export type { GatewaySetupProps, ActionResult, SetupCodeResult } from '@/gui/All.This/netget/Setup/GatewaySetup';
+export type { SetupPhase, DependencyStatus, DependencyState, ClaimReturnProof } from '@/gui/All.This/netget/Setup/setupState';
+export { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
+export type { NetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
+export { default as MainServerView } from '@/gui/All.This/netget/MainServer/MainServerView';
+export type { MainServerViewProps } from '@/gui/All.This/netget/MainServer/MainServerView';
+export { default as LogsView } from '@/gui/All.This/netget/MainServer/LogsView';
+export type { LogsViewProps, LogEntry, LogType } from '@/gui/All.This/netget/MainServer/LogsView';
 export {
   createMonadClient,
   claimNamespace,

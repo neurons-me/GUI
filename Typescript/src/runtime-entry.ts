@@ -20,3 +20,11 @@ export { SpecBoundary } from './runtime/SpecBoundary';
 export type { SpecBoundaryProps } from './runtime/SpecBoundary';
 export { AppShell } from './runtime/AppShell';
 export type { AppShellProps, AppShellNavItem } from './runtime/AppShell';
+// GuiRegistry (the aggregated { [type]: RegistryEntry } map built from every
+// component's own .resolver.tsx — meta.demoSpec included) had no public
+// export path at all before this line — only reachable via the internal
+// `@/Registry` alias. Exposing the existing object here, not duplicating
+// or rebuilding it: a spec-driven catalog app needs this to resolve
+// `type` strings and to enumerate demoSpecs for live previews.
+export { GuiRegistry } from './Registry';
+export type { RegistryEntry, RegistryMeta, RegistryKind, GuiRegistry as GuiRegistryType } from './Registry';

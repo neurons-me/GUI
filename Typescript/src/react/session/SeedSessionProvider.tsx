@@ -20,6 +20,8 @@ import {
   type MonadWriteResult,
 } from '@/core/session/monadClient';
 import { getActiveNamespaceRoot, fetchGatewayHostname } from '@/gui/All.This/Cleaker/signedRequest';
+import { bytesToHex, deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
+import { hasLocalIdentityVault, loadLocalIdentityVault } from '@/core/identity/localIdentityVault';
 
 export type SeedSessionStatus = 'idle' | 'pending' | 'ready' | 'error';
 
@@ -37,6 +39,12 @@ export type SeedCredentialsLoginInput = {
   namespace?: string | null;
   transportOrigin?: string | null;
   autoOpen?: boolean;
+  /**
+   * registerWithCredentials() only: overrides the claimed identity's root
+   * (see createCleakerSession's identityRootHex — same doc comment applies
+   * here). Ignored by loginWithCredentials()/loginWithSeed().
+   */
+  identityRootHex?: string | null;
 };
 
 export type SeedCredentialResolution =
@@ -99,7 +107,16 @@ export type SeedSessionContextErrorCode =
   | 'SESSION_REQUIRED'
   | 'CREDENTIAL_LOGIN_UNAVAILABLE'
   | 'INVALID_CREDENTIAL_RESULT'
-  | 'INVALID_CLAIM';
+  | 'INVALID_CLAIM'
+  | 'INVALID_RECOVERY_PHRASE';
+
+export type SeedRecoveryInput = {
+  username: string;
+  /** Exactly 12 words, in order — see recoveryPhrase.ts's WORD_COUNT. */
+  words: string[];
+  namespace?: string | null;
+  transportOrigin?: string | null;
+};
 
 export class SeedSessionContextError<
   Code extends SeedSessionContextErrorCode = SeedSessionContextErrorCode,
@@ -128,6 +145,31 @@ export type SeedSessionContextValue = {
   activateSession(session: SeedSession | null): SeedSession | null;
   loginWithSeed(input: SeedSessionLoginInput): Promise<SeedSession>;
   loginWithCredentials(input: SeedCredentialsLoginInput): Promise<SeedSession>;
+  /**
+   * The explicit, deliberate counterpart to loginWithCredentials(): always
+   * claims (via cleaker's real signed-proof path, same as
+   * sessionBackend="cleaker"), never tries an open() first. Exists so a
+   * real "Register User" form/action is the only thing that can create a
+   * new namespace — loginWithCredentials() itself no longer falls through
+   * to claimAndOpen() on CLAIM_NOT_FOUND (see openExistingNamespace's own
+   * comment for why that auto-claim was removed).
+   */
+  registerWithCredentials(input: SeedCredentialsLoginInput): Promise<SeedSession>;
+  /**
+   * Recovers an ALREADY-claimed identity from its 12-word phrase alone —
+   * no password. Re-derives the exact same root the original registration
+   * used, which reproduces the exact same wire secret and therefore the
+   * exact same `noise`-decryption key: this calls the ordinary open()
+   * endpoint (no server-side recovery capability needed), and on success
+   * recovers real data access, not just a fresh empty claim. Never sends
+   * the phrase or the derived root anywhere — only what claim/signIn
+   * always sent (the derived secret + signed proof). Does not itself
+   * touch the local vault; callers that want day-to-day password sign-in
+   * again afterward should derive the root a second time from the same
+   * words and call saveLocalIdentityVault with a NEW password (see
+   * RecoverAccount.tsx).
+   */
+  recoverWithPhrase(input: SeedRecoveryInput): Promise<SeedSession>;
   claim(namespace: string): Promise<MonadClaimResult>;
   open(namespace?: string | null): Promise<MonadOpenResult>;
   claimAndOpen(namespace: string): Promise<MonadOpenResult>;
@@ -272,23 +314,36 @@ function normalizeCredentialResolution(
 // Shared by both backends (loginWithSeed's createSeedSession path and
 // loginWithCredentials' opt-in createCleakerSession path) so they produce
 // identical behavior and error messages regardless of which one is active.
-// Only a genuinely UNCLAIMED namespace falls through to claimAndOpen()
-// ("first claimer wins" — SessionSurface.enter() originally did this by
-// hand). A WRONG SECRET against an already-claimed namespace must NOT
-// attempt a claim (it used to, silently, producing a confusing raw
-// "CLAIM NAMESPACE_TAKEN") — surfaced instead as a clean "Invalid Claim".
-async function openOrClaim(session: SeedSession, namespace: string): Promise<void> {
+//
+// Deliberately does NOT fall through to claimAndOpen() on CLAIM_NOT_FOUND
+// anymore ("first claimer wins" — auto-registering a brand-new identity the
+// instant an unrecognized username is submitted). Claiming a namespace must
+// be an explicit, separate action (a real "Register User" form/flow), never
+// a silent side effect of a mistyped or new username in the sign-in form —
+// otherwise a typo in your own username silently creates a new empty
+// identity instead of telling you it doesn't exist.
+//
+// CLAIM_NOT_FOUND, IDENTITY_MISMATCH, and CLAIM_VERIFICATION_FAILED all
+// surface as the same generic "Invalid Claim" here — the sign-in form
+// should not reveal whether a username doesn't exist or the secret was
+// wrong (that distinction is exactly what username enumeration attacks
+// look for). CLAIM_NOT_FOUND used to propagate as the raw MonadClientError
+// instead, which meant the sign-in form displayed its unhumanized fallback
+// message ("OPEN CLAIM_NOT_FOUND") verbatim. A real "Register" affordance
+// stays a separate, explicit action — never inferred from this error.
+async function openExistingNamespace(session: SeedSession, namespace: string): Promise<void> {
   try {
     await session.open(namespace);
   } catch (openError) {
     const code = openError instanceof MonadClientError ? openError.code : null;
-    if (code === 'CLAIM_NOT_FOUND') {
-      await session.claimAndOpen(namespace);
-    } else if (code === 'IDENTITY_MISMATCH' || code === 'CLAIM_VERIFICATION_FAILED') {
+    if (
+      code === 'IDENTITY_MISMATCH' ||
+      code === 'CLAIM_VERIFICATION_FAILED' ||
+      code === 'CLAIM_NOT_FOUND'
+    ) {
       throw new SeedSessionContextError('INVALID_CLAIM', 'Invalid Claim');
-    } else {
-      throw openError;
     }
+    throw openError;
   }
 }
 
@@ -404,7 +459,7 @@ export function SeedSessionProvider({
 
       try {
         if (shouldAutoOpen && options.semanticNamespace) {
-          await openOrClaim(nextSession, options.semanticNamespace);
+          await openExistingNamespace(nextSession, options.semanticNamespace);
         }
         commitSnapshot(nextSession);
         return nextSession;
@@ -455,6 +510,29 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
+      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+
+      // Day-to-day sign-in for a phrase-registered identity: if this
+      // browser holds a local vault for this exact namespace (written at
+      // registration or by a prior recovery — see RegisterMe.tsx/
+      // RecoverAccount.tsx), unlock it with the password TYPED HERE and
+      // reconstruct the SAME root the registration/recovery flow used,
+      // rather than deriving a completely different, unrelated identity
+      // via deriveCompoundSeed(username, password) (createCleakerSession's
+      // default path). A vault that exists but won't unlock with this
+      // password is a definitive, specific failure — surfaced directly
+      // instead of falling through to a compound-seed attempt that would
+      // only ever produce a confusing generic "Invalid Claim" further down.
+      let identityRootHex: string | undefined;
+      if (hasLocalIdentityVault(fullNamespace)) {
+        try {
+          const rootBytes = await loadLocalIdentityVault(fullNamespace, password);
+          identityRootHex = rootBytes ? bytesToHex(rootBytes) : undefined;
+        } catch (cause) {
+          return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect password.'));
+        }
+      }
+
       React.startTransition(() => {
         setStatus('pending');
         setError(null);
@@ -470,13 +548,13 @@ export function SeedSessionProvider({
         transportOrigin: cleakerTransportOrigin,
         fetchImpl,
         headers,
+        identityRootHex,
       });
-      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
       const shouldAutoOpen = input.autoOpen !== false;
 
       try {
         if (shouldAutoOpen) {
-          await openOrClaim(nextSession, fullNamespace);
+          await openExistingNamespace(nextSession, fullNamespace);
         }
         commitSnapshot(nextSession);
         return nextSession;
@@ -485,6 +563,142 @@ export function SeedSessionProvider({
           nextSession.logout();
         } catch {
           // Best-effort cleanup for failed logins.
+        }
+        commitSnapshot(null);
+        return fail(cause);
+      }
+    },
+    [commitSnapshot, defaultTransportOrigin, fail, fetchImpl, headers],
+  );
+
+  const registerWithCredentials = React.useCallback(
+    async (input: SeedCredentialsLoginInput) => {
+      const username = String(input.username || input.email || '').trim();
+      const password = String(input.password || '');
+
+      if (!username) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+      }
+
+      let rootNamespace = String(input.namespace || '').trim() || getActiveNamespaceRoot() || '';
+      if (!rootNamespace) {
+        try {
+          rootNamespace = await fetchGatewayHostname();
+        } catch (cause) {
+          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+      }
+      if (!rootNamespace) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+      }
+
+      React.startTransition(() => {
+        setStatus('pending');
+        setError(null);
+      });
+
+      const cleakerTransportOrigin = normalizeMonadTransportOrigin(
+        input.transportOrigin || defaultTransportOrigin,
+      );
+      const nextSession = createCleakerSession({
+        username,
+        password,
+        namespace: rootNamespace,
+        transportOrigin: cleakerTransportOrigin,
+        fetchImpl,
+        headers,
+        identityRootHex: String(input.identityRootHex || '').trim() || undefined,
+      });
+      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+
+      try {
+        // Deliberate register action — always claims, never tries open()
+        // first. The explicit counterpart to loginWithCredentials' refusal
+        // to auto-create an identity on CLAIM_NOT_FOUND: this is the one
+        // path allowed to, because the caller (a real "Register User"
+        // form/button) has already said so on purpose.
+        await nextSession.claimAndOpen(fullNamespace);
+        commitSnapshot(nextSession);
+        return nextSession;
+      } catch (cause) {
+        try {
+          nextSession.logout();
+        } catch {
+          // Best-effort cleanup for failed registration.
+        }
+        commitSnapshot(null);
+        return fail(cause);
+      }
+    },
+    [commitSnapshot, defaultTransportOrigin, fail, fetchImpl, headers],
+  );
+
+  const recoverWithPhrase = React.useCallback(
+    async (input: SeedRecoveryInput) => {
+      const username = String(input.username || '').trim();
+      const words = Array.isArray(input.words) ? input.words : [];
+
+      if (!username) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+      }
+
+      let rootNamespace = String(input.namespace || '').trim() || getActiveNamespaceRoot() || '';
+      if (!rootNamespace) {
+        try {
+          rootNamespace = await fetchGatewayHostname();
+        } catch (cause) {
+          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+      }
+      if (!rootNamespace) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+      }
+
+      // Derived and validated BEFORE flipping to 'pending' — an invalid
+      // phrase is a purely local, instant failure, same reasoning
+      // RegisterMe.tsx's derivation-error guard uses.
+      let identityRootHex: string;
+      try {
+        identityRootHex = bytesToHex(await deriveIdentityRootBytesFromPhrase(words));
+      } catch (cause) {
+        return fail(new SeedSessionContextError('INVALID_RECOVERY_PHRASE', 'That phrase is not a valid recovery phrase.'));
+      }
+
+      React.startTransition(() => {
+        setStatus('pending');
+        setError(null);
+      });
+
+      const cleakerTransportOrigin = normalizeMonadTransportOrigin(
+        input.transportOrigin || defaultTransportOrigin,
+      );
+      const nextSession = createCleakerSession({
+        username,
+        namespace: rootNamespace,
+        transportOrigin: cleakerTransportOrigin,
+        fetchImpl,
+        headers,
+        identityRootHex,
+      });
+      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+
+      try {
+        // open(), deliberately never claim(): recovery reconnects to an
+        // ALREADY-existing claim. The re-derived root/secret either match
+        // what that claim was created with (real recovery, real data back)
+        // or the server rejects them (CLAIM_NOT_FOUND / IDENTITY_MISMATCH
+        // / a secretCommitment mismatch) — openExistingNamespace's mapping
+        // already turns all of those into one generic INVALID_CLAIM here,
+        // exactly like a normal sign-in's wrong-secret case, so this can't
+        // be used to enumerate which usernames exist either.
+        await openExistingNamespace(nextSession, fullNamespace);
+        commitSnapshot(nextSession);
+        return nextSession;
+      } catch (cause) {
+        try {
+          nextSession.logout();
+        } catch {
+          // Best-effort cleanup for a failed recovery attempt.
         }
         commitSnapshot(null);
         return fail(cause);
@@ -662,6 +876,8 @@ export function SeedSessionProvider({
       activateSession,
       loginWithSeed,
       loginWithCredentials,
+      registerWithCredentials,
+      recoverWithPhrase,
       claim,
       open,
       claimAndOpen,
@@ -677,6 +893,8 @@ export function SeedSessionProvider({
       clearError,
       error,
       loginWithCredentials,
+      registerWithCredentials,
+      recoverWithPhrase,
       loginWithSeed,
       activateSession,
       open,
@@ -689,12 +907,14 @@ export function SeedSessionProvider({
     ],
   );
 
-  const content = snapshot.me && snapshot.runtime ? (
+  // Always the same wrapper, whether or not a session exists yet — see
+  // MeRuntimeProvider's own doc comment for why conditionally inserting it
+  // only post-auth used to remount (and silently wipe the state of)
+  // everything underneath it the instant a claim/login succeeded.
+  const content = (
     <MeRuntimeProvider me={snapshot.me} runtime={snapshot.runtime}>
       {children}
     </MeRuntimeProvider>
-  ) : (
-    children
   );
 
   const SeedSessionContext = getSeedSessionContext();

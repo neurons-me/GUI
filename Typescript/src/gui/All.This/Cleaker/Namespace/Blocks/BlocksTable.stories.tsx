@@ -29,7 +29,7 @@ export default meta;
 export const Default = () => (
   <Theme>
     <BlocksTable
-      endpoint="http://local.netget/apps/netget"
+      endpoint="http://127.0.0.1:8164"
       namespaceRootUrl="http://local.cleaker"
       namespaceLabel="local.cleaker"
     />

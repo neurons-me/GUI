@@ -379,13 +379,22 @@ export function BlocksTable({
       }
 
       const tryFetchJson = async (url: string) => {
+        // `cache: 'no-store'` alone already tells the fetch itself to skip
+        // the HTTP cache — the Cache-Control/Pragma REQUEST headers this
+        // used to also send were redundant with that, and being
+        // non-"simple" headers, they force a CORS preflight (OPTIONS) on
+        // every request. Confirmed live: netget's own mesh proxy
+        // (/apps/netget/*, what this hits when embedded in CleakerLanding
+        // rather than given a direct origin) doesn't allow them in
+        // Access-Control-Allow-Headers, so the preflight itself failed —
+        // UsersTable.tsx's sibling fetch never hit this because it sends
+        // no extra headers at all (a plain GET is CORS-"simple", no
+        // preflight needed either way).
         const res = await fetch(url, {
           method: 'GET',
           cache: 'no-store',
           headers: {
             'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
           },
         });
         const text = await res.text();
