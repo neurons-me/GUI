@@ -1,6 +1,6 @@
 // src/themes/catalog/GhostShell/manifest.ts
 import type { ThemeManifest } from '@/types/theme';
-import badgeImage from './ghost.png';
+import badgeImage from './ghost.png?url';
 import lightTokens from './light.tokens';
 import darkTokens from './dark.tokens';
 const ghostShellManifest: ThemeManifest = {

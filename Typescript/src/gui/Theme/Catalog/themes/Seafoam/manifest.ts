@@ -1,6 +1,6 @@
 // src/themes/tokens/Seafoam/manifest.ts
 import type { ThemeManifest } from '@/types/theme';
-import badgeImage from './seaFoam.png';
+import badgeImage from './seaFoam.png?url';
 import lightTokens from './light.tokens';
 import darkTokens from './dark.tokens';
 const SeafoamManifest: ThemeManifest = {

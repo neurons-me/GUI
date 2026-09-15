@@ -1,6 +1,6 @@
 // src/themes/tokens/neurons/manifest.ts
 import type { ThemeManifest } from '@/types/theme';
-import badgeImage from './princeOfDarkness.png';
+import badgeImage from './princeOfDarkness.png?url';
 import lightTokens from './light.tokens';
 import darkTokens from './dark.tokens';
 const PrinceOfDarknessManifest: ThemeManifest = {

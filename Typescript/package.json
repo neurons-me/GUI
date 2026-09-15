@@ -51,8 +51,8 @@
       "import": "./dist/cleaker/index.js",
       "require": "./dist/cleaker/index.cjs"
     },
-    "./style.css": "./dist/styles.css",
-    "./style": "./dist/styles.css",
+    "./style.css": "./dist/material-symbols.css",
+    "./style": "./dist/material-symbols.css",
     "./atoms": {
       "types": "./dist/atoms/index.d.ts",
       "import": "./dist/atoms/index.js",

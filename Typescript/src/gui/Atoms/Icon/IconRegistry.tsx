@@ -1,6 +1,15 @@
 import * as React from 'react';
 import clsx from 'clsx';
-import 'material-symbols';
+// Deliberately no `import 'material-symbols'` here: that bare import pulls
+// in ALL THREE families (outlined/rounded/sharp) from the npm package via
+// this.gui's own bundler, and on this build's asset pipeline that ends up
+// inlining the fonts as base64 in the bundled CSS (~12MB, even though only
+// "material-symbols-rounded" is ever used anywhere in this codebase).
+// Consumers must instead <link> the real, cacheable public/material-symbols.css
+// (+ public/material-symbols-rounded.woff2) directly in their own HTML shell
+// — the same pattern every demo/*.html and Storybook's preview-head already
+// use. The class names below (.material-symbols-rounded) are plain global
+// CSS selectors; nothing here depends on the JS import for them to resolve.
 
 const iconRegistry: Record<string, React.LazyExoticComponent<React.ComponentType<any>>> = {};
 

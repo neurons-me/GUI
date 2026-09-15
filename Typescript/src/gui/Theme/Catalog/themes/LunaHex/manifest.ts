@@ -1,6 +1,6 @@
 // src/themes/catalog/neurons/manifest.ts
 import type { ThemeManifest } from '@/types/theme';
-import badgeImage from './LunaHex.png';
+import badgeImage from './LunaHex.png?url';
 import lightTokens from './light.tokens';
 import darkTokens from './dark.tokens';
 const lunaManifest: ThemeManifest = {

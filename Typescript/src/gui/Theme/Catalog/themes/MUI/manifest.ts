@@ -1,6 +1,6 @@
 // src/themes/catalog/neurons/manifest.ts
 import type { ThemeManifest } from '@/types/theme';
-import badgeImage from './MUI.png';
+import badgeImage from './MUI.png?url';
 import lightTokens from './light.tokens';
 import darkTokens from './dark.tokens';
 const muiManifest: ThemeManifest = {
