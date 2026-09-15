@@ -12,8 +12,8 @@ export type RegistryMeta = {
   id: string;
   label: string;
   kind: RegistryKind;
-  path?: string[];
-  tags?: string[];
+  path?: readonly string[];
+  tags?: readonly string[];
   demoSpec?: GuiNode;
   [key: string]: any;
 };

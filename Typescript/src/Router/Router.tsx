@@ -3,11 +3,6 @@ import { BrowserRouter, useInRouterContext } from "react-router-dom";
 import { mount as mountGUI } from "@/runtime/mount";
 import type { MountOptions, MountTarget } from "@/runtime/mount";
 
-const ROUTER_FUTURE_FLAGS = {
-  v7_startTransition: true,
-  v7_relativeSplatPath: true,
-} as const;
-
 export type RouteSpec = any;
 export type RouterRuntime = {
   resolve?: (value: any, context?: RouterResolveContext) => any | Promise<any>;
@@ -358,7 +353,10 @@ export function router(
  */
 export const RouterProvider: React.FC<{ children?: ReactNode }> = ({ children }) => {
   const inRouter = useInRouterContext();
-  return inRouter ? <>{children}</> : <BrowserRouter future={ROUTER_FUTURE_FLAGS}>{children}</BrowserRouter>;
+  // react-router-dom v7: the v6-era future flags (v7_startTransition,
+  // v7_relativeSplatPath) opted into behavior that's just the default now
+  // -- BrowserRouterProps no longer has a `future` prop for them at all.
+  return inRouter ? <>{children}</> : <BrowserRouter>{children}</BrowserRouter>;
 };
 
 export default RouterProvider;
