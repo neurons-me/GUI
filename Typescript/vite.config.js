@@ -5,7 +5,6 @@ import react from '@vitejs/plugin-react';
 import mdx from '@mdx-js/rollup';
 import { resolve } from 'path';
 import path from 'node:path';
-import os from 'node:os';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -100,64 +99,13 @@ export default defineConfig({
               return next();
             }
           }
-          // Disposable stand-in for netget's real mesh registry endpoint
-          // (GET /apps in modules/netget/Typescript/.../backend/routes/
-          // localNetget.js, backed by apps.json + readReportedApps() in
-          // src/runtime/appRegistry.ts). This demo runs no netget backend
-          // process of its own, so "/netget/apps" has nothing real to read
-          // from unless something serves that same shape here — this
-          // middleware mirrors readReportedApps()'s exact reduction
-          // (lastSeenMs/ttlMs -> alive) against a disposable, file-backed
-          // apps.json seeded once with this pilot's one real app ("gui",
-          // pointed at the disposable monad this harness already runs).
-          // It is NOT wired to a live heartbeat (this harness's monad
-          // never calls /apps/report) — the entry is seeded, not reported
-          // — that gap is called out explicitly in cleakerHome.main.tsx's
-          // own top comment and is real future work, not hidden here.
-          if (process.env.DEMO_ROLE === 'cleakerHome' && url.startsWith('/api/netget/apps')) {
-            const registryDir = path.join(os.tmpdir(), 'gui-catalog-harness-netget-data', 'runtime');
-            const registryPath = path.join(registryDir, 'apps.json');
-            if (!fs.existsSync(registryPath)) {
-              fs.mkdirSync(registryDir, { recursive: true });
-              const seeded = {
-                version: 1,
-                updatedAt: new Date().toISOString(),
-                apps: {
-                  gui: {
-                    id: 'gui',
-                    name: 'gui',
-                    host: '127.0.0.1',
-                    port: 8162,
-                    lastSeenMs: Date.now(),
-                    ttlMs: 45_000,
-                    trust: 'owner',
-                    frontendMode: 'dev',
-                    localOnly: true,
-                    metadata: {
-                      monadName: 'gui-catalog-harness-dev',
-                      namespace: 'gui-catalog-harness.local',
-                      endpoint: 'http://127.0.0.1:8162',
-                    },
-                    tags: ['pilot', 'disposable'],
-                  },
-                },
-              };
-              fs.writeFileSync(registryPath, JSON.stringify(seeded, null, 2));
-            }
-            let registry = { apps: {}, updatedAt: null };
-            try {
-              registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-            } catch { /* treat unreadable registry as empty, same as readReportedApps() */ }
-            const now = Date.now();
-            const apps = Object.values(registry.apps || {}).map((app) => {
-              const lastSeenMs = Number(app.lastSeenMs || 0);
-              const ttlMs = Number(app.ttlMs || 45_000);
-              return { ...app, alive: lastSeenMs > 0 && now - lastSeenMs <= ttlMs };
-            }).sort((a, b) => a.name.localeCompare(b.name));
-            res.setHeader('content-type', 'application/json');
-            res.end(JSON.stringify({ apps, count: apps.length, updatedAt: registry.updatedAt }));
-            return;
-          }
+          // No stand-in for netget's mesh registry endpoint here anymore --
+          // cleakerHome.main.tsx now reads the REAL registry directly from
+          // NETGET_ENDPOINT (the disposable netget-gateway-harness-server.mjs
+          // process, backed by GET /apps in localNetget.js + appRegistry.ts's
+          // readReportedApps()/upsertReportedApp()). A real monad's own
+          // POST /apps/report heartbeat is what populates it now, not a
+          // file seeded here on first request.
           if (url === '/' || url.startsWith('/index.html') || url.startsWith('/claimFlow.html')) return next();
           if (url.startsWith('/@') || url.startsWith('/src/') || url.startsWith('/node_modules/')) return next();
           if (/\.[a-zA-Z0-9]+(\?|$)/.test(url)) return next(); // has a file extension -> a real asset request

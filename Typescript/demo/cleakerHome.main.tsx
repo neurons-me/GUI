@@ -162,10 +162,12 @@ const NETGET_ENDPOINT = params.get('netgetEndpoint') || 'http://127.0.0.1:4603';
 // every other disposable-infra caveat in this pilot.
 const CLEAKER_ENDPOINT_URL = `http://${ROOT_NAMESPACE}`;
 
-// This pilot's disposable harness only ever runs ONE app's content tree
-// ("gui" -- see dev-harness/gui-catalog-harness-server.mts) with ONE known
-// page ("home"). Once a real page-listing mechanism exists, this becomes
-// a real fetched list instead of a constant.
+// Still a hardcoded stand-in, not a real page-listing mechanism (that's
+// separate, real future work -- see this file's own top comment). "myblog"
+// added alongside "gui" to prove a SECOND app, registered under a
+// DIFFERENT owner's own namespace, gets its authorization from that
+// namespace's own claim (appAuthorization.ts) rather than from anything
+// specific to "gui".
 const KNOWN_PAGES_BY_APP: Record<string, string[]> = { gui: ['home'] };
 
 interface NetgetAppEntry {
@@ -314,20 +316,25 @@ function NetgetGatewayLogs() {
   );
 }
 
-// "/netget/apps" — the mesh registry, read (not reinvented): same shape as
-// modules/netget/Typescript/src/runtime/appRegistry.ts's
-// readReportedApps() / apps.json, served here by a disposable dev-only
-// stand-in (vite.config.js). See that file's own comment for exactly what
-// is and isn't live about this data.
+// "/netget/apps" — the REAL mesh registry: GET {NETGET_ENDPOINT}/apps
+// (localNetget.js), which only ever returns entries that are actually
+// live (it scrubs expired ones server-side, the same as apps.lua's own
+// list_apps() -- see appRegistry.ts's upsertReportedApp() for the write
+// half a real monad's heartbeat lands through). No dev-only stand-in
+// anymore -- this reads whatever a real POST /apps/report heartbeat
+// actually put there.
 function NetgetAppsList() {
   const [apps, setApps] = React.useState<NetgetAppEntry[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
-    fetch('/api/netget/apps')
+    fetch(`${NETGET_ENDPOINT}/apps`)
       .then((res) => res.json())
-      .then((body) => { if (!cancelled) setApps(body.apps || []); })
+      // The real endpoint only ever returns entries it already confirmed
+      // are live (it scrubs expired ones itself) -- it doesn't send an
+      // `alive` flag back, unlike the old seeded stand-in this replaces.
+      .then((body) => { if (!cancelled) setApps((body.apps || []).map((a: NetgetAppEntry) => ({ ...a, alive: true }))); })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, []);
@@ -366,9 +373,11 @@ function NetgetAppDetail() {
 
   React.useEffect(() => {
     let cancelled = false;
-    fetch('/api/netget/apps')
+    fetch(`${NETGET_ENDPOINT}/apps`)
       .then((res) => res.json())
-      .then((body) => { if (!cancelled) setEntry((body.apps || []).find((a: NetgetAppEntry) => a.id === appId) || null); });
+      // Same as NetgetAppsList: the real endpoint only returns entries it
+      // already confirmed are live and sends no `alive` flag of its own.
+      .then((body) => { if (!cancelled) setEntry((body.apps || []).map((a: NetgetAppEntry) => ({ ...a, alive: true })).find((a: NetgetAppEntry) => a.id === appId) || null); });
     return () => { cancelled = true; };
   }, [appId]);
 
@@ -420,19 +429,86 @@ function AppPageEditor() {
     setActiveNamespaceRoot(ROOT_NAMESPACE);
   });
 
+  // The page's real destination -- WHICH namespace/monad this specific
+  // appId's content actually lives on -- comes from the app's own REAL
+  // registry entry (metadata.namespace/metadata.endpoint), read from the
+  // same live registry NetgetAppsList/NetgetAppDetail read (no dev-only
+  // stand-in), never from the signed-in identity and never from the
+  // page-wide defaults: editing apps.gui.* must still resolve to whoever
+  // gui-catalog-harness.local's own claim says owns it, and a different
+  // app reporting a different namespace/endpoint must resolve THERE
+  // instead -- a fallback to the global default here would make that
+  // distinction untestable (every app would silently resolve the same
+  // way whether or not resolution actually worked). So there is no
+  // fallback: usePageView is only ever called (by AppPageEditorResolved
+  // below) once a real entry with both fields is confirmed found. While
+  // resolving, or if the app never registered, this blocks -- no read, no
+  // edit, no request against a guessed destination.
+  const [registryStatus, setRegistryStatus] = React.useState<'loading' | 'found' | 'not-found' | 'error'>('loading');
+  const [registryEntry, setRegistryEntry] = React.useState<NetgetAppEntry | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    setRegistryStatus('loading');
+    fetch(`${NETGET_ENDPOINT}/apps`)
+      .then((res) => res.json())
+      .then((body) => {
+        if (cancelled) return;
+        const found = (body.apps || []).find((a: NetgetAppEntry) => a.id === appId) || null;
+        setRegistryEntry(found);
+        setRegistryStatus(found ? 'found' : 'not-found');
+      })
+      .catch(() => { if (!cancelled) setRegistryStatus('error'); });
+    return () => { cancelled = true; };
+  }, [appId]);
+
+  const resolvedEndpoint = registryEntry?.metadata?.endpoint;
+  const resolvedNamespace = registryEntry?.metadata?.namespace;
+
+  if (registryStatus !== 'found' || !resolvedEndpoint || !resolvedNamespace) {
+    return (
+      <NetgetChrome backTo={`/netget/apps/${appId}`} backLabel={`← apps.${appId}`}>
+        <Typography variant="h4">apps.{appId} — {pageId}</Typography>
+        {registryStatus === 'loading' && (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Resolving destination…</Typography>
+        )}
+        {registryStatus === 'error' && (
+          <Typography variant="body2" sx={{ color: 'error.main' }}>
+            Could not reach the registry — cannot resolve where apps.{appId} runs. No operations available.
+          </Typography>
+        )}
+        {(registryStatus === 'not-found' || (registryStatus === 'found' && (!resolvedEndpoint || !resolvedNamespace))) && (
+          <Typography variant="body2" sx={{ color: 'error.main' }}>
+            apps.{appId} is not registered with Netget (no live heartbeat, or its entry is missing endpoint/namespace) —
+            its real destination is unknown, so this page cannot be opened or edited. No default is assumed.
+          </Typography>
+        )}
+      </NetgetChrome>
+    );
+  }
+
+  return (
+    <AppPageEditorResolved appId={appId!} pageId={pageId!} endpoint={resolvedEndpoint} rootNamespace={resolvedNamespace} />
+  );
+}
+
+// Only ever mounted once AppPageEditor has confirmed a real registry entry
+// with both endpoint and namespace -- usePageView is called unconditionally
+// here, but that's safe precisely because this component doesn't exist
+// until the destination is real.
+function AppPageEditorResolved({ appId, pageId, endpoint: pageEndpoint, rootNamespace: pageRootNamespace }: { appId: string; pageId: string; endpoint: string; rootNamespace: string }) {
   const seed = useSeedSession();
   const authenticated = (seed as any).authenticated as boolean;
   const { canEdit, leftBarElements, content, registry, status, dirty } = usePageView({
-    endpoint,
-    rootNamespace: ROOT_NAMESPACE,
-    appId: appId!,
-    pageId: pageId!,
+    endpoint: pageEndpoint,
+    rootNamespace: pageRootNamespace,
+    appId,
+    pageId,
     signedOutHeader: <SignedOutHeader />,
   });
 
   return (
     <Layout
-      TopBar={{ title: `${ROOT_NAMESPACE} — apps.${appId} (${canEdit ? 'editor' : authenticated ? 'signed in, no edit access' : 'visitor'})` }}
+      TopBar={{ title: `${pageRootNamespace} — apps.${appId} (${canEdit ? 'editor' : authenticated ? 'signed in, no edit access' : 'visitor'})` }}
       LeftBar={
         canEdit
           ? { initialView: 'expanded', elements: leftBarElements }
