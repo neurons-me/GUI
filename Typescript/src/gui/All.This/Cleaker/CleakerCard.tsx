@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { alpha } from '@mui/material/styles';
-import { GlobalStyles } from '@mui/system';
 import Box from '@/gui/Atoms/Box/Box';
 import Button from '@/gui/Atoms/Button/Button';
 import Icon from '@/gui/Atoms/Icon/Icon';
@@ -185,18 +184,6 @@ export default function CleakerCard(props: CleakerCardProps) {
 
   return (
     <>
-      {/* Same jellyfish-drift feel as QR.me.tsx — a soft, mostly-static
-          glow with a slow vertical drift + gentle breathing scale, not an
-          intensity pulse. See QR.me.tsx's comment: an earlier version
-          pulsed the glow's own strength and read as too much glow. */}
-      <GlobalStyles
-        styles={{
-          '@keyframes qrmeGlow': {
-            '0%, 100%': { transform: 'translateY(0px) scale(1)' },
-            '50%': { transform: 'translateY(-5px) scale(1.012)' },
-          },
-        }}
-      />
       <Box
       {...nodeAttrs('card', 'Cleaker.Card')}
       sx={{
@@ -229,17 +216,21 @@ export default function CleakerCard(props: CleakerCardProps) {
               sx={{
                 width: avatarExpanded ? 146 : 64,
                 height: avatarExpanded ? 146 : 64,
-                borderRadius: '50%',
+                // Square, not circular — same real, confirmed bug as
+                // QR.me.tsx's own QR face (see its doc comment): a circular
+                // frame this close to the QR's own side length clips the
+                // corner finder patterns a camera needs intact.
+                borderRadius: '12px',
                 overflow: 'hidden',
                 border: `1px solid ${themedUi.qrBorder}`,
                 // Monad.tsx's own ring: a thicker solid ring plus a real
                 // colored glow, not just a soft dark drop shadow — same
                 // touch as QR.me.tsx's QR face.
-                // Dialed way back — see QR.me.tsx's matching comment: thin
-                // ring, soft low-alpha spread, the drift animation is doing
-                // the "alive" work now, not shadow intensity.
+                // Static, not animated — this is a real scannable QR
+                // (Cleaker.AvatarQR), same reasoning as QR.me.tsx's own
+                // matching comment: continuous motion puts the finder
+                // patterns a camera needs to lock onto in motion too.
                 boxShadow: `0 0 0 2px ${theme.palette.primary.main}, 0 0 14px 3px ${theme.palette.primary.main}40, ${avatarExpanded ? '0 12px 22px rgba(0,0,0,0.18)' : '0 8px 18px rgba(0,0,0,0.14)'}`,
-                animation: 'qrmeGlow 5s ease-in-out infinite',
                 background: themedUi.qrBackground,
                 cursor: 'pointer',
                 transition: 'width 180ms ease, height 180ms ease, box-shadow 180ms ease',

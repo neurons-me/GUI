@@ -1,10 +1,35 @@
 import React from 'react';
-import { GlobalStyles } from '@mui/system';
 import { Avatar, Box, Typography } from '@/gui/Atoms';
 import { useGuiTheme } from '@/gui-internals/Hooks';
-import QR from '../QR';
+import QR, { getQrModuleCount, snapQrCellSize } from '../QR';
 import PixelWordmark from './PixelWordmark';
 import { ME_WORDMARK_EMBED_BITMAP } from './meMark';
+
+// Must match the ecc/quietZone actually passed to <QR> below — this is
+// what decides how many modules a given value needs, which is exactly
+// what MIN_PX_PER_MODULE below is sizing against.
+const QR_ECC = 'H' as const;
+const QR_QUIET_ZONE_MODULES = 1;
+// Investigated live (2026-09-16): a phone camera read local.cleaker's QR
+// fine with a short value, stopped recognizing it once a longer value (a
+// username appended) pushed qrcode-generator into a denser QR version at
+// the same fixed rendered size. Confirmed with an independent decoder
+// (jsQR) against real browser-rendered SVG output — not ECC corruption,
+// not the circular clip (that remained unresolved either way): a
+// fractional pixel-per-module cell picks up real anti-aliasing blur from
+// the browser's own SVG rasterizer, and snapping to a whole-pixel cell
+// (snapQrCellSize, in QR.tsx) fixed the plain/undecorated case in that
+// test. MIN_PX_PER_MODULE is the floor passed into that snap — it keeps
+// growing the rendered size for a longer `value` rather than allowing an
+// ever-smaller whole-pixel cell.
+const MIN_PX_PER_MODULE = 4;
+// Approximates qrInset's own 0.015 ratio below to size UP from a required
+// qrSize to the diameter that would produce it, before effectiveDiameter
+// itself exists yet. Only ever used as a starting point for
+// snapQrCellSize's floor/ceiling math — the actual qrInset/qrSize/
+// effectiveDiameter triple computed below is what's authoritative and
+// self-consistent, this is just how big a diameter to ask it for.
+const QR_INSET_RATIO = 0.015;
 
 export type QRmeProps = {
   value: string;
@@ -74,7 +99,31 @@ export default function QRme({
         : DIAMETER_BY_VARIANT[variant]
   );
   const isTopbar = variant === 'topbar';
-  const effectiveDiameter = isTopbar ? Math.min(resolvedDiameter, 40) : resolvedDiameter;
+  // The topbar variant is a small status badge, never meant to be scanned
+  // (40px can't hold a legible QR at any content length) — it keeps its
+  // own fixed cap, unaffected by value length. Every other variant grows
+  // past what the caller asked for when a longer `value` would otherwise
+  // shrink modules below MIN_PX_PER_MODULE at the requested size.
+  //
+  // qrSize/effectiveDiameter are derived from snapQrCellSize FIRST (not the
+  // other way around) so the frame below is sized to exactly what
+  // <QR> will actually render — never a size QR.tsx then has to be
+  // CSS-stretched to fit, which would silently reintroduce the fractional
+  // per-module pixel size snapQrCellSize exists to avoid (see its own doc
+  // comment in QR.tsx for the confirmed real decode failure this caused).
+  const { qrSize, effectiveDiameter, qrInset } = React.useMemo(() => {
+    if (isTopbar) {
+      const diameter = Math.min(resolvedDiameter, 40);
+      const inset = Math.max(2, Math.round(diameter * 0.02));
+      return { qrSize: diameter - inset * 2, effectiveDiameter: diameter, qrInset: inset };
+    }
+    const moduleCount = getQrModuleCount(value, QR_ECC);
+    const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+    const inset = Math.max(2, Math.round(resolvedDiameter * QR_INSET_RATIO));
+    const requestedQrSize = resolvedDiameter - inset * 2;
+    const { size } = snapQrCellSize(totalModules, requestedQrSize, MIN_PX_PER_MODULE);
+    return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
+  }, [value, resolvedDiameter, isTopbar]);
   const [hovered, setHovered] = React.useState(false);
   const [pinned, setPinned] = React.useState(defaultFace === 'avatar');
 
@@ -82,15 +131,6 @@ export default function QRme({
   const faceRotation = showingAvatar ? 180 : 0;
   const rootNodeId = String(dataGuiNodeId || 'QR.me');
   const rootNodeType = String(dataGuiComponent || 'QR.me');
-  // Small inset — just enough to keep the QR's own square corners (clipped
-  // by the circular mask below) from touching the outer rim border. A
-  // bigger inset here is what read as "too much white circle around it" —
-  // the square QR should nearly circumscribe the circle, not float inside
-  // it with room to spare.
-  const qrInset = isTopbar
-    ? Math.max(2, Math.round(effectiveDiameter * 0.02))
-    : Math.max(2, Math.round(effectiveDiameter * 0.015));
-  const qrSize = effectiveDiameter - qrInset * 2;
   const qrBg = bg ?? theme.palette.background.paper;
   const qrFg = fg ?? theme.palette.primary.main;
   const avatarBg = avatarSrc ? 'transparent' : theme.palette.primary.main;
@@ -123,22 +163,6 @@ export default function QRme({
 
   return (
     <>
-      {/* Less "glowing ring," more "drifting in zero gravity" — a jellyfish
-          (medusa de mar) feel: a soft, mostly-static glow with a slow
-          vertical drift + gentle breathing scale, not an intensity pulse.
-          The earlier version animated opacity/glow-strength and read as
-          "too much glow" — the motion was the part that landed, so the
-          glow itself is now flat and weak and only the transform animates.
-          Scoped to the QR face only (not the avatar face, not the tiny
-          topbar variant). */}
-      <GlobalStyles
-        styles={{
-          '@keyframes qrmeGlow': {
-            '0%, 100%': { transform: 'translateY(0px) scale(1)' },
-            '50%': { transform: 'translateY(-5px) scale(1.012)' },
-          },
-        }}
-      />
       <Box
         data-gui-node-id={rootNodeId}
       data-gui-component={rootNodeType}
@@ -184,7 +208,16 @@ export default function QRme({
           sx={{
             position: 'absolute',
             inset: 0,
-            borderRadius: '50%',
+            // Square, not circular — confirmed live (2026-09-16) with a
+            // real side-by-side phone-camera test (/qr-test): a circular
+            // frame this close to the QR's own side length (not its
+            // diagonal) clips into the corner finder patterns a camera
+            // needs intact, and it got WORSE as content length pushed the
+            // QR to a denser version — square scanned every time, circular
+            // failed past a short username. A 12px radius (matching QR.tsx's
+            // own internal corner rounding) softens the corners without
+            // cutting anywhere near the finder patterns.
+            borderRadius: '12px',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             display: 'flex',
@@ -199,10 +232,13 @@ export default function QRme({
                 ? `0 0 0 1px ${theme.palette.primary.main}22, 0 12px 22px rgba(0,0,0,0.18)`
                 // Dialed way back from the earlier "stronger" pass, which
                 // read as too much glow — thin ring, soft low-alpha spread.
-                // The drift/scale animation (qrmeGlow, above) is doing the
-                // "alive" work now, not shadow intensity.
+                // Static, not animated: this ring sits directly around the
+                // QR face, and continuous motion here (an earlier version
+                // had a drift/scale keyframe) puts the actual scannable
+                // pattern in motion too — real cameras need a still target
+                // to lock onto a QR's finder patterns, confirmed live
+                // (2026-09-16) against local.cleaker's own QR.
                 : `0 0 0 2px ${theme.palette.primary.main}, 0 0 14px 3px ${theme.palette.primary.main}40, 0 8px 18px rgba(0,0,0,0.14)`,
-            animation: !isTopbar && !showingAvatar ? 'qrmeGlow 5s ease-in-out infinite' : undefined,
             overflow: 'hidden',
           }}
         >
@@ -212,7 +248,7 @@ export default function QRme({
               inset: qrInset,
               width: qrSize,
               height: qrSize,
-              borderRadius: '50%',
+              borderRadius: '12px',
               overflow: 'hidden',
               bgcolor: 'background.paper',
               display: 'flex',
@@ -226,13 +262,13 @@ export default function QRme({
               bg={qrBg}
               fg={qrFg}
               ecc="H"
-              // Default quietZone (4 modules) bakes a wide white margin
-              // into the QR's own square canvas, on top of the circular
-              // frame's own inset — combined, that's what read as "too
-              // much white circle around it." A slim 1-module zone (still
-              // real whitespace, just not padded) plus ECC=H keeps it
-              // scannable while letting the pattern reach much closer to
-              // the circular clip.
+              // Slim (1-module) rather than the library default (4) — kept
+              // this way after the circular-clip fix (this frame is square
+              // now, see the outer Box's own doc comment) because it
+              // already tested as reliably scannable at this value, real
+              // decoder + real phone confirmed, once module size was
+              // pixel-snapped (snapQrCellSize in QR.tsx) and the clip
+              // removed — no evidence this specific value needs revisiting.
               quietZone={1}
               // No embed props at all here — QR.tsx's embedMode="negative-space"
               // turned out to still draw the bitmap back as a filled shape
@@ -286,7 +322,10 @@ export default function QRme({
           sx={{
             position: 'absolute',
             inset: 0,
-            borderRadius: '50%',
+            // Matches the QR face's own square shape (see that Box's doc
+            // comment) — both faces of the same flip card, so they must
+            // agree, not flip from circle to square mid-rotation.
+            borderRadius: '12px',
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',

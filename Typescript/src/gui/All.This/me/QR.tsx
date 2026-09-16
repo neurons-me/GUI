@@ -65,6 +65,51 @@ function parseStringBitmap(rows: string[]): boolean[][] {
 
 type ModuleMatrix = boolean[][];
 
+/**
+ * Module count (per side, not counting quiet zone) for a given value/ECC —
+ * the same qrcode-generator call buildQRMatrix makes below, minus building
+ * the full boolean matrix, so a caller can size a QR's rendered box BEFORE
+ * drawing it. A longer value can push qrcode-generator to a denser QR
+ * version (more modules) at the same rendered size — confirmed live
+ * (2026-09-16): local.cleaker's own QR read fine on a phone camera with no
+ * username in the value, stopped being recognized at all once a username
+ * lengthened it into the next version, well before ECC=H's own corruption
+ * budget was anywhere near exhausted. The fixed rendered size just left
+ * less physical space per module for the camera to resolve.
+ */
+export function getQrModuleCount(value: string | null | undefined, ecc: "L" | "M" | "Q" | "H" = "H"): number {
+  const encodedValue = String(value ?? "");
+  const qr = (qrcodegen as any)(0, ecc);
+  qr.addData(encodedValue);
+  qr.make();
+  return qr.getModuleCount();
+}
+
+/**
+ * Snaps a requested render size down to a whole-pixel-per-module grid:
+ * `floor(requestedSize / totalModules)` cell size, `cell * totalModules`
+ * actual size — never the fractional `requestedSize / totalModules` this
+ * component used to render at directly. Confirmed live (2026-09-16): a
+ * real independent decoder (jsQR) failed on an unclipped, undecorated QR
+ * at 33 modules with a fractional ~4.14px cell, and decoded correctly once
+ * cells were snapped to a whole pixel — sub-pixel module edges pick up
+ * real anti-aliasing blur from the browser's own SVG rasterizer, not an
+ * artifact of any particular test tool. `cellFloor` lets a caller demand a
+ * minimum whole-pixel cell size (e.g. so a value long enough to need more
+ * modules grows the rendered size instead of producing a smaller
+ * fractional cell) — never applied as a ceiling, only ever raises the
+ * floored cell if it would otherwise land below it.
+ */
+export function snapQrCellSize(
+  totalModules: number,
+  requestedSize: number,
+  cellFloor: number = 1,
+): { cell: number; size: number } {
+  const flooredCell = Math.max(1, Math.floor(requestedSize / Math.max(1, totalModules)));
+  const cell = Math.max(cellFloor, flooredCell);
+  return { cell, size: cell * totalModules };
+}
+
 function buildQRMatrix(value: string | null | undefined, ecc: "L" | "M" | "Q" | "H"): ModuleMatrix {
   const encodedValue = String(value ?? "");
   // qrcode-generator expects typeNumber 0 for auto
@@ -453,7 +498,15 @@ export default function QR({
 
   const n = matrix.length;
   const totalModules = n + quietZone * 2;
-  const cell = size / totalModules;
+  // Self-correcting regardless of caller: never render at the raw
+  // `size / totalModules` fractional cell (see snapQrCellSize's own doc
+  // comment for why that broke real decoding). `renderedSize` can come out
+  // slightly smaller than the requested `size` after flooring — callers
+  // that need to lay out a container around this (QR.me.tsx's circular
+  // frame) should call snapQrCellSize themselves first with the same
+  // totalModules to get the same answer before sizing anything, rather
+  // than assuming their requested `size` is what actually gets drawn.
+  const { cell, size: renderedSize } = snapQrCellSize(totalModules, size);
   const r = Math.max(0, moduleRadius);
 
   // Build a single path for performance
@@ -525,20 +578,20 @@ const overlayD = useMemo(() => {
       })() : null}
 
       <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
+        width={renderedSize}
+        height={renderedSize}
+        viewBox={`0 0 ${renderedSize} ${renderedSize}`}
         role="img"
         aria-label="QR code"
         shapeRendering="crispEdges"
       >
         {/* background */}
-        {bg !== "transparent" ? <rect x={0} y={0} width={size} height={size} fill={`var(--qr-bg, ${bg})`} /> : null}
+        {bg !== "transparent" ? <rect x={0} y={0} width={renderedSize} height={renderedSize} fill={`var(--qr-bg, ${bg})`} /> : null}
 
         {/* clip to rounded outer rect if bg is transparent */}
         <defs>
           <clipPath id={clipId}>
-            <rect x={0} y={0} width={size} height={size} rx={12} ry={12} />
+            <rect x={0} y={0} width={renderedSize} height={renderedSize} rx={12} ry={12} />
           </clipPath>
         </defs>
 
