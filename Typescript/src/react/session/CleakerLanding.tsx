@@ -8,7 +8,7 @@
 // ("Hello, I am .me" — username in, identity derives out) — that story is
 // a demo with a fake local hash; this wires the same shape to the real
 // session (useMeLauncherView(), the same claim/open flow MeLauncher uses).
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, useInRouterContext, useSearchParams, useNavigate } from 'react-router-dom';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
@@ -31,6 +31,7 @@ import { useMeLauncherView } from './MeLauncher';
 import Beatle from '@/gui/All.This/NRP/Beatle/Beatle';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
+import type { NamespaceChannel } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 import RegisterMe from './RegisterMe';
 import RecoverAccount from './RecoverAccount';
@@ -287,13 +288,45 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
   // would compute (buildCleakerNamespaceUrl is the shared utility both
   // wrap), just resolved directly here since QRme takes a raw value, not a
   // username+endpoint pair to derive one from itself.
-  const qrValue = useMemo(() => {
+  const defaultQrValue = useMemo(() => {
     try {
       return buildCleakerNamespaceUrl(resolvedEndpoint, username || undefined);
     } catch {
       return resolvedEndpoint;
     }
   }, [resolvedEndpoint, username]);
+
+  // Beatle below can resolve to a DIFFERENT destination than this page's
+  // own identity — the QR should follow that, not stay pinned to
+  // defaultQrValue once something real has resolved. Only ever set from a
+  // genuine 'resolved' channel (via onConnect, fired once per successful
+  // open — see Beatle.tsx's own effect), and only using the endpoint the
+  // NRP server itself already computed and vetted (channel.resolved,
+  // deriveEndpoints() server-side) — never built by hand from
+  // expression.canonical, which can carry me://, operators, or selectors
+  // that don't reduce to a web hostname+path at all. Left untouched (not
+  // cleared) on every other state — resolving, error, invalid,
+  // disconnected — so the QR never flips to represent a destination that
+  // never actually resolved; it just keeps showing the last one that did.
+  //
+  // The QR carries a plain, shareable address only — never a session
+  // token or secret. Whoever scans it opens that address with their OWN
+  // context and permissions, not this page's.
+  //
+  // Reachability is NOT solved here: a host like "local.cleaker" only
+  // resolves on machines that have it configured (mkcert/hosts entry) —
+  // a phone scanning this QR has no such entry, and "localhost" in the QR
+  // would point at the PHONE itself, not this computer. This only wires
+  // the QR to the correct address Beatle resolved; whether that address
+  // is externally reachable from whatever scans it is a separate,
+  // unsolved problem.
+  const [beatleResolvedUrl, setBeatleResolvedUrl] = useState<string | null>(null);
+  const handleBeatleConnect = useCallback((channel: NamespaceChannel) => {
+    const endpoint = channel.resolved?.[0];
+    if (endpoint) setBeatleResolvedUrl(endpoint);
+  }, []);
+
+  const qrValue = beatleResolvedUrl ?? defaultQrValue;
 
   if (!view) return null;
 
@@ -716,7 +749,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               it. */}
           {secureContextOk && (
             <Box sx={{ width: '100%', maxWidth: 420 }}>
-              <Beatle defaultExpression={namespaceRootLabel} showResolver={false} />
+              <Beatle defaultExpression={namespaceRootLabel} showResolver={false} onConnect={handleBeatleConnect} />
             </Box>
           )}
 
