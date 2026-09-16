@@ -324,13 +324,18 @@ function normalizeCredentialResolution(
 // identity instead of telling you it doesn't exist.
 //
 // CLAIM_NOT_FOUND, IDENTITY_MISMATCH, and CLAIM_VERIFICATION_FAILED all
-// surface as the same generic "Invalid Claim" here — the sign-in form
-// should not reveal whether a username doesn't exist or the secret was
-// wrong (that distinction is exactly what username enumeration attacks
-// look for). CLAIM_NOT_FOUND used to propagate as the raw MonadClientError
-// instead, which meant the sign-in form displayed its unhumanized fallback
-// message ("OPEN CLAIM_NOT_FOUND") verbatim. A real "Register" affordance
-// stays a separate, explicit action — never inferred from this error.
+// surface as the same generic message here — the sign-in form should not
+// reveal whether a username doesn't exist or the secret was wrong (that
+// distinction is exactly what username enumeration attacks look for), NOR
+// assert a specific cause it doesn't actually know: a wrong password and a
+// vault that lives on a different browser/device produce the exact same
+// three codes from here, so the message names neither and instead points
+// at the one thing that's always a safe, correct next step regardless of
+// which of those it actually was. CLAIM_NOT_FOUND used to propagate as the
+// raw MonadClientError instead, which meant the sign-in form displayed its
+// unhumanized fallback message ("OPEN CLAIM_NOT_FOUND") verbatim. A real
+// "Register" affordance stays a separate, explicit action — never inferred
+// from this error.
 async function openExistingNamespace(session: SeedSession, namespace: string): Promise<void> {
   try {
     await session.open(namespace);
@@ -341,7 +346,10 @@ async function openExistingNamespace(session: SeedSession, namespace: string): P
       code === 'CLAIM_VERIFICATION_FAILED' ||
       code === 'CLAIM_NOT_FOUND'
     ) {
-      throw new SeedSessionContextError('INVALID_CLAIM', 'Invalid Claim');
+      throw new SeedSessionContextError(
+        'INVALID_CLAIM',
+        'No pudimos abrir esta identidad. Revisa tus credenciales. Si la creaste en otro navegador o dispositivo, usa Recuperar cuenta.',
+      );
     }
     throw openError;
   }
