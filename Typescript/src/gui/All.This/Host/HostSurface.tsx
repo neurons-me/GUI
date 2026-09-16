@@ -343,7 +343,21 @@ export default function HostSurface({ endpoint, pollIntervalMs = 5000, sx }: Hos
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
-        <Typography variant="h5">{state.rootName || 'This host'}</Typography>
+        {/* This label answers "where is this interface" — a physical fact
+            about the current page, not this monad's own configured
+            identity. window.location.hostname always wins when available:
+            state.rootName comes from the bootstrap response's surfaceEntry,
+            which is keyed off the monad's self-identity (defaults to
+            "local.cleaker" when unconfigured — see
+            netgetMonadProcess.ts's UNCONFIGURED_DEFAULT_NAMESPACE), so
+            every hostname alias proxying to the same netget monad
+            (local.host, local.netget, ...) got back the same wrong label
+            regardless of which one the browser actually used. Falls back
+            to the server value only off-window (SSR) or before it's
+            reachable at all. */}
+        <Typography variant="h5">
+          {(typeof window !== 'undefined' && window.location.hostname) || state.rootName || 'This host'}
+        </Typography>
         <Typography
           variant="caption"
           sx={{
