@@ -28,6 +28,9 @@ import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/C
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
 import { useMeLauncherView } from './MeLauncher';
+import Beatle from '@/gui/All.This/NRP/Beatle/Beatle';
+import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
+import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 import RegisterMe from './RegisterMe';
 import RecoverAccount from './RecoverAccount';
@@ -56,14 +59,16 @@ export interface CleakerLandingProps {
   netgetMonadOrigin?: string;
 }
 
-const DEFAULT_CLEAKER_ENDPOINT = 'https://cleaker.me';
-const LOCAL_CLEAKER_ENDPOINT = 'http://local.cleaker';
-// local.host is the general local host surface (same role as local.netget),
-// not a cleaker root itself — App.jsx only ever renders this component when
-// the page was actually served from local.cleaker specifically. Recognized
-// here too, defensively, in case a caller ever passes it as the endpoint
-// prop directly — still correctly reads as "local," not the public root.
-const LOCAL_CLEAKER_ALIAS_LABELS = new Set(['local.cleaker', 'local.host']);
+// No hardcoded root here on purpose — cleaker.me/local.cleaker were never
+// structurally special, just two values `cleakerEndpoint` happened to hold
+// in this session's dev environment (see SetChemistry.findings.md's
+// "generalizes past 2" note). window.location is the one legitimate
+// fallback: a physical fact about where this page is actually running,
+// never a semantic guess about which root "should" be default. Any host
+// this component is served from becomes its own default root, unmodified.
+function defaultCleakerEndpoint(): string {
+  return typeof window !== 'undefined' ? window.location.origin : '';
+}
 
 // netget's own monad, reached the same way any other app reaches its own —
 // through netget's generic /apps/:name mesh proxy, not a dedicated port.
@@ -134,22 +139,45 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
   // RecoverAccount gets to run its own post-recovery "set a new local
   // password" step.
   const [recoveryComplete, setRecoveryComplete] = useState(false);
-  // Root switch — local.cleaker and cleaker.me are the same identity root
-  // reached two ways (dev-local vs public), not two different roots. Starts
-  // at whichever one netget actually served this page from (cleakerEndpoint);
-  // once a person clicks the badge, that explicit choice wins over the prop
-  // for the rest of this session.
-  const [rootOverride, setRootOverride] = useState<string | null>(null);
-  const resolvedEndpoint = rootOverride || cleakerEndpoint || DEFAULT_CLEAKER_ENDPOINT;
+  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
   );
-  const isOnLocalRoot = LOCAL_CLEAKER_ALIAS_LABELS.has(namespaceRootLabel);
 
-  const toggleNamespaceRoot = () => {
-    setRootOverride(isOnLocalRoot ? DEFAULT_CLEAKER_ENDPOINT : LOCAL_CLEAKER_ENDPOINT);
-  };
+  // Real crypto capability of the page THIS component is actually running
+  // on right now — not a string check on "https" (that misses the
+  // legitimate localhost/127.0.0.1 exception, and says nothing about
+  // whether crypto.subtle itself actually exists). This is a property of
+  // the physical page, independent of whichever root resolvedEndpoint
+  // names — a namespace string being "cleaker.me" says nothing about
+  // whether THIS page is physically loaded over https. The server-side
+  // redirect (see setNginxConfigRoutes.ts) is the fix that stops this from
+  // ever being false in practice; this is the client-side backstop for
+  // whenever it still is — a stale bookmark, a proxy that stripped the
+  // redirect, a different deployment that hasn't wired it up yet.
+  const secureContextOk = typeof window !== 'undefined'
+    && window.isSecureContext === true
+    && typeof window.crypto?.subtle === 'object'
+    && window.crypto.subtle !== null;
+
+  // The connection this page is actually loaded over — scheme + host
+  // (+ port, when non-default, via URL's own .host) — never folded into
+  // namespaceRootLabel itself, which stays the bare semantic root
+  // (".<root>" in a claimed identity) regardless of transport. Falls back
+  // to the resolved endpoint's own scheme when off-window (SSR) or when
+  // showing the OTHER root than the one physically loaded.
+  const connectionLabel = useMemo(() => {
+    if (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel) {
+      return `${window.location.protocol}//${window.location.host}`;
+    }
+    try {
+      const u = new URL(resolvedEndpoint);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return resolvedEndpoint;
+    }
+  }, [resolvedEndpoint, namespaceRootLabel]);
 
   // The switch isn't just cosmetic — whatever root the badge shows is the
   // root that actually gets claimed. resolveNetgetSeedFromCredentials
@@ -181,16 +209,16 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
     const timeoutId = setTimeout(() => controller.abort(), 2500);
     // When the root being checked is the same host this page is already
     // loaded from, check window.location.origin instead of resolvedEndpoint
-    // verbatim — LOCAL_CLEAKER_ENDPOINT is hardcoded to http://, and if the
-    // browser actually loaded this page over https (seen live: Chrome
-    // auto-upgrading local.cleaker to https, "Not Secure" cert warning and
-    // all), fetching the http:// version from an https:// page is mixed
-    // content and gets silently blocked — read as "down" even though the
-    // page obviously loaded fine. Using the exact origin already proven to
-    // work sidesteps the protocol mismatch entirely for the common case
-    // (checking the root you're actually standing on); checking the OTHER
-    // root (cleaker.me from local.cleaker, or vice versa) still uses the
-    // configured endpoint as before, since that direction isn't blocked.
+    // verbatim — a caller-supplied cleakerEndpoint prop can carry a scheme
+    // that doesn't match what the browser actually loaded (seen live:
+    // Chrome auto-upgrading a plain-http endpoint to https, "Not Secure"
+    // cert warning and all), and fetching the mismatched-scheme version
+    // from an https page is mixed content, silently blocked — read as
+    // "down" even though the page obviously loaded fine. Using the exact
+    // origin already proven to work sidesteps the protocol mismatch
+    // entirely for the common case (checking the root you're actually
+    // standing on); checking any OTHER namespace still uses the configured
+    // endpoint as before, since that direction isn't blocked.
     const checkUrl = (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel)
       ? window.location.origin
       : resolvedEndpoint;
@@ -415,6 +443,24 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
         >
           <Icon name="link" fontSize={18 as any} />
         </LinkIconButton>
+        <LinkIconButton
+          component={Link}
+          to="/url"
+          aria-label="Open the URL explorer"
+          data-gui-node-id="CleakerLanding.urlLink"
+          sx={{
+            width: 40,
+            height: 40,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: '50%',
+            bgcolor: 'background.paper',
+            color: 'text.secondary',
+            '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
+          }}
+        >
+          <Icon name="language" fontSize={18 as any} />
+        </LinkIconButton>
       </Box>
 
       {/* Directory search — fixed to the top-right corner, out of the
@@ -590,57 +636,89 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               am I claiming into"). Pre-auth only now — see the
               authenticated branch above for why. */}
           <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: -2 }}>
-            {/* No trailing ".me" here — the .me submit button below is now
+            {/* No trailing ".me" here — the Claim submit button below is now
                 the answer to this sentence, not a repeat of it. The page
                 reads as one continuous line: "Hello, I am…" [namespace]
-                [username] [secret] ".me". */}
+                [username] [secret] "Claim". */}
             <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
               Hello, I am…
             </Typography>
-            <Box
-              component="button"
-              type="button"
-              onClick={toggleNamespaceRoot}
-              data-gui-node-id="CleakerLanding.namespaceRoot"
-              aria-label={`Switch to ${isOnLocalRoot ? deriveNamespaceRootLabel(DEFAULT_CLEAKER_ENDPOINT) : deriveNamespaceRootLabel(LOCAL_CLEAKER_ENDPOINT)}`}
-              title={`${namespaceRootLabel} — ${rootReachable === 'up' ? 'reachable' : rootReachable === 'down' ? 'unreachable' : 'checking…'}`}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                fontFamily: 'monospace',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                letterSpacing: '0.02em',
-                color: 'text.secondary',
-                px: 1.25,
-                py: 0.4,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 999,
-                background: 'transparent',
-                cursor: 'pointer',
-                '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
-              }}
-            >
-              {/* Discrete reachability dot — same tenue opacity as the swap
-                  icon beside it, not a loud status widget. Neutral while
-                  checking so it never flashes red before the first answer. */}
-              <Box
-                component="span"
-                sx={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: '50%',
-                  flexShrink: 0,
-                  opacity: 0.6,
-                  bgcolor: rootReachable === 'up' ? 'success.main' : rootReachable === 'down' ? 'error.main' : 'text.secondary',
-                }}
-              />
-              {namespaceRootLabel}
-              <Icon name="swap_horiz" fontSize={13 as any} style={{ opacity: 0.6 }} />
-            </Box>
+            {/* The connection badge that used to live here (a separate
+                "here" pill, click-to-switch local.cleaker/cleaker.me) is
+                gone — Beatle below IS that control now: its own connection
+                dot + state label already show exactly what the badge did,
+                and its input defaults to this same resolved value as real,
+                editable text (see defaultExpression below), not a second
+                display of it. Showing "local.cleaker" in two places at
+                once was the actual bug, not which of the two survived.
+                Known, accepted side effect: this removes the one-click
+                switch to another root for the CREDENTIALS form's own
+                target below -- that still resolves whatever
+                cleakerEndpoint says (or window.location's own origin when
+                no prop is given — no hardcoded root either way, same as
+                before), just with no in-page toggle anymore. Beatle's own field can
+                explore a different destination freely; it was never wired
+                to change what the credentials form claims into, and still
+                isn't -- exploring and claiming stay two different actions,
+                on purpose. */}
+            {!secureContextOk && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+                <Typography variant="body2" sx={{ color: 'warning.main', textAlign: 'center', fontSize: '0.8rem' }}>
+                  Para iniciar sesión necesitas una conexión segura.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  color="warning"
+                  size="small"
+                  onClick={() => {
+                    if (typeof window === 'undefined') return;
+                    // Swapping just the scheme on the CURRENT origin assumes
+                    // https lives on the same port http does -- not
+                    // guaranteed (a dev proxy, a non-standard port mapping).
+                    // The configured endpoint's own origin is the one this
+                    // page's own reachability/registration logic already
+                    // trusts as "where https for this root actually is";
+                    // preserve path/search/hash so the button lands you
+                    // back where you were, not the bare root.
+                    try {
+                      const httpsOrigin = new URL(resolvedEndpoint).origin;
+                      window.location.href = `${httpsOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+                    } catch {
+                      window.location.href = window.location.href.replace(/^http:/, 'https:');
+                    }
+                  }}
+                  data-gui-node-id="CleakerLanding.openHttps"
+                >
+                  Abrir HTTPS
+                </Button>
+              </Box>
+            )}
           </Box>
+
+          {/* me:// — Beatle's own raw expression input (its parser/useBeatle
+              already gate on domain shape — see isValidDomainShape in cleaker
+              and ResolutionState's 'invalid' state — so free text is enough;
+              no per-field chip editor needed for what's ultimately just one
+              string). No separate "here" badge anymore — this IS that
+              control now, defaulting to the current resolved root
+              (defaultExpression), never a guessed expansion for anything
+              typed after. showResolver=false: this page already answers
+              "which server" via the warning/https flow above, so the
+              resolver combobox would repeat that, not add to it. Opening a
+              channel only ever reads disclosure/endpoints for what's
+              public — nothing here claims, registers, or shares this page's
+              active identity; that stays exactly what the credentials form
+              below does, unconnected to whatever root this explores.
+              Skipped entirely (not shown disabled) when the page itself
+              isn't a secure context — useBeatle's own open() already
+              refuses to connect there, and the warning above already
+              explains why, so a second dead control here would just repeat
+              it. */}
+          {secureContextOk && (
+            <Box sx={{ width: '100%', maxWidth: 420 }}>
+              <Beatle defaultExpression={namespaceRootLabel} showResolver={false} />
+            </Box>
+          )}
 
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {credentialsForm && (
@@ -649,7 +727,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
                 label="Username"
                 value={credentialsForm.username}
                 onChange={(e) => credentialsForm.setUsername(e.target.value)}
-                disabled={pending}
+                disabled={pending || !secureContextOk}
                 autoFocus
                 fullWidth
               />
@@ -658,7 +736,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
                 type="password"
                 value={credentialsForm.password}
                 onChange={(e) => credentialsForm.setPassword(e.target.value)}
-                disabled={pending}
+                disabled={pending || !secureContextOk}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleEnter(); }}
                 fullWidth
               />
@@ -673,7 +751,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
             component="button"
             type="button"
             onClick={handleEnter}
-            disabled={pending || (!!credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password))}
+            disabled={pending || !secureContextOk || (!!credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password))}
             data-gui-node-id="CleakerLanding.submit"
             sx={{
               display: 'flex',
@@ -692,7 +770,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
             }}
           >
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {pending ? '…' : '.me'}
+              {pending ? '…' : 'Claim'}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, alignSelf: 'center' }}>
@@ -700,12 +778,14 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               component="button"
               type="button"
               onClick={() => { setRegistrationComplete(false); setMode('register'); }}
+              disabled={!secureContextOk}
               data-gui-node-id="CleakerLanding.switchToRegister"
               sx={{
                 background: 'transparent',
                 border: 0,
                 color: 'text.secondary',
-                cursor: 'pointer',
+                cursor: secureContextOk ? 'pointer' : 'not-allowed',
+                opacity: secureContextOk ? 1 : 0.5,
                 fontSize: '0.8rem',
                 textDecoration: 'underline',
                 p: 0,
@@ -720,12 +800,14 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               component="button"
               type="button"
               onClick={() => { setRecoveryComplete(false); setMode('recover'); }}
+              disabled={!secureContextOk}
               data-gui-node-id="CleakerLanding.switchToRecover"
               sx={{
                 background: 'transparent',
                 border: 0,
                 color: 'text.secondary',
-                cursor: 'pointer',
+                cursor: secureContextOk ? 'pointer' : 'not-allowed',
+                opacity: secureContextOk ? 1 : 0.5,
                 fontSize: '0.8rem',
                 textDecoration: 'underline',
                 p: 0,
@@ -749,7 +831,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
 const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  const resolvedEndpoint = cleakerEndpoint || DEFAULT_CLEAKER_ENDPOINT;
+  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
@@ -799,7 +881,7 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
 const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  const resolvedEndpoint = cleakerEndpoint || DEFAULT_CLEAKER_ENDPOINT;
+  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
@@ -836,6 +918,115 @@ const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpo
           namespaceLabel={namespaceRootLabel}
           data-gui-node-id="CleakerBlockchainView.table"
         />
+      </Box>
+    </Box>
+  );
+};
+
+const URL_VIEW_STATE_COLOR: Record<string, string> = {
+  idle: '#555e66', parsing: '#ffb74d', connecting: '#ffb74d', resolving: '#ffcc02',
+  connected: '#66bb6a', streaming: '#4fc3f7', error: '#666', invalid: '#e57373', disconnected: '#555e66',
+};
+
+// The /url route — same minimal shell as CleakerUsersView/CleakerBlockchainView
+// above (sibling route, not a child), but NOT a static page: entering a URL
+// here is a real NRP invocation, not client-side navigation. It composes the
+// `@` overlay expression (`<namespace> @ "<url>"`) and opens it through the
+// exact same useBeatle()/channel machinery Beatle itself uses — see
+// SetChemistry.findings.md's "every URL has a me:// alter ego" note. Per the
+// per-operator status table there, `@` is parsed client-side but never
+// resolved server-side (handleNrpOpen ignores ast) — so this will sit at
+// 'resolving' forever today. That's shown, not hidden: the point is
+// expressing real NRP intent through the real protocol, not faking a result.
+const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) => {
+  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  const namespaceRootLabel = useMemo(
+    () => deriveNamespaceRootLabel(resolvedEndpoint),
+    [resolvedEndpoint],
+  );
+  const resolverWs = useMemo(() => makeDefaultResolvers()[0].ws, []);
+  const { channel, open } = useBeatle(resolverWs);
+  const [urlInput, setUrlInput] = useState('');
+  const color = URL_VIEW_STATE_COLOR[channel.state] ?? URL_VIEW_STATE_COLOR.idle;
+
+  const handleSubmit = () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+    open(`${namespaceRootLabel} @ "${trimmed}"`);
+  };
+
+  return (
+    <Box
+      data-gui-node-id="CleakerUrlView"
+      data-gui-component="CleakerUrlView"
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        px: 3,
+        py: 6,
+        boxSizing: 'border-box',
+        ...sx,
+      }}
+    >
+      <Box sx={{ width: '100%', maxWidth: 480 }}>
+        <LinkIconButton
+          component={Link}
+          to="/"
+          aria-label="Back to .me"
+          data-gui-node-id="CleakerUrlView.back"
+          sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+        >
+          <Icon name="arrow_back" fontSize={18 as any} />
+        </LinkIconButton>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+          URL
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          {namespaceRootLabel} @ this URL — opens a real NRP channel, not a page fetch.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+          <TextField
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+            placeholder="https://example.com/page"
+            fullWidth
+            size="small"
+            data-gui-node-id="CleakerUrlView.input"
+          />
+          <Box
+            component="button"
+            type="button"
+            onClick={handleSubmit}
+            data-gui-node-id="CleakerUrlView.submit"
+            sx={{
+              px: 2,
+              border: '1px solid',
+              borderColor: 'primary.main',
+              borderRadius: 1,
+              background: 'transparent',
+              color: 'primary.main',
+              cursor: 'pointer',
+              fontWeight: 600,
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            @
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+          <Typography variant="caption" sx={{ color, fontWeight: 600 }}>
+            {channel.state}
+          </Typography>
+          {channel.error && (
+            <Typography variant="caption" sx={{ color: 'error.main' }}>
+              — {channel.error}
+            </Typography>
+          )}
+        </Box>
       </Box>
     </Box>
   );
@@ -1565,6 +1756,7 @@ const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
     <Route path="/" element={<CleakerLandingHome {...props} />} />
     <Route path="/users" element={<CleakerUsersView {...props} />} />
     <Route path="/blockchain" element={<CleakerBlockchainView {...props} />} />
+    <Route path="/url" element={<CleakerUrlView {...props} />} />
     <Route path="/keychain" element={<CleakerKeychainView {...props} />} />
     <Route path="/keychain/claim" element={<CleakerNetgetClaimView {...props} />} />
     <Route path="/keychain/admin-sign" element={<CleakerNetgetAdminSignView {...props} />} />

@@ -19,6 +19,7 @@ const STATE_COLOR: Record<ResolutionState, string> = {
   connected:    '#66bb6a',
   streaming:    '#4fc3f7',
   error:        '#666',
+  invalid:      '#e57373',
   disconnected: '#555e66',
 };
 
@@ -30,6 +31,7 @@ const STATE_LABEL: Record<ResolutionState, string> = {
   connected:    'connected',
   streaming:    'streaming',
   error:        'no server',
+  invalid:      'invalid domain',
   disconnected: 'disconnected',
 };
 
@@ -50,9 +52,10 @@ function saveHistory(items: string[]) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(items.slice(0, MAX_HISTORY))); } catch {}
 }
 
+// Always wss:// — see makeDefaultResolvers' own comment in Beatle.types.ts
+// for why "looks local, so ws:// is fine" was never actually a safe guess.
 function namespaceToWs(ns: string): string {
-  const isLocal = ns === 'localhost' || ns.endsWith('.local') || /^127\.|^192\.168\.|^10\./.test(ns);
-  return `${isLocal ? 'ws' : 'wss'}://${ns}/nrp`;
+  return `wss://${ns}/nrp`;
 }
 
 // ── component ──────────────────────────────────────────────────────────────
@@ -61,6 +64,7 @@ export default function Beatle({
   defaultExpression = '',
   resolvers,
   nrpEndpoint,
+  showResolver = true,
   onConnect,
   onMessage,
   onDisconnect,
@@ -200,35 +204,39 @@ export default function Beatle({
           }}
         />
 
-        {/* Divider */}
-        <Box sx={{ width: '1px', height: 20, bgcolor: 'divider', flexShrink: 0 }} />
+        {showResolver && (
+          <>
+            {/* Divider */}
+            <Box sx={{ width: '1px', height: 20, bgcolor: 'divider', flexShrink: 0 }} />
 
-        {/* Resolver combobox */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: KIND_COLOR[resolverKind], flexShrink: 0 }} />
-          <Box
-            component="input"
-            list="beatle-resolvers"
-            value={resolverInput}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setResolverInput(e.target.value)}
-            onBlur={() => { if (resolverInput.trim()) commitResolver(resolverInput); }}
-            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === 'Enter') { commitResolver(resolverInput); e.currentTarget.blur(); }
-            }}
-            placeholder="namespace"
-            spellCheck={false}
-            autoComplete="off"
-            sx={{
-              border: 'none', outline: 'none', background: 'transparent',
-              color: 'text.secondary', fontFamily: 'monospace',
-              fontSize: '0.68rem', fontWeight: 500, width: 120,
-              '&::placeholder': { color: 'text.disabled', fontStyle: 'italic' },
-            }}
-          />
-          <datalist id="beatle-resolvers">
-            {options.map(o => <option key={o} value={o} />)}
-          </datalist>
-        </Box>
+            {/* Resolver combobox */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: KIND_COLOR[resolverKind], flexShrink: 0 }} />
+              <Box
+                component="input"
+                list="beatle-resolvers"
+                value={resolverInput}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setResolverInput(e.target.value)}
+                onBlur={() => { if (resolverInput.trim()) commitResolver(resolverInput); }}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === 'Enter') { commitResolver(resolverInput); e.currentTarget.blur(); }
+                }}
+                placeholder="namespace"
+                spellCheck={false}
+                autoComplete="off"
+                sx={{
+                  border: 'none', outline: 'none', background: 'transparent',
+                  color: 'text.secondary', fontFamily: 'monospace',
+                  fontSize: '0.68rem', fontWeight: 500, width: 120,
+                  '&::placeholder': { color: 'text.disabled', fontStyle: 'italic' },
+                }}
+              />
+              <datalist id="beatle-resolvers">
+                {options.map(o => <option key={o} value={o} />)}
+              </datalist>
+            </Box>
+          </>
+        )}
 
         {/* State */}
         <Typography

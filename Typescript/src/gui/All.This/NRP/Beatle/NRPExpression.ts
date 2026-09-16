@@ -35,7 +35,7 @@
  * Bare overlay:   @ wikipedia.com
  */
 
-import { parseNamespaceExpression as cleakerParse } from 'cleaker';
+import { parseNamespaceExpression as cleakerParse, isValidDomainShape } from 'cleaker';
 import type { ParsedNamespaceExpression } from 'cleaker';
 
 export type NRPNodeKind = 'namespace' | 'union' | 'intersection' | 'overlay' | 'complement';
@@ -65,6 +65,13 @@ export type NRPExpression = {
   syntaxValid: boolean;
   /** All namespace leaves passed Cleaker validation */
   namespaceValid: boolean;
+  /**
+   * All namespace leaves have real FQDN shape (2+ DNS-label-shaped segments —
+   * cleaker's isValidDomainShape). A namespace can be namespaceValid (parses,
+   * can be claimed/written to `.me`) without being domainShapeValid — that's
+   * the "invalid claim, never resolves" case, not a parse error.
+   */
+  domainShapeValid: boolean;
   /** syntaxValid — safe to send to NRP server */
   valid: boolean;
   error?: string;
@@ -245,6 +252,16 @@ function allNamespacesValid(node: NRPNode): boolean {
   }
 }
 
+function allNamespacesDomainShaped(node: NRPNode): boolean {
+  switch (node.kind) {
+    case 'namespace':    return node.parsed !== undefined && isValidDomainShape(node.parsed.fqdn);
+    case 'complement':   return allNamespacesDomainShaped(node.operand);
+    case 'union':        return allNamespacesDomainShaped(node.left) && allNamespacesDomainShaped(node.right);
+    case 'intersection': return allNamespacesDomainShaped(node.left) && allNamespacesDomainShaped(node.right);
+    case 'overlay':      return allNamespacesDomainShaped(node.namespace);
+  }
+}
+
 // ── Canonical serializer ───────────────────────────────────────────────────
 // Precedence-aware: inserts parens wherever child prec < parent prec,
 // preserving semantic stability across parse/serialize round-trips.
@@ -293,7 +310,8 @@ export function parseNRPExpression(raw: string): NRPExpression {
     const ast = new Parser(tokens).parse();
     const canonical = canonicalize(ast);
     const namespaceValid = allNamespacesValid(ast);
-    return { raw, canonical, ast, syntaxValid: true, namespaceValid, valid: true };
+    const domainShapeValid = namespaceValid && allNamespacesDomainShaped(ast);
+    return { raw, canonical, ast, syntaxValid: true, namespaceValid, domainShapeValid, valid: true };
   } catch (e) {
     const fallback: NRPNode = { kind: 'namespace', value: raw.trim(), parseError: String(e) };
     return {
@@ -302,6 +320,7 @@ export function parseNRPExpression(raw: string): NRPExpression {
       ast: fallback,
       syntaxValid: false,
       namespaceValid: false,
+      domainShapeValid: false,
       valid: false,
       error: String(e),
     };
@@ -341,7 +360,8 @@ function expandNode(node: NRPNode, namespaceRoot: string): NRPNode {
 export function expandBareHandles(expr: NRPExpression, namespaceRoot: string): NRPExpression {
   const ast = expandNode(expr.ast, namespaceRoot);
   const canonical = canonicalize(ast);
-  return { ...expr, ast, canonical, namespaceValid: allNamespacesValid(ast) };
+  const namespaceValid = allNamespacesValid(ast);
+  return { ...expr, ast, canonical, namespaceValid, domainShapeValid: namespaceValid && allNamespacesDomainShaped(ast) };
 }
 
 // ── NRP URI parsing ────────────────────────────────────────────────────────

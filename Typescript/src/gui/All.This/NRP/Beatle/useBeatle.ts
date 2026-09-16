@@ -8,7 +8,9 @@ import type {
   ResolutionState,
 } from './Beatle.types';
 
-const DEFAULT_ENDPOINT = 'ws://local.netget/nrp';
+// wss, not ws — see Beatle.types.ts's makeDefaultResolvers() for why a
+// plain-ws fallback is never correct here.
+const DEFAULT_ENDPOINT = 'wss://local.netget/nrp';
 
 const IDLE_CHANNEL: NamespaceChannel = {
   expression: null,
@@ -53,11 +55,30 @@ export function useBeatle(
 
     close();
 
+    // me:// only opens over secure transport, or it doesn't open — never a
+    // silent downgrade. A plain http:// page can't open a wss:// socket to
+    // itself either way (the browser will refuse), but failing here with a
+    // clear, specific reason beats letting the WebSocket constructor throw
+    // whatever generic error the browser happens to produce for it.
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      patch('error', { expression: null, error: 'Secure connection required — open this page over https to use me://.' });
+      return;
+    }
+
     patch('parsing', { expression: null, resolved: [], error: undefined });
     const expr = parseNRPExpression(raw);
 
     if (!expr.valid) {
       patch('error', { expression: expr, error: expr.error ?? 'Invalid expression' });
+      return;
+    }
+
+    // Parses fine, but doesn't have real FQDN shape — this will never derive
+    // through NRP (see ResolutionState's 'invalid' doc comment). Distinct
+    // from a parse error: the namespace can still be claimed/written to
+    // `.me`, it just never opens a channel here.
+    if (!expr.domainShapeValid) {
+      patch('invalid', { expression: expr, error: 'invalid NRP - domain name' });
       return;
     }
 
@@ -108,7 +129,12 @@ export function useBeatle(
             patch('streaming');
             break;
           case 'error':
-            patch('error', { error: msg.payload });
+            // Server is the authority — if it flags a namespace as
+            // shape-invalid (the client should already have caught this
+            // itself above, but a stale bundle or a bypass shouldn't just
+            // look like a generic connection failure), land on 'invalid'
+            // rather than 'error' too.
+            patch(msg.code === 'invalid_namespace_shape' ? 'invalid' : 'error', { error: msg.payload });
             break;
           // ping/pong/data: no state change
         }

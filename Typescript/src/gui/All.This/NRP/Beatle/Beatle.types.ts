@@ -34,6 +34,15 @@ export type ResolutionState =
   | 'connected'
   | 'streaming'
   | 'error'
+  /**
+   * The expression parsed fine, but a namespace leaf doesn't have real FQDN
+   * shape (2+ DNS-label-shaped segments — see cleaker's isValidDomainShape).
+   * Distinct from 'error': this isn't a connection failure that a retry or a
+   * live server could fix, it's a structural "this will never resolve
+   * through NRP" answer. The namespace can still exist as a claim/branch in
+   * `.me` — it just never derives, so it never joins NRP resolution.
+   */
+  | 'invalid'
   | 'disconnected';
 
 export type NamespaceChannel = {
@@ -134,6 +143,15 @@ export type MsgError = {
   type: 'error';
   channelId?: string;
   payload: string;
+  /**
+   * Present only for a small set of errors the client needs to react to
+   * differently than a generic connection failure — currently just the
+   * domain-shape gate (see ResolutionState's 'invalid' doc comment). Server
+   * is the authority: the client already gates this itself before opening a
+   * channel, but if that check is ever bypassed or stale, this code is what
+   * lets the client still land on 'invalid' instead of 'error'.
+   */
+  code?: 'invalid_namespace_shape';
   timestamp: number;
 };
 
@@ -166,11 +184,21 @@ export type NRPResolver = {
  * Build the default resolver list.
  * The local entry uses the actual browser hostname so the user sees
  * their real machine name rather than a generic alias.
+ *
+ * Always wss:// — never a plain ws:// fallback. The NRP contract this
+ * session settled on is "me:// only opens over secure transport, or it
+ * doesn't open" (matching why the page itself now redirects http to https
+ * server-side — see setNginxConfigRoutes.ts's forceHttpsRedirect). Guessing
+ * ws:// for anything that "looks local" was the actual bug: a page loaded
+ * over https can't open a plain ws:// socket at all (mixed content), so
+ * that guess would silently fail exactly when it mattered, and there was
+ * never a case where downgrading to ws:// was the CORRECT fallback rather
+ * than a failure the user should see.
  */
 export function makeDefaultResolvers(localHostname?: string): NRPResolver[] {
   const host = localHostname ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
   return [
-    { label: host,        ws: `ws://${host}/nrp`,    kind: 'local'  },
+    { label: host,        ws: `wss://${host}/nrp`,    kind: 'local'  },
     { label: 'cleaker.me', ws: 'wss://cleaker.me/nrp', kind: 'public' },
   ];
 }
@@ -183,6 +211,19 @@ export type BeatleProps = {
   resolvers?: NRPResolver[];
   /** Pre-select a resolver by ws URL */
   nrpEndpoint?: string;
+  /**
+   * Show the resolver combobox (which server the channel connects to).
+   * Default true — Beatle's own Storybook/standalone usage still wants it.
+   * A host that already shows this elsewhere (e.g. CleakerLanding's own
+   * "here" badge, which answers exactly the same question — which server
+   * you're actually on) should pass false: showing the same thing twice,
+   * under two different labels ("here" vs. a bare "namespace" placeholder
+   * here), reads as two different concepts when it's one. When false, the
+   * channel still connects — to `nrpEndpoint` if given, else the first
+   * (local) entry from the resolver list — just without a second control
+   * for picking it.
+   */
+  showResolver?: boolean;
   onConnect?: (channel: NamespaceChannel) => void;
   onMessage?: (msg: BeatleMessage) => void;
   onDisconnect?: () => void;
