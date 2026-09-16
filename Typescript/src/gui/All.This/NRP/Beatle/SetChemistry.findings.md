@@ -86,6 +86,48 @@ is implemented (same gap as everywhere else in this doc: `handleNrpOpen`
 ignores `ast`) — this section just fixes what the correct N-ary expansion
 rule actually is, generalized from the location/identity example.
 
+**Order is a separate, undecided question — 2026-09-16.** Writing the
+example as `alex.<location-host> + alex.<identity-namespace>` put location
+first, but that's an artifact of how it happened to get typed here, not a
+rule that location goes first (or that any operand has a canonical
+position). `+` is commutative as a set — `A + B` and `B + A` name the same
+resulting set of claim scopes — but a real implementation is not obligated
+to treat the two orderings identically: if resolution is eager (first
+candidate to answer wins) or the response preserves order (`resolved`'s
+own `payload.endpoints: string[]` already does, per `nrpHandler.ts`), then
+which operand is listed first can decide which one is *primary* —
+displayed first, tried first, shown as canonical on conflict — even though
+the underlying set is the same either way. Nothing here decides that
+ordering rule yet; it's a distinct open question from which contexts get
+unioned at all, not something to default silently just because an example
+had to be written down in *some* order.
+
+**The output of a resolved expression is a hash, not a readable string —
+and that's what the `.me` QR should encode, not built yet.** Everything
+above describes *which* contexts get combined; this is about what
+combining them actually *produces*. A resolved `me₁ + me₂` (real
+multi-recipient key wrap) or `me₁ ∩ me₂` (real XOR-share reconstruction)
+naturally yields combined key material — a fingerprint of that specific
+combination — the same way `me/Typescript/src/me.ts`'s `deriveIdentityHash`
+(`keccak256(IDENTITY_HASH_DOMAIN + seed)`) is the fingerprint of one seed
+today. There's no equivalent "combined claim-scope hash" anywhere in the
+kernel yet — only ever computed for a single identity, never for a
+resolved expression.
+
+Where this lands once real resolution exists: `QRme`
+(`packages/GUI/Typescript/src/gui/All.This/me/QR/QR.me.tsx`) already takes
+a plain `value: string` with no assumption about its shape — today
+`CleakerLanding.tsx`'s `qrValue` is a readable claim URL
+(`buildCleakerNamespaceUrl(resolvedEndpoint, username)`, the residue this
+file's own "window.location is where set chemistry's ash settles" note
+describes). A resolved set-chemistry expression's QR would encode that
+result hash instead — same component, same prop, no structural change
+needed — a scannable fingerprint of one specific combination of claim
+scopes, verifiable, not just a pointer to a single identity's own address.
+Not implemented: no combined-scope hash function exists, and nothing
+decides yet whether the QR would show the hash alone, or the hash
+alongside the readable expression that produced it.
+
 **Test split required:** local interpretation (parsing/expansion, pure
 client-side, no network) and real resolution (does a server holding that
 namespace actually answer, and how) are separate claims — getting a
