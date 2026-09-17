@@ -1911,13 +1911,13 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
 
   const extraElements: LeftBarElement[] = [
     ...(authenticated
-      ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain' } }]
+      ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain', icon: 'key' } }]
       : []),
-    { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget' } },
+    { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget', icon: 'router' } },
     // TEMPORARY lab-access icons, kept clearly labeled -- same destinations
     // as before, just relocated from CleakerLandingHome's own icon row.
-    { type: 'link' as const, props: { id: 'provenance-demo', label: 'profile.displayName demo (temporary)', to: '/provenance-demo' } },
-    { type: 'link' as const, props: { id: 'layout-demo', label: 'Layout sidebar demo (temporary)', to: '/layout-demo/proyecto' } },
+    { type: 'link' as const, props: { id: 'provenance-demo', label: 'profile.displayName demo (temporary)', to: '/provenance-demo', icon: 'science' } },
+    { type: 'link' as const, props: { id: 'layout-demo', label: 'Layout sidebar demo (temporary)', to: '/layout-demo/proyecto', icon: 'view_sidebar' } },
   ];
 
   return (

@@ -14,9 +14,11 @@ import {
 const BUILTIN_SCOPE: ScopeData = {
   itemIds: ['users', 'blockchain', 'url'],
   items: {
-    users: { type: 'link', props: { id: 'users', label: 'Users', to: '/users' } },
-    blockchain: { type: 'link', props: { id: 'blockchain', label: 'Blockchain', to: '/blockchain' } },
-    url: { type: 'link', props: { id: 'url', label: 'URL', to: '/url' } },
+    // Same icon names the old top-right icon row used for these same three
+    // destinations, before that row was retired in favor of this sidebar.
+    users: { type: 'link', props: { id: 'users', label: 'Users', to: '/users', icon: 'group' } },
+    blockchain: { type: 'link', props: { id: 'blockchain', label: 'Blockchain', to: '/blockchain', icon: 'link' } },
+    url: { type: 'link', props: { id: 'url', label: 'URL', to: '/url', icon: 'language' } },
   },
 };
 
