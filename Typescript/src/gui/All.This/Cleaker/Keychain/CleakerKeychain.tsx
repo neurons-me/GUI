@@ -64,7 +64,12 @@ export interface CleakerKeychainProps {
   focusedKeyId?: string | null;
   onNavigate?: (view: KeychainView, targetId?: string | null) => void;
   onRequestUnlock?: (keyId: string, passphrase: string) => void;
-  onSubmitAddKey?: (label: string, admin: boolean, passphrase: string) => void;
+  // May return a Promise -- AddKeyView awaits it to show a real "working"
+  // state instead of leaving the button looking clickable (and inert)
+  // for however long the real request takes, flagged live as reading
+  // exactly like a hang even when the request was still genuinely
+  // in flight.
+  onSubmitAddKey?: (label: string, admin: boolean, passphrase: string) => void | Promise<void>;
   onRetryRegistration?: (publicKeyRaw: string) => void;
   onConfirmRevoke?: (keyId: string) => void;
   onRecoverKeychain?: (label: string, passphrase: string) => void;
@@ -401,14 +406,36 @@ function LocalKeyDetailView({
 }
 
 function AddKeyView({ onSubmit, onBack }: {
-  onSubmit: (label: string, admin: boolean, passphrase: string) => void;
+  onSubmit: (label: string, admin: boolean, passphrase: string) => void | Promise<void>;
   onBack: () => void;
 }) {
   const [label, setLabel] = React.useState('');
   const [admin, setAdmin] = React.useState(false);
   const [passphrase, setPassphrase] = React.useState('');
+  // The one piece of visible feedback this screen was missing entirely --
+  // the button had no state of its own between "idle" and "gone" (the
+  // parent navigates away on completion), so however long the real
+  // request took, it just sat there looking clickable and doing nothing
+  // visible. Flagged live as reading exactly like a hang, request still
+  // in flight or not. A mounted-ref guard, not just a bare setState,
+  // because the parent's own onSubmit already calls setView('list') on
+  // completion -- this component can unmount before its own `finally`
+  // runs, and setting state on it after that would just be a harmless
+  // no-op React would otherwise warn about.
+  const [submitting, setSubmitting] = React.useState(false);
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const canSubmit = label.trim().length > 0 && passphrase.length > 0;
+  const canSubmit = label.trim().length > 0 && passphrase.length > 0 && !submitting;
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      await onSubmit(label, admin, passphrase);
+    } finally {
+      if (mountedRef.current) setSubmitting(false);
+    }
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
@@ -422,8 +449,8 @@ function AddKeyView({ onSubmit, onBack }: {
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
         This passphrase only protects the copy stored on this device — it never leaves it.
       </Typography>
-      <PrimaryButton onClick={() => onSubmit(label, admin, passphrase)} disabled={!canSubmit}>
-        Generate &amp; request authorization
+      <PrimaryButton onClick={handleSubmit} disabled={!canSubmit}>
+        {submitting ? 'Working…' : 'Generate & request authorization'}
       </PrimaryButton>
       <SecondaryButton onClick={onBack}>Back</SecondaryButton>
     </Box>
