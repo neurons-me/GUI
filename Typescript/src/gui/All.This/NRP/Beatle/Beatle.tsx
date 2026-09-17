@@ -68,6 +68,7 @@ export default function Beatle({
   onConnect,
   onMessage,
   onDisconnect,
+  onStateChange,
   variant = 'bar',
   sx,
 }: BeatleProps) {
@@ -107,6 +108,7 @@ export default function Beatle({
 
   useEffect(() => { if (channel.state === 'connected') onConnect?.(channel); }, [channel.state]); // eslint-disable-line
   useEffect(() => { if (channel.state === 'disconnected') onDisconnect?.(); }, [channel.state]); // eslint-disable-line
+  useEffect(() => { onStateChange?.(channel.state); }, [channel.state]); // eslint-disable-line
 
   const commitResolver = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -132,13 +134,42 @@ export default function Beatle({
 
   if (variant === 'bubble') {
     return (
+      <>
+      {/* Own copy, not shared with the bar variant's below -- a bubble
+          can be the ONLY Beatle instance mounted on a page, and MUI's
+          GlobalStyles only injects the keyframes an actually-rendered
+          instance asks for. */}
+      <GlobalStyles styles={{ '@keyframes beatle-pulse': { '0%,100%': { opacity: 0.6 }, '50%': { opacity: 1 } } }} />
       <Box
         title={expressionLabel ? `me://${expressionLabel} — ${STATE_LABEL[channel.state]}` : 'Beatle — NRP channel'}
-        onClick={() => expressionRef.current?.focus()}
-        sx={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none', ...sx }}
+        // Same open/disconnect toggle as the bar variant's own scarab
+        // icon (below) -- this WAS just `expressionRef.current?.focus()`,
+        // a no-op here since bubble mode never renders the input that
+        // ref points at, so clicking a bubble Beatle did nothing at all.
+        // Fixed so a bare icon can be a real, working trigger on its own
+        // (see CleakerLanding.tsx, where this replaces a full bar whose
+        // input duplicated text already shown elsewhere).
+        onClick={() =>
+          channel.state === 'connected' || channel.state === 'streaming'
+            ? disconnect() : handleSubmit()
+        }
+        // Array form — see the bar variant's own Box below for why (a
+        // function-form sx silently dropped by a plain object spread).
+        sx={[
+          { display: 'inline-flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' },
+          ...(Array.isArray(sx) ? sx : [sx]),
+        ]}
       >
-        <span style={{ fontSize: 22, color, filter: `drop-shadow(0 0 4px ${color})`, lineHeight: 1 }}>𓆣</span>
+        <span
+          style={{
+            fontSize: 22, color, filter: `drop-shadow(0 0 4px ${color})`, lineHeight: 1,
+            animation: pulsing ? 'beatle-pulse 1s ease-in-out infinite' : 'none',
+          }}
+        >
+          𓆣
+        </span>
       </Box>
+      </>
     );
   }
 
@@ -147,20 +178,30 @@ export default function Beatle({
       <GlobalStyles styles={{ '@keyframes beatle-pulse': { '0%,100%': { opacity: 0.6 }, '50%': { opacity: 1 } } }} />
 
       <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          width: '100%',
-          height: 44,
-          px: 1.5,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: focused ? color : 'divider',
-          bgcolor: 'background.paper',
-          transition: 'border-color 0.2s ease',
-          ...sx,
-        }}
+        // Array form, not `{...defaults, ...sx}` — that plain object spread
+        // silently dropped a function-form sx (MUI's normal way to read
+        // the live theme, e.g. `sx={(theme) => ({...})}`): spreading a
+        // function's own enumerable properties copies nothing, so the
+        // caller's override never applied and this fell back to its own
+        // defaults underneath. MUI's Box already merges an array of
+        // (object | function | falsy) correctly, in order — this is that,
+        // not a new mechanism.
+        sx={[
+          {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            width: '100%',
+            height: 44,
+            px: 1.5,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: focused ? color : 'divider',
+            bgcolor: 'background.paper',
+            transition: 'border-color 0.2s ease',
+          },
+          ...(Array.isArray(sx) ? sx : [sx]),
+        ]}
       >
         {/* Scarab */}
         <Box
@@ -178,11 +219,6 @@ export default function Beatle({
         >
           𓆣
         </Box>
-
-        {/* me:// */}
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace', fontSize: '0.8rem', flexShrink: 0 }}>
-          me://
-        </Typography>
 
         {/* Expression input */}
         <Box
@@ -238,13 +274,19 @@ export default function Beatle({
           </>
         )}
 
-        {/* State */}
-        <Typography
-          variant="caption"
-          sx={{ flexShrink: 0, fontSize: '0.7rem', fontWeight: 600, color, transition: 'color 0.3s ease', whiteSpace: 'nowrap' }}
-        >
-          {STATE_LABEL[channel.state]}
-        </Typography>
+        {/* State — nothing shown at rest ('idle'): there's genuinely
+            nothing to report before anyone's tried to open a channel, and
+            a fixed word there ("no channel") read as noise, not insight,
+            confirmed live (2026-09-16). Every other state IS something
+            that actually happened (an attempt, a result), worth showing. */}
+        {channel.state !== 'idle' && (
+          <Typography
+            variant="caption"
+            sx={{ flexShrink: 0, fontSize: '0.7rem', fontWeight: 600, color, transition: 'color 0.3s ease', whiteSpace: 'nowrap' }}
+          >
+            {STATE_LABEL[channel.state]}
+          </Typography>
+        )}
 
         {/* Endpoints badge */}
         {(channel.state === 'connected' || channel.state === 'streaming') && channel.resolved.length > 0 && (

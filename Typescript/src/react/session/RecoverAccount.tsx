@@ -93,10 +93,10 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
       <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
         <Box sx={{ textAlign: 'center', mb: -1 }}>
           <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
-            Set a New Password
+            Set a New Secret
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-            Recovered <strong>{semanticNamespace}</strong>. This password stays on this device only — it unlocks a
+            Recovered <strong>{semanticNamespace}</strong>. This secret stays on this device only — it unlocks a
             local copy of your identity so you don&apos;t need the phrase every time.
           </Typography>
         </Box>

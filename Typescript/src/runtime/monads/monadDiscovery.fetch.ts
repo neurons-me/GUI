@@ -106,6 +106,19 @@ async function fetchJsonWithTimeout(
   }
 }
 
+// readJson() above falls back to `{ text }` when a response body isn't
+// valid JSON -- a real Monad's /__surface contract is always JSON, so that
+// fallback shape is proof this ISN'T one, not a lenient variant of a real
+// surface payload. Without this check, a non-Monad server that 200s some
+// unrelated HTML at this path (an SPA's own catch-all index.html for any
+// unmatched route, which frontend_local's own server does) reads as
+// `alive` below purely because response.ok was true -- confirmed live as a
+// real gap, not a hypothetical one.
+function isGenuineSurfacePayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  return !('text' in (payload as Record<string, unknown>));
+}
+
 function discoveryError(
   stage: MonadDiscoveryError['stage'],
   error: unknown,
@@ -348,6 +361,15 @@ export async function probeMonadSurface(input: ProbeBase): Promise<SurfaceProbeR
     const latencyMs = now() - startedAt;
     if (!response.ok) {
       const error = `HTTP ${response.status}`;
+      return {
+        endpoint: endpointHealth(candidate, 'dead', { latencyMs, error }),
+        monad: null,
+        error: { endpoint, stage: 'surface', message: error, at: now() },
+      };
+    }
+
+    if (!isGenuineSurfacePayload(payload)) {
+      const error = 'Non-JSON response from /__surface';
       return {
         endpoint: endpointHealth(candidate, 'dead', { latencyMs, error }),
         monad: null,

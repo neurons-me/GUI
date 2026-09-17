@@ -158,17 +158,35 @@ function normalizeMountDevtools(options: MountOptions): NormalizedMountDevtools 
       : {};
   const devtoolsEnabled = options.devtools === true || rawDevtools.enabled === true;
 
+  // "Requested" means the caller wants the inspector/admin-view
+  // INFRASTRUCTURE mounted at all (SelectionProvider + RuntimeInspector),
+  // distinct from "enabled" (whether it starts ON) -- so this must only be
+  // true when an option was explicitly set to `true`, never merely "set to
+  // some boolean". The previous `typeof x === 'boolean'` checks treated an
+  // explicit `false` the same as `true`: a caller passing
+  // `devtools: { inspector: false }` to mean "no inspector, don't mount
+  // it" still got requested=true, mounting a hidden-but-live
+  // SelectionProvider/RuntimeInspector anyway. Because selectionStore is a
+  // page-wide singleton (globalThis[STORE_KEY], see selectionStore.ts),
+  // that hidden instance shares inspectorEnabled/selectedNode state with
+  // any OTHER inspector mounted elsewhere on the same page -- confirmed
+  // live: frontend_local's main.jsx mounts the whole app with
+  // devtools:{inspector:false, inspectorToggleVisible:false} expecting
+  // none of this mounted, and toggling a SEPARATE, real inspector
+  // elsewhere on the page turned this hidden one on too, both racing to
+  // handle the same click with two different `me` values (one a real
+  // kernel, one a browser-side stand-in) depending on DOM paint order.
   const inspectorRequested =
     devtoolsEnabled ||
-    legacyInspectorSet ||
-    typeof rawDevtools.inspector === 'boolean' ||
-    legacyToggleSet ||
-    typeof rawDevtools.inspectorToggleVisible === 'boolean';
+    options.inspectorEnabled === true ||
+    rawDevtools.inspector === true ||
+    options.inspectorToggleVisible === true ||
+    rawDevtools.inspectorToggleVisible === true;
 
   const adminViewRequested =
     devtoolsEnabled ||
-    legacyAdminViewSet ||
-    typeof rawDevtools.adminView === 'boolean';
+    options.adminViewEnabled === true ||
+    rawDevtools.adminView === true;
 
   const requested = inspectorRequested || adminViewRequested;
   if (!requested) {

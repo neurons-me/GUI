@@ -227,6 +227,15 @@ export type BeatleProps = {
   onConnect?: (channel: NamespaceChannel) => void;
   onMessage?: (msg: BeatleMessage) => void;
   onDisconnect?: () => void;
+  /**
+   * Fired on every channel.state transition (idle/parsing/connecting/
+   * resolving/connected/streaming/error/invalid/disconnected) -- not just
+   * the connected/disconnected edges onConnect/onDisconnect already cover.
+   * For a host that wants to mirror Beatle's own connection state
+   * elsewhere (e.g. recoloring a QR code by it) without opening a second,
+   * independent channel to get it.
+   */
+  onStateChange?: (state: ResolutionState) => void;
   variant?: 'bar' | 'bubble';
   sx?: any;
 };

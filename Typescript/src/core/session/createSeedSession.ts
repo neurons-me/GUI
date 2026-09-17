@@ -77,6 +77,27 @@ export interface SeedSession {
    * seed string, not necessarily one bound to an active expression).
    */
   signPayload?(message: string): Promise<string>;
+  /**
+   * The one signed-write entry point GUI code should use: "save this value
+   * at this path" — nothing about signatures, canonical JSON, or which
+   * namespace this targets is the caller's concern. Composes this same
+   * session's own write()+signPayload() internally, using ITS OWN bound
+   * identityHash/namespace, so a caller can never sign a payload for one
+   * namespace and have it land against another. Optional for the same
+   * reason signPayload is: a session backend that can't sign (no
+   * signPayload) can't offer this either.
+   */
+  signAndWrite?<TValue = unknown>(expression: string, value: TValue): Promise<MonadWriteResult>;
+  /**
+   * The read-side counterpart to signAndWrite — a genuine, disclosure-
+   * checked read against this session's own monad/namespace (never the
+   * local-only read() above, which only ever answers from whatever this
+   * tab already has in memory). Resolves the SAME namespace write()/
+   * signAndWrite() do, so a caller can't accidentally read one namespace's
+   * copy of a path while having written another's. Returns `undefined` for
+   * a path that genuinely doesn't exist yet, rather than throwing.
+   */
+  readConfirmed?<TValue = unknown>(expression: string): Promise<TValue | undefined>;
   clear(): void;
   logout(): void;
 }

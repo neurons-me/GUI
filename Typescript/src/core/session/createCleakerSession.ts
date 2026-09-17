@@ -13,12 +13,13 @@
 import ME, {
   deriveBranchProofSeed,
   importEd25519SigningKey,
+  normalizeProofMessage,
   signEd25519Proof,
 } from 'this.me';
 import cleaker from 'cleaker';
 import type { CleakerNode, MeKernel } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
-import { createMeRuntime, readMeValue } from '@/runtime/run-me';
+import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
 import type { MeLike } from '@/react/types';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
 import { deriveWireSecretFromRootBytes, hexToBytes } from '@/core/identity/recoveryPhrase';
@@ -364,6 +365,68 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       const branchSeed = await deriveBranchProofSeed(kernelSeedHex, username);
       const { privateKey } = await importEd25519SigningKey(branchSeed);
       return signEd25519Proof(privateKey, message);
+    },
+    // The one signed-write entry point GUI code should call: "save this
+    // value at this path", nothing more. Builds and signs the exact
+    // canonical body the server verifies against (see monadClient.ts's
+    // writeNamespace() — operation/expression/value/identityHash, no other
+    // fields — and modules/monad's replay.ts's isNamespaceWriteAuthorized(),
+    // which checks the signature against toStableJson() of precisely that
+    // object; normalizeProofMessage is this.me's own copy of the same
+    // sorted-key canonical-JSON algorithm, confirmed byte-for-byte
+    // equivalent by reading both). A caller never assembles this payload
+    // itself — that was the exact mistake this method replaces.
+    //
+    // identityHash/activeNamespace are read fresh at call time (the same
+    // closure variables `write` and `open`/`claim` already share), so this
+    // can never sign or target a namespace other than the one THIS session
+    // is actually bound to.
+    async signAndWrite<TValue = unknown>(expression: string, value: TValue): Promise<MonadWriteResult> {
+      if (!activeNamespace) {
+        throw new SeedSessionError('NAMESPACE_REQUIRED', 'An active namespace is required for signAndWrite.');
+      }
+      const signedFields = { operation: 'write', expression, value, identityHash };
+      const signedPayload = normalizeProofMessage(signedFields);
+      const branchSeed = await deriveBranchProofSeed(kernelSeedHex, username);
+      const { privateKey } = await importEd25519SigningKey(branchSeed);
+      const signature = await signEd25519Proof(privateKey, signedPayload);
+      const result = await this.write(expression, value, { signature, signedPayload });
+      // Mirror the now-CONFIRMED value into the local kernel so reactive
+      // consumers (useMeValue, the Inspector's me.explain()) observe the
+      // same destination this write just durably reached — this mirroring
+      // only ever runs after a real write() has already succeeded; it is
+      // never itself the persistence mechanism (that's the line above).
+      try { writeMeValue(me, expression, value); } catch { /* local mirror is best-effort */ }
+      return result;
+    },
+    // The read-side counterpart: a genuine GET against this session's own
+    // monad/namespace (monadClient.ts's readNamespacePath, the real
+    // disclosure-checked endpoint — never the local-only read() above,
+    // which only ever answers from whatever this tab already has in
+    // memory). Resolves the namespace the exact same way write()/
+    // signAndWrite() do, from the SAME activeNamespace closure variable —
+    // read and write can never silently target different namespaces.
+    // A path that genuinely doesn't exist yet (NOT_FOUND/PATH_NOT_FOUND)
+    // is a legitimate empty state, not an error worth throwing.
+    async readConfirmed<TValue = unknown>(expression: string): Promise<TValue | undefined> {
+      const semanticNamespace = normalizeMonadSemanticNamespace(String(activeNamespace || '').trim());
+      if (!semanticNamespace) {
+        throw new SeedSessionError('NAMESPACE_REQUIRED', 'An active namespace is required for readConfirmed.');
+      }
+      try {
+        const result = await monad.readNamespacePath<TValue>({
+          semanticNamespace,
+          transportOrigin,
+          path: expression,
+        });
+        try { writeMeValue(me, expression, result.value as any); } catch { /* local mirror is best-effort */ }
+        return result.value;
+      } catch (cause) {
+        if (cause instanceof MonadClientError && (cause.code === 'NOT_FOUND' || cause.code === 'PATH_NOT_FOUND')) {
+          return undefined;
+        }
+        throw cause;
+      }
     },
     clear,
     logout() {

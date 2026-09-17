@@ -71,7 +71,7 @@ function safeStringify(value: any): string {
 
 type InspectorTab = 'spec' | 'resolved' | 'diff';
 type ExplainPanelStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unsupported';
-type ExplainPanelTone = 'ready' | 'warning' | 'redacted';
+type ExplainPanelTone = 'ready' | 'warning' | 'redacted' | 'unknown';
 
 type ExplainPanelState = {
   status: ExplainPanelStatus;
@@ -332,19 +332,16 @@ function summarizeExplainPayload(payload: any, provenance: any): ExplainPanelSum
   const maskedInputs = Array.isArray(payload?.derivation?.inputs)
     ? payload.derivation.inputs.filter((input: any) => Boolean(input?.masked)).length
     : 0;
-  const policy = String(provenance?.policy || '').toLowerCase();
-  const policyHintsRedaction =
-    policy.includes('stealth') || policy.includes('secret') || policy.includes('redact');
 
-  if (payload?.value === undefined && (policyHintsRedaction || maskedInputs > 0 || payload?.path)) {
-    return {
-      label: 'Redacted by Kernel Policy',
-      message:
-        'The kernel returned no public value for this path. The interface is respecting stealth at read time.',
-      tone: 'redacted',
-    };
-  }
-
+  // "Stealth Dependencies Masked" describes a fact the kernel's own response
+  // actually contains -- derivation.ts's explain() marks individual
+  // derivation INPUTS with `masked: true` when they resolve inside a secret
+  // scope (see resolveBranchScope/pathStartsWith there). That fact stands on
+  // its own regardless of whether the node's own top-level `value` happens
+  // to be present or not -- a derivation can have masked inputs and still
+  // compute a public result, so this no longer requires `value === undefined`
+  // to fire (that co-occurrence was never something the kernel actually
+  // asserted; it was this file inferring a link the payload doesn't make).
   if (maskedInputs > 0) {
     return {
       label: 'Stealth Dependencies Masked',
@@ -353,6 +350,26 @@ function summarizeExplainPayload(payload: any, provenance: any): ExplainPanelSum
           ? 'One dependency was masked by the kernel while explaining this node.'
           : `${maskedInputs} dependencies were masked by the kernel while explaining this node.`,
       tone: 'warning',
+    };
+  }
+
+  // Beyond that, the kernel's explain() contract has no field anywhere that
+  // marks the primary `value` itself as redacted -- for a plain
+  // (non-derived) path it returns `value: self.readPath(target)` verbatim,
+  // with nothing distinguishing "this path is under a secret scope" from
+  // "this path simply has no local value yet" (confirmed by reading its
+  // early-return branch directly). `provenance.policy` is metadata THIS
+  // component's author wrote, not something the kernel declared, so it
+  // can't stand in for that missing signal either. Until the kernel's own
+  // explain() contract adds a real field for this, "Value Not Available" is
+  // the only honest label for `value === undefined` — anything more
+  // specific would be inventing a cause the response doesn't support.
+  if (payload?.value === undefined) {
+    return {
+      label: 'Value Not Available',
+      message:
+        'The kernel returned no value for this path, and nothing in the response says why -- it may not be set on this kernel instance yet, or it may be under a secret scope the current contract can\'t distinguish. Compare a direct local read against a confirmed server read to narrow it down.',
+      tone: 'unknown',
     };
   }
 
@@ -1141,6 +1158,13 @@ export function RuntimeInspector({
         color: '#fde68a',
       };
     }
+    if (explainSummary.tone === 'unknown') {
+      return {
+        border: '1px solid rgba(148, 163, 184, 0.35)',
+        background: 'rgba(51, 65, 85, 0.35)',
+        color: '#cbd5e1',
+      };
+    }
     return {
       border: '1px solid rgba(74, 222, 128, 0.3)',
       background: 'rgba(20, 83, 45, 0.3)',
@@ -1153,6 +1177,7 @@ export function RuntimeInspector({
       {toggleVisible && (
         <button
           type="button"
+          data-gui-inspector-control="true"
           onClick={() => setInspectorEnabled(!inspectorEnabled)}
           style={{
             position: 'fixed',
@@ -1174,6 +1199,7 @@ export function RuntimeInspector({
 
       {open && (
         <aside
+          data-gui-inspector-control="true"
           style={{
             position: 'fixed',
             top: 0,

@@ -27,14 +27,22 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
+import DisplayNameProvenanceDemo from '@/gui/All.This/Cleaker/Provenance/DisplayNameProvenanceDemo';
+import { SidebarCompositionShell } from '@/gui/Layout/Sidebars/Composition/SidebarCompositionDemo';
+import Layout from '@/gui/Layout/Layout';
+import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
+import { useCleakerRootSidebar } from './cleakerNavigationComposition';
+import { useVerifiedCleakerRoot, type CleakerRootSeed, type CleakerRootStatus } from './verifiedCleakerRoot';
 import { useMeLauncherView } from './MeLauncher';
-import Beatle from '@/gui/All.This/NRP/Beatle/Beatle';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
-import type { NamespaceChannel } from '@/gui/All.This/NRP/Beatle/Beatle.types';
+import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 import RegisterMe from './RegisterMe';
 import RecoverAccount from './RecoverAccount';
+import MainServerView from '@/gui/All.This/netget/MainServer/MainServerView';
+import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
+import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
 
 interface DirectoryUser {
   username: string;
@@ -105,6 +113,18 @@ function deriveNamespaceRootLabel(endpoint: string): string {
   }
 }
 
+// Same mixed-content fix as rootSeed's own derivation below (see
+// CleakerLayoutShell): when the namespace being resolved IS the host this
+// page is already loaded from, trust window.location's own scheme over a
+// guessed https -- probing a scheme this page didn't actually load over
+// is indistinguishable from the destination being down.
+function cleakerEndpointForNamespace(namespace: string): string {
+  if (typeof window !== 'undefined' && window.location.hostname === namespace) {
+    return window.location.origin;
+  }
+  return `https://${namespace}`;
+}
+
 // QRme itself now always draws a crisp, legible ".me" (PixelWordmark,
 // rendered independent of QR module resolution — see QR.me.tsx / meMark.ts),
 // so expanding on click is purely about physical scan size, not legibility.
@@ -116,7 +136,37 @@ function deriveNamespaceRootLabel(endpoint: string): string {
 const QR_DIAMETER_DEFAULT = 125;
 const QR_DIAMETER_EXPANDED = 214;
 
-const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
+// Spanish-language mirror of Beatle.tsx's own (English, internal) STATE_LABEL
+// -- not exported from there, and this page's other status copy ("No se
+// pudo conectar a…") is already Spanish, so this stays consistent with it
+// rather than pulling in Beatle's English wording.
+const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
+  idle: '',
+  parsing: 'Analizando…',
+  connecting: 'Conectando…',
+  resolving: 'Resolviendo…',
+  connected: 'Conectado',
+  streaming: 'Transmitiendo',
+  error: 'No se pudo conectar',
+  invalid: 'Dominio inválido',
+  disconnected: '',
+};
+
+// Local extensions of CleakerLandingProps (like the removed `destination`
+// prop before them), not a change to that shared, exported type -- only
+// CleakerLayoutShell supplies these, wiring Beatle's own resolution into
+// the SAME shared context the sidebar and /netget read from, instead of
+// independently-drifting "current root" facts. onBeatleNamespaceResolved:
+// see handleBeatleConnect below and verifiedCleakerRoot.ts's `promote`.
+// sharedRootStatus: the shared context's OWN in-flight/settled status, so
+// the QR can wait for that re-verification instead of reporting success
+// the instant Beatle's own (weaker) mesh resolution does.
+type CleakerLandingHomeProps = CleakerLandingProps & {
+  onBeatleNamespaceResolved?: (namespace: string) => void;
+  sharedRootStatus?: CleakerRootStatus;
+};
+
+const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
   const [expanded, setExpanded] = useState(false);
@@ -193,47 +243,6 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
     return () => setActiveNamespaceRoot(null);
   }, [namespaceRootLabel]);
 
-  // Reachability of whichever root is currently shown — a quiet, discrete
-  // signal ("is this actually there before you try to claim into it"), not
-  // a loud status widget. `no-cors` deliberately: this only needs to know
-  // whether the host resolves and answers at all, not read its response —
-  // an opaque 200 from no-cors and a real 404 both count as "up" here, only
-  // a network-level failure (DNS, connection refused, timeout) is "down".
-  // That sidesteps needing any CORS grant from cleaker.me specifically for
-  // a check this shallow. Re-runs whenever the shown root changes (toggle
-  // or prop), not on a timer — a one-shot check per root, not polling.
-  const [rootReachable, setRootReachable] = useState<'checking' | 'up' | 'down'>('checking');
-  useEffect(() => {
-    let cancelled = false;
-    setRootReachable('checking');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-    // When the root being checked is the same host this page is already
-    // loaded from, check window.location.origin instead of resolvedEndpoint
-    // verbatim — a caller-supplied cleakerEndpoint prop can carry a scheme
-    // that doesn't match what the browser actually loaded (seen live:
-    // Chrome auto-upgrading a plain-http endpoint to https, "Not Secure"
-    // cert warning and all), and fetching the mismatched-scheme version
-    // from an https page is mixed content, silently blocked — read as
-    // "down" even though the page obviously loaded fine. Using the exact
-    // origin already proven to work sidesteps the protocol mismatch
-    // entirely for the common case (checking the root you're actually
-    // standing on); checking any OTHER namespace still uses the configured
-    // endpoint as before, since that direction isn't blocked.
-    const checkUrl = (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel)
-      ? window.location.origin
-      : resolvedEndpoint;
-    fetch(checkUrl, { method: 'HEAD', mode: 'no-cors', signal: controller.signal })
-      .then(() => { if (!cancelled) setRootReachable('up'); })
-      .catch(() => { if (!cancelled) setRootReachable('down'); })
-      .finally(() => clearTimeout(timeoutId));
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearTimeout(timeoutId);
-    };
-  }, [resolvedEndpoint]);
-
   // Directory search — "look up an existing .me identity" before doing
   // anything with your own. Same live claims directory UsersTable already
   // reads (GET {origin}/apps/netget/ → { users: [...] }), fetched once on
@@ -296,37 +305,61 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
     }
   }, [resolvedEndpoint, username]);
 
-  // Beatle below can resolve to a DIFFERENT destination than this page's
-  // own identity — the QR should follow that, not stay pinned to
-  // defaultQrValue once something real has resolved. Only ever set from a
-  // genuine 'resolved' channel (via onConnect, fired once per successful
-  // open — see Beatle.tsx's own effect), and only using the endpoint the
-  // NRP server itself already computed and vetted (channel.resolved,
-  // deriveEndpoints() server-side) — never built by hand from
-  // expression.canonical, which can carry me://, operators, or selectors
-  // that don't reduce to a web hostname+path at all. Left untouched (not
-  // cleared) on every other state — resolving, error, invalid,
-  // disconnected — so the QR never flips to represent a destination that
-  // never actually resolved; it just keeps showing the last one that did.
+  // Beatle's own connection state (idle/parsing/connecting/resolving/
+  // connected/streaming/error/invalid/disconnected) drives the QR's
+  // status -- no second, independent check for the "is Beatle talking to
+  // something" part. Beatle already shows this itself (its scarab dot +
+  // state label, right above); this only means the QR recolors in sync
+  // with it instead of staying visually disconnected from the one real
+  // signal already on screen.
   //
-  // The QR carries a plain, shareable address only — never a session
-  // token or secret. Whoever scans it opens that address with their OWN
-  // context and permissions, not this page's.
-  //
-  // Reachability is NOT solved here: a host like "local.cleaker" only
-  // resolves on machines that have it configured (mkcert/hosts entry) —
-  // a phone scanning this QR has no such entry, and "localhost" in the QR
-  // would point at the PHONE itself, not this computer. This only wires
-  // the QR to the correct address Beatle resolved; whether that address
-  // is externally reachable from whatever scans it is a separate,
-  // unsolved problem.
-  const [beatleResolvedUrl, setBeatleResolvedUrl] = useState<string | null>(null);
-  const handleBeatleConnect = useCallback((channel: NamespaceChannel) => {
-    const endpoint = channel.resolved?.[0];
-    if (endpoint) setBeatleResolvedUrl(endpoint);
-  }, []);
+  // BUT Beatle's own "connected" only means netget's mesh resolver found
+  // something -- it does NOT mean the shared confirmed context (sidebar,
+  // /netget) has actually moved there yet. A genuine connect triggers a
+  // SEPARATE re-verification (see handleBeatleConnect below,
+  // onBeatleNamespaceResolved, verifiedCleakerRoot.ts's promote()); while
+  // that's still in flight, sharedRootStatus stays 'checking', and the QR
+  // must keep showing "checking" too -- otherwise it would report success
+  // a beat before the sidebar/netget context that's supposed to match it
+  // actually does, exactly the drift this was corrected to close.
+  const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
+  const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' =
+    beatleState === 'error' || beatleState === 'invalid' ? 'error'
+    : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
+    : beatleState === 'connected' || beatleState === 'streaming'
+      ? (sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
+      : 'idle';
+  const qrStatusLabel = beatleState === 'idle' || beatleState === 'disconnected' ? '' : BEATLE_STATE_LABEL[beatleState];
 
-  const qrValue = beatleResolvedUrl ?? defaultQrValue;
+  // USED TO also override the QR's own encoded value with whatever
+  // Beatle resolved (a `beatleResolvedUrl` state, permanently replacing
+  // defaultQrValue once set) -- that made sense back when Beatle was a
+  // visible, manually-typed switcher: you'd type a genuinely different
+  // destination and the QR would deliberately follow it there. Now that
+  // Beatle is headless and auto-connects to `beatleExpression` on its
+  // own (see that hook above), it resolves the bare ROOT, not whatever
+  // username is currently being typed into the sign-in form -- so that
+  // override was firing on every page load and permanently freezing the
+  // QR at the root's address, silently killing the "QR previews the
+  // username you're typing" behavior (flagged live: "el QR ya no cambia
+  // según el username que pongas"). There's no longer a user action that
+  // means "follow this other destination instead," so the QR now just
+  // always reflects defaultQrValue, and handleBeatleConnect only handles
+  // the shared-context promotion below.
+  const handleBeatleConnect = useCallback((channel: NamespaceChannel) => {
+    // Beatle resolving is NOT the same fact as the shared context moving --
+    // that only happens if a fresh probeCleakerRoot independently confirms
+    // whatever namespace Beatle just resolved (see onBeatleNamespaceResolved's
+    // own doc comment below). Only handles the common case (a bare
+    // namespace leaf, e.g. typing "cleaker.me") -- a union/overlay/path
+    // expression isn't "which root," so it's left alone here.
+    const ast = channel.expression?.ast;
+    if (ast?.kind === 'namespace' && ast.value) {
+      onBeatleNamespaceResolved?.(ast.value);
+    }
+  }, [onBeatleNamespaceResolved]);
+
+  const qrValue = defaultQrValue;
 
   if (!view) return null;
 
@@ -390,22 +423,71 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
     }
   }, [authenticated, mode, registrationComplete, recoveryComplete]);
 
-  // The authenticated identity line links to its own real .me surface —
-  // strip the root suffix off semanticNamespace to get just the handle
-  // (same derivation SessionSurface.tsx already uses for its own `handle`),
-  // then build the same kind of URL UsersTable's rows already link to.
+  // Strip the root suffix off semanticNamespace to get just the handle
+  // (same derivation SessionSurface.tsx already uses for its own `handle`)
+  // -- feeds beatleExpression below when semanticNamespace itself isn't
+  // ready yet (claim accepted, session not fully settled).
   const authenticatedHandle = useMemo(() => {
     if (!semanticNamespace) return '';
     const suffix = `.${namespaceRootLabel}`;
     return semanticNamespace.endsWith(suffix) ? semanticNamespace.slice(0, -suffix.length) : semanticNamespace;
   }, [semanticNamespace, namespaceRootLabel]);
-  const authenticatedHref = useMemo(() => {
-    try {
-      return buildCleakerNamespaceUrl(resolvedEndpoint, authenticatedHandle || undefined);
-    } catch {
-      return resolvedEndpoint;
-    }
-  }, [resolvedEndpoint, authenticatedHandle]);
+
+  // What Beatle, right under the QR, shows and connects to -- the SAME
+  // expression this QR is currently positioned at, never a second,
+  // independently-stale one. Pre-auth: the bare root (the switch between
+  // e.g. "local.cleaker"/"cleaker.me"). Once claimed: the full identity,
+  // exactly matching the (now-removed) big identity link's own text, so
+  // there's one place this shows, not two.
+  const beatleExpression = authenticated
+    ? (semanticNamespace || `${authenticatedHandle || '…'}.${namespaceRootLabel}`)
+    : namespaceRootLabel;
+  // Used to be prepended with Beatle's own scarab glyph, back when a
+  // visible Beatle instance sat right under the QR and this glyph
+  // pointed at it. Now that Beatle is gone entirely (headless connect,
+  // below), QR.me.tsx draws a real online/offline status dot at the same
+  // spot instead of a fixed icon that never actually reflected
+  // connection state -- see its own perimeterLabel/perimeterRootLabel
+  // doc comments.
+  const perimeterLabel = beatleExpression;
+  // Same "visit this .me" pattern the directory search already uses
+  // (visitUser, above) -- makes the handle drawn around your OWN QR a
+  // real pointer to that identity's own surface, not just decoration.
+  // Only meaningful once there's an actual handle (pre-auth, the
+  // perimeter is just the bare root with no handle segment to link).
+  const perimeterHandleHref = authenticated && authenticatedHandle
+    ? buildCleakerNamespaceUrl(resolvedEndpoint, authenticatedHandle)
+    : undefined;
+
+  // Headless Beatle -- the exact same useBeatle()/channel machinery the
+  // visible <Beatle> component wraps (see CleakerUrlView's own use of it
+  // above), called directly instead of through that component. Flagged
+  // live, twice, as still showing SOMETHING under the QR no matter how
+  // small ("porque sigues poniendo al escarabajo") after a bar-with-text,
+  // then an icon-only bubble, both still duplicated what the QR's own
+  // perimeter already displays. "Solo queremos el QR" is literal: no
+  // separate control, icon, or box of any kind -- so the channel now
+  // opens on its own, the moment there's an expression to open (mount,
+  // and again whenever beatleExpression itself changes), rather than
+  // waiting on a tap that had nowhere left to live.
+  const beatleResolverWs = useMemo(() => makeDefaultResolvers()[0].ws, []);
+  const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs);
+  // Same mode gate the QR bubble itself uses (it isn't even rendered in
+  // register/recover mode -- see that Box's own doc comment) -- nothing
+  // on screen would reflect this channel's status there, so there's no
+  // reason to open one.
+  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk;
+  useEffect(() => {
+    if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
+    // openBeatleChannel is stable (useBeatle's own useCallback) except
+    // when beatleResolverWs changes, which never happens post-mount here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beatleAutoConnectReady, beatleExpression]);
+  useEffect(() => {
+    setBeatleState(beatleChannel.state);
+    if (beatleChannel.state === 'connected') handleBeatleConnect(beatleChannel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beatleChannel.state]);
 
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
@@ -422,79 +504,24 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
+        // Was 4 -- flagged live as far too much air between the QR/Beatle
+        // group and whatever renders below it (the sign-in form, or the
+        // authenticated hash+Salir block) -- cut hard per that feedback.
+        // NOT the literal 80% first tried (0.8): the QR's own perimeter
+        // label already sits close to its outer edge, so that value
+        // collided the "Hello, I am…" heading straight into it -- this is
+        // as tight as it goes before overlapping the QR's own label.
+        gap: 1.5,
         px: 3,
         py: 6,
         boxSizing: 'border-box',
         ...sx,
       }}
     >
-      {/* Users directory + Blockchain — mirrors the search icon's top-right
-          placement on the opposite corner. Both are real routes (/users,
-          /blockchain — client-side, see the <Routes> wrapper below), not
-          modals or state toggles: each is an NRP-addressable subtree
-          (local.cleaker/users vs local.cleaker/blockchain — the claims
-          directory vs the full memory log behind it, see
-          modules/cleaker/Typescript/typedocs/Namespace-Is-Context.md §4),
-          so each needs its own URL. No sidebars/Layout shell here on
-          purpose — this stays the same minimal, centered chrome as the
-          landing page, just different center content. */}
-      <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, left: { xs: 12, sm: 20 }, zIndex: 20, display: 'flex', gap: 1 }}>
-        <LinkIconButton
-          component={Link}
-          to="/users"
-          aria-label="Browse .me users"
-          data-gui-node-id="CleakerLanding.usersLink"
-          sx={{
-            width: 40,
-            height: 40,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: '50%',
-            bgcolor: 'background.paper',
-            color: 'text.secondary',
-            '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
-          }}
-        >
-          <Icon name="group" fontSize={18 as any} />
-        </LinkIconButton>
-        <LinkIconButton
-          component={Link}
-          to="/blockchain"
-          aria-label="Browse the namespace blockchain"
-          data-gui-node-id="CleakerLanding.blockchainLink"
-          sx={{
-            width: 40,
-            height: 40,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: '50%',
-            bgcolor: 'background.paper',
-            color: 'text.secondary',
-            '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
-          }}
-        >
-          <Icon name="link" fontSize={18 as any} />
-        </LinkIconButton>
-        <LinkIconButton
-          component={Link}
-          to="/url"
-          aria-label="Open the URL explorer"
-          data-gui-node-id="CleakerLanding.urlLink"
-          sx={{
-            width: 40,
-            height: 40,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: '50%',
-            bgcolor: 'background.paper',
-            color: 'text.secondary',
-            '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
-          }}
-        >
-          <Icon name="language" fontSize={18 as any} />
-        </LinkIconButton>
-      </Box>
+      {/* Users/Blockchain/URL (and Keychain, once authenticated) now live
+          in the shared sidebar -- see CleakerLayoutShell below, which
+          mounts the real Layout/LeftBar around this whole route tree.
+          Removed from here entirely rather than duplicated. */}
 
       {/* Directory search — fixed to the top-right corner, out of the
           centered identity flow entirely (looking someone else up is a
@@ -546,74 +573,59 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
             diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
             hoverFlip={false}
             clickFlip={false}
+            status={qrStatus}
+            statusLabel={qrStatusLabel}
+            // The namespace/expression itself draws AROUND the QR's own
+            // perimeter (see QR.me.tsx's own doc comment on
+            // perimeterLabel) instead of sitting in a separate caption
+            // box well below it -- flagged live as reading like two
+            // disconnected things. Stays visible whether collapsed or
+            // expanded -- this is the one that must always ring the
+            // QR.me itself (corrected live: an earlier pass hid this
+            // one instead of addressing Beatle's own field below, which
+            // was backwards -- this is "the right one to keep").
+            perimeterLabel={perimeterLabel}
+            perimeterRootLabel={namespaceRootLabel}
+            perimeterHandleHref={perimeterHandleHref}
             data-gui-node-id="CleakerLanding.bubble"
             style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           />
         </Box>
       )}
 
+      {/* No visible Beatle here at all, in any form -- a full text bar,
+          then an icon-only bubble, both still read as a second thing
+          duplicating the QR ("porque sigues poniendo al escarabajo").
+          "Solo queremos el QR" is literal: the channel itself still
+          opens (see the headless useBeatle() call above, right next to
+          handleBeatleConnect), it just no longer needs a visible control
+          to do it -- it connects on its own the moment there's an
+          expression to open. */}
+
       {authenticated
       && (mode !== 'register' || registrationComplete)
       && (mode !== 'recover' || recoveryComplete) ? (
         /* Authenticated — "Hello, I am…" and the root-switch badge were
            both about deciding WHO/WHERE to claim into before you had an
-           identity yet; once you have one, they're just noise. Replaces
-           both with the one thing worth showing: the real claimed
-           namespace, whole (e.g. "jabellae.local.cleaker"), not split
-           across a greeting and a separate pill. The identityHash-derived
-           label stays underneath it — a human likes seeing that public,
-           checkable fingerprint next to their name, not just the name
-           alone. */
+           identity yet; once you have one, they're just noise. The real
+           claimed namespace, whole (e.g. "jabellae.local.cleaker"), is
+           what Beatle now shows right under the QR (see beatleExpression
+           above this branch) -- showing it a second time here, in a
+           separate big link, was the exact "same thing twice" redundancy
+           flagged live. The identityHash-derived label stays -- a human
+           likes seeing that public, checkable fingerprint next to their
+           name, not just the name alone -- it just no longer repeats the
+           name alongside it. */
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-          <Typography
-            component="a"
-            href={authenticatedHref}
-            data-gui-node-id="CleakerLanding.identity"
-            variant="body1"
-            sx={{
-              fontWeight: 700,
-              fontFamily: 'monospace',
-              wordBreak: 'break-all',
-              textAlign: 'center',
-              color: 'text.primary',
-              textDecoration: 'none',
-              '&:hover': { color: 'primary.main', textDecoration: 'underline' },
-            }}
-          >
-            {semanticNamespace || `${authenticatedHandle || '…'}.${namespaceRootLabel}`}
-          </Typography>
           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
             {label}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {/* jabellae.local.cleaker/keychain — the keys belonging to
-                THIS authenticated identity, same route-per-subtree pattern
-                as /users and /blockchain above. Only shown once signed
-                in: the keychain is about your own keys, not something to
-                browse pre-auth the way the public directory is. */}
-            <LinkIconButton
-              component={Link}
-              to="/keychain"
-              aria-label="Open keychain"
-              data-gui-node-id="CleakerLanding.keychainLink"
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                p: 1,
-                px: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Icon name="key" fontSize="1rem" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Keychain</Typography>
-            </LinkIconButton>
+            {/* Keychain moved to the shared sidebar (CleakerLayoutShell,
+                shown only once authenticated -- same condition as before,
+                just relocated) instead of living inline here. Salir stays
+                -- it's an account action tied to this identity display,
+                not a navigation control. */}
             <Box
               component="button"
               type="button"
@@ -669,31 +681,32 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               am I claiming into"). Pre-auth only now — see the
               authenticated branch above for why. */}
           <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: -2 }}>
-            {/* No trailing ".me" here — the Claim submit button below is now
+            {/* No trailing ".me" here — the .me submit button below is now
                 the answer to this sentence, not a repeat of it. The page
                 reads as one continuous line: "Hello, I am…" [namespace]
-                [username] [secret] "Claim". */}
+                [username] [secret] ".me". */}
             <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
               Hello, I am…
             </Typography>
             {/* The connection badge that used to live here (a separate
                 "here" pill, click-to-switch local.cleaker/cleaker.me) is
-                gone — Beatle below IS that control now: its own connection
-                dot + state label already show exactly what the badge did,
-                and its input defaults to this same resolved value as real,
-                editable text (see defaultExpression below), not a second
-                display of it. Showing "local.cleaker" in two places at
-                once was the actual bug, not which of the two survived.
-                Known, accepted side effect: this removes the one-click
-                switch to another root for the CREDENTIALS form's own
-                target below -- that still resolves whatever
-                cleakerEndpoint says (or window.location's own origin when
-                no prop is given — no hardcoded root either way, same as
-                before), just with no in-page toggle anymore. Beatle's own field can
-                explore a different destination freely; it was never wired
-                to change what the credentials form claims into, and still
-                isn't -- exploring and claiming stay two different actions,
-                on purpose. */}
+                gone — Beatle, now positioned right under the QR above (see
+                that Box), IS that control: its own connection dot + state
+                label already show exactly what the badge did, and its
+                input defaults to this same resolved value as real,
+                editable text, not a second display of it. Showing
+                "local.cleaker" in two places at once was the actual bug,
+                not which of the two survived, and not where on the page
+                the surviving one sits. Known, accepted side effect: this
+                removes the one-click switch to another root for the
+                CREDENTIALS form's own target below -- that still resolves
+                whatever cleakerEndpoint says (or window.location's own
+                origin when no prop is given — no hardcoded root either
+                way, same as before), just with no in-page toggle anymore.
+                Beatle's own field can explore a different destination
+                freely; it was never wired to change what the credentials
+                form claims into, and still isn't -- exploring and
+                claiming stay two different actions, on purpose. */}
             {!secureContextOk && (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
                 <Typography variant="body2" sx={{ color: 'warning.main', textAlign: 'center', fontSize: '0.8rem' }}>
@@ -727,31 +740,6 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
               </Box>
             )}
           </Box>
-
-          {/* me:// — Beatle's own raw expression input (its parser/useBeatle
-              already gate on domain shape — see isValidDomainShape in cleaker
-              and ResolutionState's 'invalid' state — so free text is enough;
-              no per-field chip editor needed for what's ultimately just one
-              string). No separate "here" badge anymore — this IS that
-              control now, defaulting to the current resolved root
-              (defaultExpression), never a guessed expansion for anything
-              typed after. showResolver=false: this page already answers
-              "which server" via the warning/https flow above, so the
-              resolver combobox would repeat that, not add to it. Opening a
-              channel only ever reads disclosure/endpoints for what's
-              public — nothing here claims, registers, or shares this page's
-              active identity; that stays exactly what the credentials form
-              below does, unconnected to whatever root this explores.
-              Skipped entirely (not shown disabled) when the page itself
-              isn't a secure context — useBeatle's own open() already
-              refuses to connect there, and the warning above already
-              explains why, so a second dead control here would just repeat
-              it. */}
-          {secureContextOk && (
-            <Box sx={{ width: '100%', maxWidth: 420 }}>
-              <Beatle defaultExpression={namespaceRootLabel} showResolver={false} onConnect={handleBeatleConnect} />
-            </Box>
-          )}
 
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {credentialsForm && (
@@ -803,7 +791,7 @@ const CleakerLandingHome: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint
             }}
           >
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {pending ? '…' : 'Claim'}
+              {pending ? '…' : '.me'}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, alignSelf: 'center' }}>
@@ -874,34 +862,14 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
     <Box
       data-gui-node-id="CleakerUsersView"
       data-gui-component="CleakerUsersView"
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        px: 3,
-        py: 6,
-        boxSizing: 'border-box',
-        ...sx,
-      }}
+      sx={{ p: 3, width: '100%', maxWidth: 720, boxSizing: 'border-box', ...sx }}
     >
-      <Box sx={{ width: '100%', maxWidth: 720 }}>
-        <LinkIconButton
-          component={Link}
-          to="/"
-          aria-label="Back to .me"
-          data-gui-node-id="CleakerUsersView.back"
-          sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-        >
-          <Icon name="arrow_back" fontSize={18 as any} />
-        </LinkIconButton>
-        <UsersTable
-          endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
-          namespaceRootUrl={resolvedEndpoint}
-          namespaceLabel={namespaceRootLabel}
-          data-gui-node-id="CleakerUsersView.table"
-        />
-      </Box>
+      <UsersTable
+        endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
+        namespaceRootUrl={resolvedEndpoint}
+        namespaceLabel={namespaceRootLabel}
+        data-gui-node-id="CleakerUsersView.table"
+      />
     </Box>
   );
 };
@@ -924,34 +892,14 @@ const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpo
     <Box
       data-gui-node-id="CleakerBlockchainView"
       data-gui-component="CleakerBlockchainView"
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        px: 3,
-        py: 6,
-        boxSizing: 'border-box',
-        ...sx,
-      }}
+      sx={{ p: 3, width: '100%', maxWidth: 720, boxSizing: 'border-box', ...sx }}
     >
-      <Box sx={{ width: '100%', maxWidth: 720 }}>
-        <LinkIconButton
-          component={Link}
-          to="/"
-          aria-label="Back to .me"
-          data-gui-node-id="CleakerBlockchainView.back"
-          sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-        >
-          <Icon name="arrow_back" fontSize={18 as any} />
-        </LinkIconButton>
-        <BlocksTable
-          endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
-          namespaceRootUrl={resolvedEndpoint}
-          namespaceLabel={namespaceRootLabel}
-          data-gui-node-id="CleakerBlockchainView.table"
-        />
-      </Box>
+      <BlocksTable
+        endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
+        namespaceRootUrl={resolvedEndpoint}
+        namespaceLabel={namespaceRootLabel}
+        data-gui-node-id="CleakerBlockchainView.table"
+      />
     </Box>
   );
 };
@@ -992,74 +940,54 @@ const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) 
     <Box
       data-gui-node-id="CleakerUrlView"
       data-gui-component="CleakerUrlView"
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        px: 3,
-        py: 6,
-        boxSizing: 'border-box',
-        ...sx,
-      }}
+      sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box', ...sx }}
     >
-      <Box sx={{ width: '100%', maxWidth: 480 }}>
-        <LinkIconButton
-          component={Link}
-          to="/"
-          aria-label="Back to .me"
-          data-gui-node-id="CleakerUrlView.back"
-          sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+        URL
+      </Typography>
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+        {namespaceRootLabel} @ this URL — opens a real NRP channel, not a page fetch.
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+        <TextField
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+          placeholder="https://example.com/page"
+          fullWidth
+          size="small"
+          data-gui-node-id="CleakerUrlView.input"
+        />
+        <Box
+          component="button"
+          type="button"
+          onClick={handleSubmit}
+          data-gui-node-id="CleakerUrlView.submit"
+          sx={{
+            px: 2,
+            border: '1px solid',
+            borderColor: 'primary.main',
+            borderRadius: 1,
+            background: 'transparent',
+            color: 'primary.main',
+            cursor: 'pointer',
+            fontWeight: 600,
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
         >
-          <Icon name="arrow_back" fontSize={18 as any} />
-        </LinkIconButton>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-          URL
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-          {namespaceRootLabel} @ this URL — opens a real NRP channel, not a page fetch.
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-          <TextField
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-            placeholder="https://example.com/page"
-            fullWidth
-            size="small"
-            data-gui-node-id="CleakerUrlView.input"
-          />
-          <Box
-            component="button"
-            type="button"
-            onClick={handleSubmit}
-            data-gui-node-id="CleakerUrlView.submit"
-            sx={{
-              px: 2,
-              border: '1px solid',
-              borderColor: 'primary.main',
-              borderRadius: 1,
-              background: 'transparent',
-              color: 'primary.main',
-              cursor: 'pointer',
-              fontWeight: 600,
-              '&:hover': { bgcolor: 'action.hover' },
-            }}
-          >
-            @
-          </Box>
+          @
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
-          <Typography variant="caption" sx={{ color, fontWeight: 600 }}>
-            {channel.state}
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+        <Typography variant="caption" sx={{ color, fontWeight: 600 }}>
+          {channel.state}
+        </Typography>
+        {channel.error && (
+          <Typography variant="caption" sx={{ color: 'error.main' }}>
+            — {channel.error}
           </Typography>
-          {channel.error && (
-            <Typography variant="caption" sx={{ color: 'error.main' }}>
-              — {channel.error}
-            </Typography>
-          )}
-        </Box>
+        )}
       </Box>
     </Box>
   );
@@ -1117,28 +1045,10 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
     return candidate?.keyId ?? null;
   }
 
-  const backLink = (
-    <LinkIconButton
-      component={Link}
-      to="/"
-      aria-label="Back to .me"
-      data-gui-node-id="CleakerKeychainView.back"
-      sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-    >
-      <Icon name="arrow_back" fontSize={18 as any} />
-    </LinkIconButton>
-  );
-
   if (!ctx?.authenticated || !client) {
     return (
-      <Box
-        data-gui-node-id="CleakerKeychainView"
-        sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' }}
-      >
-        <Box sx={{ width: '100%', maxWidth: 480 }}>
-          {backLink}
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Sign in first to see your keychain.</Typography>
-        </Box>
+      <Box data-gui-node-id="CleakerKeychainView" sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>Sign in first to see your keychain.</Typography>
       </Box>
     );
   }
@@ -1147,14 +1057,12 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
     <Box
       data-gui-node-id="CleakerKeychainView"
       data-gui-component="CleakerKeychainView"
-      sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' }}
+      sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box' }}
     >
-      <Box sx={{ width: '100%', maxWidth: 480 }}>
-        {backLink}
-        {notice && (
-          <Typography variant="body2" sx={{ color: 'warning.main', mb: 1 }}>{notice}</Typography>
-        )}
-        <CleakerKeychain
+      {notice && (
+        <Typography variant="body2" sx={{ color: 'warning.main', mb: 1 }}>{notice}</Typography>
+      )}
+      <CleakerKeychain
           handle={(semanticNamespace || '').split('.')[0] || ''}
           keys={keys}
           pendingLocalRegistrations={pendingLocalRegistrations}
@@ -1170,13 +1078,19 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
             await refresh();
           }}
           onSubmitAddKey={async (keyLabel, admin, passphrase) => {
+            // eslint-disable-next-line no-console
+            console.debug('[keychain] onSubmitAddKey:validating', { label: keyLabel, admin, existingKeyCount: keys.length });
             const actingKeyId = keys.length === 0 ? undefined : pickUnlockedAdminKeyId() ?? undefined;
             if (keys.length > 0 && !actingKeyId) {
+              // eslint-disable-next-line no-console
+              console.debug('[keychain] onSubmitAddKey:no-unlocked-admin-key');
               setNotice('Unlock an admin key on this device before adding a key.');
               setView('list');
               return;
             }
             const outcome = await client.generateAndRegisterKey({ label: keyLabel, admin, passphrase, actingKeyId });
+            // eslint-disable-next-line no-console
+            console.debug('[keychain] onSubmitAddKey:outcome', { ok: outcome.ok, status: outcome.status, error: outcome.error });
             setNotice(outcome.ok ? null : `Registration failed (${outcome.error}) — kept locally, retry from the list.`);
             setView('list');
             await refresh();
@@ -1205,7 +1119,6 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
             await refresh();
           }}
         />
-      </Box>
     </Box>
   );
 };
@@ -1801,15 +1714,237 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
   );
 };
 
+// CleakerNetgetView — Netget's own real views (MainServerView, GatewaySetup)
+// mounted inside this SAME Layout, at /netget, reading the ONE shared
+// confirmed context CleakerLayoutShell already resolves (see
+// verifiedCleakerRoot.ts) -- never a second, independently-guessed
+// gateway address. No new frontend, no new login, no new claim mechanism:
+// GatewaySetup's own existing checking→unclaimed→claim flow already
+// redirects to CleakerNetgetClaimView above for keychain signing, and
+// `/netget` is already in gatewaySetupSession.ts's own
+// ALLOWED_CLAIM_RETURN_PATHS -- this integration was anticipated, not
+// newly invented.
+//
+// `netget.available` is Netget's OWN, independently-checked signal
+// (probeNetgetGateway -- /gateway-identity, a route that only exists on a
+// real netget backend) -- NOT inferred from the Monad surface being
+// compatible. A Monad can run its own local context with no gateway in
+// front of it at all; this view's "no gateway available" state reflects
+// that fact directly rather than assuming one implies the other.
+//
+// A grant-admin panel (gatewayAuthorityClient.ts's grantAdmin/revokeAdmin/
+// transferOwner -- documented in its own header as "not yet wired into
+// any admin-panel UI") is deliberately NOT built here yet: that changes
+// authority, not just visibility, and belongs in its own pass, verified
+// against disposable infrastructure rather than this installation's real
+// gateway. This pass only reads and displays.
+const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget }) => {
+  const setupClient = useMemo(
+    () => (netget.available ? createNetgetSetupClient(netget.endpoint, { returnPath: '/netget' }) : null),
+    [netget.endpoint, netget.available],
+  );
+  // GatewaySetup is mounted embedded, in THIS SAME react-router tree --
+  // passed down so its own redirect to the Cleaker-origin sign view can
+  // use client-side navigation instead of a real browser reload. See
+  // GatewaySetup's own onNavigateSameOrigin doc comment for why a plain
+  // window.location.href there silently signed people back out mid-claim
+  // (this app's session lives in memory only, and a full reload remounts
+  // the whole tree, SeedSessionProvider included) -- confirmed live.
+  const navigate = useNavigate();
+
+  if (!netget.available) {
+    return (
+      <Box data-gui-node-id="CleakerNetgetView" sx={{ p: 3, maxWidth: 560 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          No hay un gateway Netget disponible en este contexto todavía.
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box data-gui-node-id="CleakerNetgetView" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <MainServerView endpoint={netget.endpoint} namespaceRootUrl={netget.endpoint} />
+
+      {setupClient && (
+        <GatewaySetup
+          endpoint={netget.endpoint}
+          onSubmitSetupCode={setupClient.onSubmitSetupCode}
+          onVerifySetupCode={setupClient.onVerifySetupCode}
+          resolveCleakerClaimUrl={setupClient.resolveCleakerClaimUrl}
+          onCommitClaim={setupClient.onCommitClaim}
+          onNavigateSameOrigin={(pathWithQuery) => navigate(pathWithQuery)}
+        />
+      )}
+    </Box>
+  );
+};
+
+// Minimal, self-contained proof that two independent GUI interfaces can
+// operate on the same `.me` meaning through the REAL authorized/persisted
+// write channel — see DisplayNameProvenanceDemo.tsx's own doc comment for
+// the full rationale. This view is just the page shell (title, back link);
+// all the actual session/kernel wiring lives in that component.
+const CleakerProvenanceDemoView: React.FC<CleakerLandingProps> = ({ sx }) => (
+  <Box
+    data-gui-node-id="CleakerProvenanceDemoView"
+    data-gui-component="CleakerProvenanceDemoView"
+    sx={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      px: 3,
+      py: 6,
+      boxSizing: 'border-box',
+      ...sx,
+    }}
+  >
+    <Box sx={{ width: '100%', maxWidth: 480 }}>
+      <LinkIconButton
+        component={Link}
+        to="/"
+        aria-label="Back to .me"
+        data-gui-node-id="CleakerProvenanceDemoView.back"
+        sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
+      >
+        <Icon name="arrow_back" fontSize={18 as any} />
+      </LinkIconButton>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+        profile.displayName
+      </Typography>
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+        Two interfaces, one `.me` meaning — real signed writes, real server reads.
+      </Typography>
+      <DisplayNameProvenanceDemo />
+    </Box>
+  </Box>
+);
+
+// TEMPORARY, remove once the Layout/sidebar scope-composition step closes
+// (see gui/Layout/Sidebars/Composition/SidebarCompositionDemo.tsx).
+// SidebarCompositionShell renders through the REAL Layout/LeftBar (its own
+// full-page chrome) and owns a NESTED <Routes> for /proyecto and
+// /proyecto/noticias -- mounted ONCE here at the "/layout-demo/*" wildcard,
+// so Layout/LeftBarProvider persist across navigation between those two
+// pages instead of remounting per route (see that file's own doc comment).
+const CleakerSidebarCompositionShellView: React.FC<CleakerLandingProps> = () => (
+  <>
+    <LinkIconButton
+      component={Link}
+      to="/"
+      aria-label="Back to .me"
+      data-gui-node-id="CleakerSidebarCompositionShellView.back"
+      sx={{
+        position: 'fixed', top: 20, right: 20, zIndex: 2100,
+        width: 40, height: 40, border: '1px solid', borderColor: 'divider',
+        borderRadius: '50%', bgcolor: 'background.paper', color: 'text.secondary',
+        '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
+      }}
+    >
+      <Icon name="arrow_back" fontSize={18 as any} />
+    </LinkIconButton>
+    <SidebarCompositionShell />
+  </>
+);
+
+// Mounts the REAL Layout/LeftBar once for Cleaker's own navigation (/,
+// /users, /blockchain, /url, /keychain) -- same shared-Layout pattern
+// proven in SidebarCompositionShell (nested <Routes> inside one Layout
+// instance, so it never remounts across these pages). Users/Blockchain/URL
+// come from useCleakerRootSidebar (the .me-backed composition: the VISITED
+// namespace's own public root scope first -- readable with or without a
+// session -- then the authenticated identity's own preferences layered on
+// top if signed in, with these JS labels as the last-resort fallback).
+// Keychain and the two lab-access icons are added via Layout's own native
+// `elements` merge (LeftBar.tsx's mergeLeftSidebarCollections) since
+// they're a client auth-state fact and dev scaffolding respectively, not
+// shared .me structure -- and Keychain's real gate is still `authenticated`
+// here, never whether it happens to be visible in some namespace's own
+// declared sidebar. /keychain/claim, /keychain/admin-sign,
+// /provenance-demo, and /layout-demo/* are deliberately NOT nested here --
+// they stay separate sibling routes (CleakerRoutes below), unchanged.
+const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
+  const ctx = useOptionalSeedSessionContext();
+  const session = ctx?.session ?? null;
+  const authenticated = ctx?.authenticated ?? false;
+  // Same derivation CleakerLandingHome/CleakerUsersView already use for
+  // "which namespace is this page" -- window.location-based, never the
+  // session's own namespace, so signing in or out can't move it.
+  const resolvedEndpoint = props.cleakerEndpoint || defaultCleakerEndpoint();
+  const namespaceRootLabel = deriveNamespaceRootLabel(resolvedEndpoint);
+
+  // A real, verified transport for the sidebar's public read -- seeded
+  // ONCE from window.location, not re-derived on every render (this isn't
+  // a user-facing switcher; Beatle above the credentials form already
+  // owns "let the user explore/switch what's on screen." See
+  // verifiedCleakerRoot.ts for what "verified" actually checks).
+  const rootSeed = useMemo<CleakerRootSeed>(() => {
+    // netget's App.jsx passes cleakerEndpoint="http://local.cleaker"
+    // literally, regardless of which scheme the browser actually loaded
+    // this page over (https, once netget's own redirect applies) --
+    // probing the mismatched http origin from an https-loaded page is
+    // mixed content, silently blocked, and indistinguishable from the
+    // destination actually being down. Same fix the old (now-removed)
+    // rootReachable check used: when the root being probed is the SAME
+    // host this page is already loaded from, trust window.location's own
+    // origin over the possibly-stale prop.
+    const endpoint = (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel)
+      ? window.location.origin
+      : resolvedEndpoint;
+    return { label: namespaceRootLabel, cleakerEndpoint: endpoint };
+    // Intentionally NOT re-created when resolvedEndpoint/namespaceRootLabel
+    // change across renders -- a one-time seed, not a live binding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
+  const { resolved } = useCleakerRootSidebar(rootSeed.label, verifiedRoot.transportOrigin, session);
+
+  // A genuine Beatle "connected" resolution re-verifies that SAME
+  // namespace here and only promotes it into the shared context on
+  // success -- this is what keeps the sidebar (and /netget) from silently
+  // drifting from whatever Beatle's own resolution shows in the QR.
+  const handleBeatleNamespaceResolved = useCallback((namespace: string) => {
+    verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace) });
+  }, [verifiedRoot.promote]);
+
+  const extraElements: LeftBarElement[] = [
+    ...(authenticated
+      ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain' } }]
+      : []),
+    { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget' } },
+    // TEMPORARY lab-access icons, kept clearly labeled -- same destinations
+    // as before, just relocated from CleakerLandingHome's own icon row.
+    { type: 'link' as const, props: { id: 'provenance-demo', label: 'profile.displayName demo (temporary)', to: '/provenance-demo' } },
+    { type: 'link' as const, props: { id: 'layout-demo', label: 'Layout sidebar demo (temporary)', to: '/layout-demo/proyecto' } },
+  ];
+
+  return (
+    <Layout LeftBar={{ elements: [...resolved.map((r) => r.element), ...extraElements] }}>
+      <Routes>
+        <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
+        <Route path="users" element={<CleakerUsersView {...props} />} />
+        <Route path="blockchain" element={<CleakerBlockchainView {...props} />} />
+        <Route path="url" element={<CleakerUrlView {...props} />} />
+        <Route path="keychain" element={<CleakerKeychainView {...props} />} />
+        <Route path="netget" element={<CleakerNetgetView netget={{
+          endpoint: verifiedRoot.cleakerEndpoint,
+          available: verifiedRoot.netget.available,
+          gatewayId: verifiedRoot.netget.gatewayId,
+        }} />} />
+      </Routes>
+    </Layout>
+  );
+};
+
 const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
   <Routes>
-    <Route path="/" element={<CleakerLandingHome {...props} />} />
-    <Route path="/users" element={<CleakerUsersView {...props} />} />
-    <Route path="/blockchain" element={<CleakerBlockchainView {...props} />} />
-    <Route path="/url" element={<CleakerUrlView {...props} />} />
-    <Route path="/keychain" element={<CleakerKeychainView {...props} />} />
+    <Route path="/*" element={<CleakerLayoutShell {...props} />} />
     <Route path="/keychain/claim" element={<CleakerNetgetClaimView {...props} />} />
     <Route path="/keychain/admin-sign" element={<CleakerNetgetAdminSignView {...props} />} />
+    <Route path="/provenance-demo" element={<CleakerProvenanceDemoView {...props} />} />
+    <Route path="/layout-demo/*" element={<CleakerSidebarCompositionShellView {...props} />} />
   </Routes>
 );
 

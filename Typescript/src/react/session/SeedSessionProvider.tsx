@@ -537,7 +537,11 @@ export function SeedSessionProvider({
           const rootBytes = await loadLocalIdentityVault(fullNamespace, password);
           identityRootHex = rootBytes ? bytesToHex(rootBytes) : undefined;
         } catch (cause) {
-          return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect password.'));
+          // "Incorrect secret," not "password" -- this app's own vocabulary
+          // everywhere else (the field label, RegisterMe/RecoverAccount)
+          // never uses "password," and a lone message that did read as an
+          // inconsistency, flagged live.
+          return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect secret.'));
         }
       }
 
