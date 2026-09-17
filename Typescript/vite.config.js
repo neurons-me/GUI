@@ -48,8 +48,89 @@ export default defineConfig({
       name: 'demo-claim-flow-spa-fallback',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          if (req.method !== 'GET' && req.method !== 'HEAD') return next();
           const url = req.url || '';
+          const pathOnly = url.split('?')[0];
+          // claimFlowEmbedded's own routing handles GET AND POST -- setup-
+          // code verify/challenge/claim, plus the monad's own register/
+          // sign-in calls further below -- so this whole branch has to run
+          // BEFORE the GET/HEAD-only gate that follows it. Every other
+          // branch in this middleware is a GET-only stand-in/rewrite and
+          // never needed to get past that gate; this is the one exception,
+          // kept as its own top-level block rather than merged into that
+          // gate so nothing about the other demos' existing behavior
+          // changes.
+          if (process.env.DEMO_ROLE === 'claimFlowEmbedded') {
+            const harnessTarget = process.env.DEMO_HARNESS_ORIGIN || 'http://127.0.0.1:4601';
+            const monadTarget = process.env.DEMO_MONAD_ORIGIN || '';
+            const isViteAsset = url.startsWith('/@') || url.startsWith('/src/') || url.startsWith('/node_modules/') || /\.[a-zA-Z0-9]+(\?|$)/.test(url);
+
+            // netget's own specific gateway-setup routes -- a fixed, small
+            // list because that IS the real backend's own route table
+            // (setupSession.js + a couple of status routes), not something
+            // to guess at. GET and POST both proxy the same way, method and
+            // body preserved as-is.
+            const harnessPaths = [
+              '/gateway-identity', '/openresty-status', '/main-server-namespace', '/harness/monad-origin',
+              '/setup/verify-code', '/setup/challenge', '/setup/claim', '/setup/verify-callback',
+              '/harness/new-setup-code',
+            ];
+            if (harnessPaths.includes(pathOnly)) {
+              const chunks = [];
+              req.on('data', (c) => chunks.push(c));
+              req.on('end', () => {
+                fetch(`${harnessTarget}${url}`, {
+                  method: req.method,
+                  headers: { 'content-type': req.headers['content-type'] || 'application/json' },
+                  body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : Buffer.concat(chunks),
+                })
+                  .then(async (r) => {
+                    res.statusCode = r.status;
+                    res.setHeader('content-type', r.headers.get('content-type') || 'application/json');
+                    res.end(await r.text());
+                  })
+                  .catch((e) => { res.statusCode = 502; res.end(JSON.stringify({ ok: false, message: String(e) })); });
+              });
+              return;
+            }
+
+            // Known CleakerLanding page paths -- rewrite to this demo's own
+            // HTML shell so BrowserRouter sees the real pathname, same
+            // reasoning as cleakerHome's own fallback below. GET/HEAD only;
+            // a browser never POSTs to one of these.
+            if ((req.method === 'GET' || req.method === 'HEAD') &&
+                ['/', '/users', '/blockchain', '/keychain', '/keychain/claim', '/netget'].includes(pathOnly)) {
+              const queryIndex = url.indexOf('?');
+              req.url = queryIndex === -1 ? '/claimFlowEmbedded.html' : `/claimFlowEmbedded.html${url.slice(queryIndex)}`;
+              return next();
+            }
+
+            // Everything else that isn't a real Vite/asset request is this
+            // installation's own content monad (register/sign-in,
+            // __surface, keychain, /apps/netget/*, ...) -- forwarded as-is,
+            // GET or POST, to whatever port the disposable monad actually
+            // landed on. This is the same role nginx's own catch-all
+            // location plays for real: connect the request to the right
+            // service, never decide what that service's own routes mean.
+            if (monadTarget && !isViteAsset && pathOnly !== '/') {
+              const chunks = [];
+              req.on('data', (c) => chunks.push(c));
+              req.on('end', () => {
+                fetch(`${monadTarget}${url}`, {
+                  method: req.method,
+                  headers: { 'content-type': req.headers['content-type'] || 'application/json' },
+                  body: (req.method === 'GET' || req.method === 'HEAD') ? undefined : Buffer.concat(chunks),
+                })
+                  .then(async (r) => {
+                    res.statusCode = r.status;
+                    res.setHeader('content-type', r.headers.get('content-type') || 'application/octet-stream');
+                    res.end(Buffer.from(await r.arrayBuffer()));
+                  })
+                  .catch((e) => { res.statusCode = 502; res.end(JSON.stringify({ ok: false, message: String(e) })); });
+              });
+              return;
+            }
+          }
+          if (req.method !== 'GET' && req.method !== 'HEAD') return next();
           // Stands in for the REAL topology's shared backend: netget's
           // own /main-server-namespace, reachable same-origin from
           // wherever Cleaker is served because nginx's admin block
@@ -58,7 +139,10 @@ export default defineConfig({
           // instances on two ports -- so CleakerNetgetClaimView's
           // returnTo-allowlist fetch needs a same-origin stand-in here,
           // pointed at whichever port this run's "netget role" is on.
-          if (url.startsWith('/main-server-namespace')) {
+          // Skipped for claimFlowEmbedded, which proxies this same path to
+          // its own real harness backend further below instead of using
+          // this two-port-split stand-in.
+          if (url.startsWith('/main-server-namespace') && process.env.DEMO_ROLE !== 'claimFlowEmbedded') {
             res.setHeader('content-type', 'application/json');
             res.end(JSON.stringify({
               namespace: 'local.cleaker',
@@ -387,6 +471,16 @@ export default defineConfig({
     ...(process.env.DEMO_BACKEND_ORIGIN ? {
       proxy: {
         '/admin-session': process.env.DEMO_BACKEND_ORIGIN,
+      },
+    } : {}),
+    // Opt-in HTTPS for a real browser round trip against the claimFlowEmbedded
+    // demo -- proves onNavigateSameOrigin's origin comparison itself holds
+    // under https end to end, not just in isolation. No-op unless both cert
+    // env vars are set; every other demo/dev-server use is unaffected.
+    ...(process.env.DEMO_HTTPS_CERT && process.env.DEMO_HTTPS_KEY ? {
+      https: {
+        cert: fs.readFileSync(process.env.DEMO_HTTPS_CERT),
+        key: fs.readFileSync(process.env.DEMO_HTTPS_KEY),
       },
     } : {}),
   } : false,

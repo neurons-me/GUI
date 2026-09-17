@@ -1271,52 +1271,53 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
   const session = ctx?.session ?? null;
   const transportOrigin = ctx?.transportOrigin ?? '';
 
-  // The ONE trusted destination. NOT derived from transportOrigin --
-  // transportOrigin's origin is wherever THIS Cleaker page itself is
-  // currently loaded from (e.g. local.cleaker), never netget's own
-  // origin, so it can't answer "is this the real netget gateway".
+  // Authorized against the ONE record that actually knows the answer --
+  // the live setup session itself (verifyClaimCallback, gatewaySetupSession.ts)
+  // -- not a client-side guess at "what netget's origin should be."
   //
-  // Instead this mirrors netgetSetupClient.ts's own resolveCleakerOrigin()
-  // in reverse, and rests on ONE assumption specific to THIS repo's
-  // deployment shape, not a general mesh guarantee: that local.netget and
-  // local.cleaker, though different origins to the browser, are routed by
+  // Flagged live, correctly, that an earlier version of this check (just
+  // `returnToUrl.origin === window.location.origin`) proved too little:
+  // matching the CURRENT page's own origin only shows the browser hasn't
+  // been redirected somewhere else since loading THIS page -- it says
+  // nothing about whether THIS SPECIFIC returnTo (this exact path, for
+  // this exact setup attempt) is the one the session actually recorded at
+  // /setup/challenge time, as opposed to some other allowed-looking value
+  // substituted in afterward. Querying the session directly closes that
+  // gap for both deployment shapes at once (embedded same-origin AND a
+  // genuinely separate netget origin) with one mechanism instead of two
+  // guesses -- see verifyClaimCallback's own doc comment for the full
+  // reasoning, including why it also catches a returnTo tampered with
+  // after the session was created.
+  //
+  // Queried relative to `window.location.origin`: in this repo's actual
+  // deployment shape, local.cleaker and local.netget are routed by
   // nginx's admin block to the SAME backend Express app (see
-  // setNginxConfigRoutes.ts) -- so a same-origin fetch to THIS page's own
-  // "/main-server-namespace" reaches that one shared backend and returns
-  // the real `mainServerName` config, the same value resolveCleakerOrigin()
-  // reads from the other side. If that assumption doesn't hold for some
-  // deployment -- a genuinely separate Cleaker service with no shared
-  // backend -- the fetch below fails or 404s, `allowedReturnOrigin` stays
-  // null, and every claim redirect is refused. Fails closed, never open:
-  // there is no fallback default here to fall back to.
-  const [allowedReturnOrigin, setAllowedReturnOrigin] = useState<string | null>(null);
+  // setNginxConfigRoutes.ts), so a same-origin fetch from wherever this
+  // page loaded reaches the one backend that holds this session's own
+  // record either way. A genuinely separate, non-shared-backend
+  // deployment has no path to that record from here at all -- the fetch
+  // fails, and this stays `false`. Fails closed, never open: there is no
+  // fallback default to fall back to.
+  const [returnToAuthorized, setReturnToAuthorized] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
+    if (!returnToUrl || !state) { setReturnToAuthorized(false); return; }
     (async () => {
       try {
-        const res = await fetch(`${window.location.origin}/main-server-namespace`, { cache: 'no-store' });
-        if (!res.ok) return;
+        const res = await fetch(`${window.location.origin}/setup/verify-callback`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ state, returnOrigin: returnToUrl.origin, returnPath: returnToUrl.pathname }),
+        });
         const body = await res.json().catch(() => null);
-        const mainServerName = typeof body?.mainServerName === 'string' ? body.mainServerName.trim() : '';
-        const isLocalMesh = !mainServerName || /^(localhost|127\.0\.0\.1|local|local\..+)$/i.test(mainServerName);
-        // A value that already spells out a scheme is never produced by
-        // a real deployment (mainServerName is always a bare hostname
-        // there) -- passed through as-is only so disposable, port-based
-        // test setups (this repo's own demo/claimFlow harness) can point
-        // this at a genuinely separate localhost origin, the same
-        // exception netgetSetupClient.ts's resolveCleakerOrigin() makes
-        // on the other side.
-        const netgetOrigin = isLocalMesh
-          ? 'http://local.netget'
-          : /^https?:\/\//i.test(mainServerName) ? mainServerName.replace(/\/+$/, '') : `https://${mainServerName}`;
-        if (!cancelled) setAllowedReturnOrigin(new URL(netgetOrigin).origin);
+        if (!cancelled) setReturnToAuthorized(res.ok && body?.ok === true);
       } catch {
-        // Leave allowedReturnOrigin null -- returnTo stays refused.
+        if (!cancelled) setReturnToAuthorized(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
-  const returnToAuthorized = !!returnToUrl && !!allowedReturnOrigin && returnToUrl.origin === allowedReturnOrigin;
+  }, [returnToUrl, state]);
 
   useEffect(() => {
     if (!identityHash || !semanticNamespace || !session?.signPayload) {
@@ -1392,6 +1393,22 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'error.main' }}>
             This link is missing required claim details. Go back to your gateway's setup page and try again.
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
+  // `returnToAuthorized` is null while the server round-trip above is
+  // still in flight -- shown as a neutral, brief wait rather than
+  // flashing the "blocked" message first and then replacing it once the
+  // real answer comes back.
+  if (returnToAuthorized === null) {
+    return (
+      <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
+        <Box sx={{ width: '100%', maxWidth: 480 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Verifying this claim link…
           </Typography>
         </Box>
       </Box>

@@ -94,6 +94,25 @@ export interface GatewaySetupProps {
   /** Submits the signed proof returned from the Cleaker-origin view to
    *  gatewaySetupSession.ts's /setup/claim for server-side verification. */
   onCommitClaim: (proof: ClaimReturnProof, setupToken: string) => Promise<ActionResult & { ownerUsername?: string }>;
+  /**
+   * When the Cleaker-origin "sign this claim" view (resolveCleakerClaimUrl's
+   * result) is on the SAME origin this page itself is running on -- true
+   * whenever GatewaySetup is mounted embedded inside Cleaker's own app
+   * (CleakerNetgetView), never true for the standalone netget App.jsx,
+   * where that view is a genuinely different origin -- this is called with
+   * that URL's own pathname+search instead of doing a real browser
+   * navigation. Confirmed live as a real bug otherwise: a plain
+   * `window.location.href` full-reloads the page even for a same-origin,
+   * same-React-app target, and this app's own session is held in memory
+   * only (SeedSessionProvider persists no token by design), so that
+   * reload silently signs the person back out mid-claim -- "escribes el
+   * código... y las siguientes pantallas te vuelve a sacar para hacer
+   * sign in," reported live. A caller that supplies this (e.g. via
+   * react-router's own useNavigate()) keeps the whole flow inside one
+   * mounted app; a caller that omits it gets the original cross-origin
+   * behavior unchanged, still correct for the genuinely separate case.
+   */
+  onNavigateSameOrigin?: (pathWithQuery: string) => void;
   /** Story/test-only: seeds the starting phase instead of always starting
    *  at "checking" — every phase is otherwise fully determined by what
    *  the first poll finds or what the URL carries on return from Cleaker.
@@ -452,6 +471,7 @@ export default function GatewaySetup({
   onVerifySetupCode,
   resolveCleakerClaimUrl,
   onCommitClaim,
+  onNavigateSameOrigin,
   initialPhase,
   sx,
 }: GatewaySetupProps) {
@@ -628,6 +648,7 @@ export default function GatewaySetup({
         <UnclaimedPanel
           onSubmitSetupCode={onSubmitSetupCode}
           resolveCleakerClaimUrl={resolveCleakerClaimUrl}
+          onNavigateSameOrigin={onNavigateSameOrigin}
           onRedirecting={() => setPhase('redirecting-to-sign')}
           externalError={claimError}
         />
@@ -657,11 +678,13 @@ export default function GatewaySetup({
 function UnclaimedPanel({
   onSubmitSetupCode,
   resolveCleakerClaimUrl,
+  onNavigateSameOrigin,
   onRedirecting,
   externalError,
 }: {
   onSubmitSetupCode: (code: string) => Promise<SetupCodeResult>;
   resolveCleakerClaimUrl: (input: { gatewayId: string; challenge: string; state: string; returnTo: string }) => Promise<string>;
+  onNavigateSameOrigin?: (pathWithQuery: string) => void;
   onRedirecting: () => void;
   externalError: string | null;
 }) {
@@ -681,7 +704,22 @@ function UnclaimedPanel({
       const returnTo = `${window.location.origin}${window.location.pathname}?setupToken=${encodeURIComponent(result.setupToken)}`;
       const claimUrl = await resolveCleakerClaimUrl({ gatewayId: result.gatewayId, challenge: result.challenge, state: result.state, returnTo });
       onRedirecting();
-      window.location.href = claimUrl;
+      // Same-origin, same-app case (GatewaySetup embedded inside Cleaker's
+      // own SPA): a real browser navigation here full-reloads the page
+      // and silently signs the person back out mid-claim, since this
+      // app's session lives in memory only -- see onNavigateSameOrigin's
+      // own doc comment. Only taken when the resolved URL genuinely is
+      // this same origin AND a caller supplied a way to navigate without
+      // reloading; otherwise this is unchanged, still-correct behavior
+      // for the real cross-origin (standalone netget) case.
+      let sameOrigin = false;
+      try { sameOrigin = new URL(claimUrl).origin === window.location.origin; } catch { /* keep false */ }
+      if (sameOrigin && onNavigateSameOrigin) {
+        const target = new URL(claimUrl);
+        onNavigateSameOrigin(`${target.pathname}${target.search}`);
+      } else {
+        window.location.href = claimUrl;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start the claim.');
     } finally {

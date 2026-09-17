@@ -54,7 +54,20 @@ function isLocalMeshValue(value: string): boolean {
   return v === 'localhost' || v === '127.0.0.1' || v === 'local' || v.startsWith('local.');
 }
 
-const LOCAL_CLEAKER_ORIGIN = 'http://local.cleaker';
+// Scheme comes from THIS page's own window.location.protocol, not a fixed
+// literal -- confirmed live as a real, separate bug from the one this
+// session already fixed in CleakerNetgetClaimView's own mirror-image
+// computation (allowedReturnOrigin): a hardcoded 'http://' here mismatches
+// the moment this page is loaded over https (already true once netget's
+// own redirect applies in production), which made UnclaimedPanel's own
+// same-origin check for onNavigateSameOrigin compare "http://local.cleaker"
+// against the real https-loaded window.location.origin and ALWAYS fail --
+// silently defeating that fix by falling through to the old full-reload
+// path every time, exactly the bug it was meant to close.
+function localCleakerOrigin(): string {
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
+  return `${protocol}//local.cleaker`;
+}
 
 /**
  * Resolves the Cleaker origin from this gateway's OWN configuration —
@@ -66,7 +79,7 @@ const LOCAL_CLEAKER_ORIGIN = 'http://local.cleaker';
 async function resolveCleakerOrigin(base: string): Promise<string> {
   const result = await fetchJson(base, '/main-server-namespace');
   const mainServerName = typeof result?.mainServerName === 'string' ? result.mainServerName.trim() : '';
-  if (!mainServerName || isLocalMeshValue(mainServerName)) return LOCAL_CLEAKER_ORIGIN;
+  if (!mainServerName || isLocalMeshValue(mainServerName)) return localCleakerOrigin();
   // A real configured value is always a bare hostname ("cleaker.example.com")
   // and always gets https. The one exception is a value that already
   // spells out a scheme ("http://127.0.0.1:5174") -- never produced by a
