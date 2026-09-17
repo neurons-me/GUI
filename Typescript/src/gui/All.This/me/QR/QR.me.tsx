@@ -30,6 +30,13 @@ const MIN_PX_PER_MODULE = 4;
 // effectiveDiameter triple computed below is what's authoritative and
 // self-consistent, this is just how big a diameter to ask it for.
 const QR_INSET_RATIO = 0.015;
+// φ -- used to derive the status dot's own size and its gap from the
+// perimeter text, instead of the independent, unrelated-looking constants
+// (radius 0.32x, gap "+3px") those had before. Flagged live as reading
+// "amontonado" (cramped) and unaligned, not just eyeballed-too-small: a
+// dot sized and spaced by a single consistent ratio to the text around it
+// reads as one deliberate unit instead of an icon dropped in afterward.
+const GOLDEN_RATIO = 1.618;
 
 export type QRmeProps = {
   value: string;
@@ -46,6 +53,63 @@ export type QRmeProps = {
   hoverFlip?: boolean;
   clickFlip?: boolean;
   showAvatarLabel?: boolean;
+  /**
+   * Connection-verification state for whatever `value` currently points
+   * at -- 'checking'/'error' recolor the ring+ink to warning/error theme
+   * tones and are appended to the accessible label via `statusLabel`;
+   * 'confirmed' (or omitting `status` entirely, the default 'idle') keeps
+   * the QR's own normal color. Purely additive: every existing caller that
+   * doesn't pass `status` renders exactly as before.
+   */
+  status?: 'idle' | 'checking' | 'confirmed' | 'error';
+  /** Accessible text describing `status` (e.g. "Verificando local.cleaker…"). */
+  statusLabel?: string;
+  /**
+   * The namespace/expression this QR is currently positioned at (e.g.
+   * "local.cleaker", or "agent-x.local.cleaker" once claimed) -- drawn as
+   * read-only curved text hugging the QR's own bottom and right edges,
+   * colored by `status` the same way the ring already is. Flagged live as
+   * the fix for a plain caption sitting well below the QR, reading as a
+   * second, disconnected thing rather than part of it. Starts on the
+   * bottom edge (just past the bottom-left corner) and wraps around the
+   * bottom-right corner up the right edge -- ONLY these two edges,
+   * confirmed live as the two that render upright/legible with plain SVG
+   * textPath (the top and left edges don't, no matter the corner
+   * geometry -- see buildPerimeterPath's own comment). Text longer than
+   * these two edges combined is simply not drawn past the path's end,
+   * which is the "cut the string" behavior wanted here, not an ellipsis
+   * this component computes itself. Purely decorative text, not a
+   * control: switching/connecting to a different expression stays
+   * whatever real control the caller provides elsewhere (e.g. shown on
+   * click), never this label itself.
+   */
+  perimeterLabel?: string;
+  /**
+   * The bare root namespace (e.g. "local.cleaker") that `perimeterLabel`
+   * ends with -- when this matches the tail of `perimeterLabel`, that
+   * trailing portion is drawn bold and colored by `status`/the ring's own
+   * accent (ringAccent) instead of the rest of the label's plain
+   * treatment. The root is what actually answers "which namespace is
+   * this," so it's the part that should carry the connection-status
+   * color. Omit to draw the whole label in the plain, non-status
+   * treatment (e.g. pre-auth, where `perimeterLabel` already IS just the
+   * root).
+   */
+  perimeterRootLabel?: string;
+  /**
+   * If set, the handle portion of `perimeterLabel` (everything before
+   * `perimeterRootLabel`) is wrapped in a real link to this URL, opened
+   * in a new tab -- the same "visit this .me" pattern the directory
+   * search already uses (`buildCleakerNamespaceUrl` + `window.open`,
+   * see CleakerLanding.tsx's own `visitUser`), just reachable from your
+   * own identity's QR too. Uses the theme's `secondary` color regardless
+   * of whether this is set -- a username is its own kind of thing, not
+   * tied to the root's connection-status color -- but only becomes an
+   * actual `<a>` (pointer cursor, real navigation) when a URL is given;
+   * otherwise it's the same plain decorative text as the rest of the
+   * label, just colored differently.
+   */
+  perimeterHandleHref?: string;
   className?: string;
   style?: React.CSSProperties;
   'data-gui-node-id'?: string;
@@ -60,6 +124,40 @@ const DIAMETER_BY_VARIANT = {
   xl: 184,
   topbar: 40,
 } as const;
+
+// Two tries before this one, both confirmed live and both wrong in a
+// different way: a full rounded-square (all four edges) renders upside
+// down on the top edge (any straight segment moving leftward does, no
+// matter the corners' own sweep-flag -- SVG's default text-on-path
+// orientation keys off the SEGMENT's own direction of travel, not the
+// corners); a circular arc turns that flip into a gradual "rotate the
+// badge to keep reading" wrap instead of a sharp one, but never removes
+// it, and it also pulled the label noticeably away from the QR itself.
+//
+// This is the fix: only the BOTTOM edge (traced left-to-right, i.e.
+// "east" -- upright, normal reading) and the RIGHT edge (traced bottom-
+// to-top, i.e. "north" -- sideways, legible tilting your head right,
+// already confirmed live) are ever used. Both directions were already
+// proven individually legible; the trick is just never asking the path to
+// go anywhere else (up-then-left, the combination that broke before).
+// Text longer than these two edges combined is simply not drawn past the
+// path's own end -- that's SVG's ordinary textPath behavior, not
+// something this function has to compute itself, and it's exactly the
+// "cut the string" behavior asked for.
+//
+// Local (0,0)-(s,s) coordinate space, matching the QR's own square (the
+// caller offsets/insets this to sit just outside the real QR edge, not a
+// separate ring further out). Starts at (r, s) -- the bottom edge, just
+// past where the bottom-LEFT corner's own curve ends -- so the full
+// bottom edge is available before the text ever has to turn the corner.
+function buildPerimeterPath(s: number, r: number): string {
+  return [
+    `M ${r},${s}`,
+    `L ${s - r},${s}`,
+    `A ${r},${r} 0 0 0 ${s},${s - r}`,
+    `L ${s},${r}`,
+  ].join(' ');
+}
 
 function fallbackInitial(username: string, avatarFallback: string): string {
   const direct = String(avatarFallback || '').trim();
@@ -84,6 +182,11 @@ export default function QRme({
   hoverFlip = true,
   clickFlip = true,
   showAvatarLabel = false,
+  status = 'idle',
+  statusLabel,
+  perimeterLabel,
+  perimeterRootLabel,
+  perimeterHandleHref,
   className,
   style,
   'data-gui-node-id': dataGuiNodeId,
@@ -131,8 +234,119 @@ export default function QRme({
   const faceRotation = showingAvatar ? 180 : 0;
   const rootNodeId = String(dataGuiNodeId || 'QR.me');
   const rootNodeType = String(dataGuiComponent || 'QR.me');
+  // 'confirmed' and the default 'idle' both fall through to the QR's own
+  // normal color -- only 'checking'/'error' recolor anything. Kept as one
+  // value (not two separate ring/ink colors) so the ink and the ring
+  // around it always agree on what they're signaling.
+  const statusColor = status === 'checking'
+    ? theme.palette.warning.main
+    : status === 'error'
+      ? theme.palette.error.main
+      : undefined;
   const qrBg = bg ?? theme.palette.background.paper;
-  const qrFg = fg ?? theme.palette.primary.main;
+  const qrFg = fg ?? statusColor ?? theme.palette.primary.main;
+  const ringAccent = statusColor ?? theme.palette.primary.main;
+  // A plain online/offline dot at the very start of the perimeter label,
+  // replacing the scarab glyph a caller used to prepend to the text
+  // itself -- flagged live as no longer needed once Beatle's own visible
+  // icon was removed entirely (see CleakerLanding.tsx's headless
+  // useBeatle() call): the connection state this glyph used to gesture
+  // at is exactly what `status` already carries, so it can just be drawn
+  // as the real thing instead of a fixed icon that never actually
+  // reflected it. Distinct four-color read (idle/checking/confirmed/
+  // error), not just statusColor's two-value fallback -- 'confirmed'
+  // needs its own green, not the ring's neutral primary.
+  const statusDotColor = status === 'checking'
+    ? theme.palette.warning.main
+    : status === 'error'
+      ? theme.palette.error.main
+      : status === 'confirmed'
+        ? theme.palette.success.main
+        : theme.palette.text.disabled;
+  // The handle portion (everything before the root) is its own kind of
+  // thing -- an identity, not a connection-status signal -- so it gets
+  // its own color rather than either the root's status-driven ringAccent
+  // or a flat neutral. Was theme.palette.secondary.main -- this brand's
+  // actual secondary token is a saturated rose, which read as alarming
+  // rather than "this is a link" once it was actually clickable
+  // (flagged live: "muy agresivo, no da esa sensación de hyperlink").
+  // `info` is the theme's own conventional link-blue instead. Same color
+  // whether or not `perimeterHandleHref` makes it clickable -- see that
+  // prop's own doc comment.
+  const perimeterHandleColor = theme.palette.info.main;
+  // The root namespace (e.g. "local.cleaker") is what actually answers
+  // "which namespace is this" -- flagged live to always read bold and to
+  // carry the same connection-status color as the ring around it
+  // (ringAccent), never the handle's own secondary color above. Split out
+  // of perimeterLabel by suffix match rather than requiring the caller to
+  // pass pre-split segments -- perimeterLabel is already the single
+  // source of truth for what's drawn; this only figures out where the
+  // root starts inside it.
+  const perimeterRootStart =
+    perimeterRootLabel && perimeterLabel?.endsWith(perimeterRootLabel)
+      ? perimeterLabel.length - perimeterRootLabel.length
+      : -1;
+  const perimeterPrefixText = perimeterRootStart >= 0 ? perimeterLabel!.slice(0, perimeterRootStart) : perimeterLabel;
+  const perimeterRootText = perimeterRootStart >= 0 ? perimeterLabel!.slice(perimeterRootStart) : '';
+
+  // perimeterLabel's own ring, sized around (not overlapping) the QR
+  // face -- scannability testing for the QR itself (see the face Box's
+  // own doc comment below) never involved anything outside its own
+  // square, so this can't affect it either way. Scales with
+  // effectiveDiameter so the expanded/default sizes both get
+  // proportionally readable text, not a fixed pixel margin that reads
+  // fine small and cramped once expanded (or the reverse).
+  const pathId = React.useId();
+  const showPerimeterLabel = !isTopbar && Boolean(perimeterLabel);
+  // sqrt, not linear (effectiveDiameter * 0.09) -- flagged live as
+  // growing the font too aggressively once expanded: a straight
+  // proportion took it from ~11px at the default size to ~19px expanded
+  // (+73%, matching the diameter's own +71% jump 1:1). sqrt keeps the
+  // same ~11px at the default size (unchanged, already tuned) but only
+  // ~15px expanded (+36%) -- still visibly bigger, not nearly as much.
+  const perimeterFontSize = Math.max(9, Math.round(Math.sqrt(effectiveDiameter)));
+  // Tight to the QR on purpose -- an earlier circle-based version offset
+  // ~0.3x the diameter out and was flagged live as leaving visibly "too
+  // much air" between the QR and whatever sits below it on the page.
+  // Nudged up slightly (0.95 -> 1.1) on later feedback that the tightest
+  // version still read as a hair too close.
+  const ringOffset = showPerimeterLabel ? Math.round(perimeterFontSize * 1.1) : 0;
+  const perimeterPathSize = effectiveDiameter + ringOffset * 2;
+  // Matches (scaled up slightly for the small extra offset) the QR
+  // face's own 12px corner radius below, so the ring reads as hugging
+  // that same shape rather than a differently-rounded one just outside it.
+  const perimeterRadius = Math.max(8, Math.round(12 + ringOffset));
+  // Room for the path itself plus the text sitting on it (glyphs extend
+  // roughly half their own height past the bare path line).
+  const outerSize = showPerimeterLabel
+    ? perimeterPathSize + perimeterFontSize
+    : effectiveDiameter;
+  const perimeterInset = (outerSize - perimeterPathSize) / 2;
+  // Sized and placed by a single ratio (φ) instead of the independent,
+  // eyeballed constants this had before (radius 0.32x, gap "+3px") --
+  // flagged live as reading cramped and unaligned, not just too small.
+  // Diameter:fontSize is 1:φ, and the gap after the dot continues the
+  // same division (gap:diameter is 1:φ too) -- one deliberate ratio
+  // running through the whole cluster instead of two unrelated numbers.
+  const statusDotDiameter = perimeterFontSize / GOLDEN_RATIO;
+  const statusDotRadius = Math.max(2, statusDotDiameter / 2);
+  const statusDotGap = statusDotDiameter / GOLDEN_RATIO;
+  // Horizontal center sits at buildPerimeterPath's own start point (r, s
+  // in its local space, before translate) -- the same corner the label
+  // text used to start its glyph from. Vertically, the path carries the
+  // text's BASELINE (y = perimeterInset + perimeterPathSize) -- lowercase
+  // ascenders/x-height rise above that line, so a dot centered ON the
+  // baseline sat visibly low next to the text (confirmed live, "ni se ve
+  // alineado"). Lifting it by its own radius puts its center at roughly
+  // the text's visual midline instead, without a second, unrelated
+  // offset constant.
+  const statusDotCx = perimeterInset + perimeterRadius;
+  const statusDotCy = perimeterInset + perimeterPathSize - statusDotRadius;
+  // diameter + gap = diameter × (1 + 1/φ) = diameter × φ = fontSize --
+  // 1 + 1/φ = φ is the golden ratio's own defining identity, so this
+  // reserves exactly one fontSize's width for the dot cluster, not a
+  // number picked to look right.
+  const perimeterTextStartOffset = statusDotDiameter + statusDotGap;
   const avatarBg = avatarSrc ? 'transparent' : theme.palette.primary.main;
   const avatarTextColor = avatarSrc
     ? theme.palette.primary.contrastText
@@ -163,13 +377,80 @@ export default function QRme({
 
   return (
     <>
+    <Box
+      className={className}
+      style={style}
+      sx={{
+        position: 'relative',
+        width: outerSize,
+        height: outerSize,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {showPerimeterLabel && (
+        <svg
+          width={outerSize}
+          height={outerSize}
+          viewBox={`0 0 ${outerSize} ${outerSize}`}
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+          // The ring/path/root text stay purely decorative, but the
+          // handle can now be a real link (see perimeterHandleHref) --
+          // an aria-hidden ancestor would swallow that link for
+          // assistive tech, so this only hides the whole group when
+          // nothing inside it is actually interactive.
+          aria-hidden={perimeterHandleHref ? undefined : 'true'}
+        >
+          <defs>
+            <path
+              id={pathId}
+              d={buildPerimeterPath(perimeterPathSize, perimeterRadius)}
+              transform={`translate(${perimeterInset}, ${perimeterInset})`}
+            />
+          </defs>
+          <circle cx={statusDotCx} cy={statusDotCy} r={statusDotRadius} fill={statusDotColor} />
+          <text fontFamily="monospace" fontSize={perimeterFontSize}>
+            <textPath href={`#${pathId}`} startOffset={perimeterTextStartOffset}>
+              {perimeterPrefixText && (
+                perimeterHandleHref ? (
+                  <a
+                    href={perimeterHandleHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Open ${perimeterPrefixText}${perimeterRootText}`}
+                    style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                    // Sits inside the QR's own click-to-expand region
+                    // (CleakerLanding wraps the whole bubble in a toggle) --
+                    // without this, opening the link would ALSO flip
+                    // expanded/collapsed underneath it.
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <tspan fill={perimeterHandleColor} fontWeight={500}>
+                      {perimeterPrefixText}
+                    </tspan>
+                  </a>
+                ) : (
+                  <tspan fill={perimeterHandleColor} fontWeight={500}>
+                    {perimeterPrefixText}
+                  </tspan>
+                )
+              )}
+              {perimeterRootText && (
+                <tspan fill={ringAccent} fontWeight={700}>
+                  {perimeterRootText}
+                </tspan>
+              )}
+            </textPath>
+          </text>
+        </svg>
+      )}
       <Box
         data-gui-node-id={rootNodeId}
       data-gui-component={rootNodeType}
-      className={className}
       role={clickFlip ? 'button' : undefined}
       tabIndex={clickFlip ? 0 : undefined}
-      aria-label={showingAvatar ? 'Show .me QR' : 'Show avatar'}
+      aria-label={[showingAvatar ? 'Show .me QR' : 'Show avatar', statusLabel].filter(Boolean).join(' — ')}
       onMouseEnter={handlePointerEnter}
       onMouseLeave={handlePointerLeave}
       onFocus={handlePointerEnter}
@@ -190,7 +471,6 @@ export default function QRme({
         cursor: clickFlip ? 'pointer' : 'default',
         userSelect: 'none',
       }}
-      style={style}
     >
       <Box
         sx={{
@@ -225,7 +505,7 @@ export default function QRme({
             justifyContent: 'center',
             background: rimBackground,
             border: '1px solid',
-            borderColor,
+            borderColor: `${ringAccent}55`,
             boxShadow: isTopbar
               ? `0 0 0 1px ${theme.palette.primary.main}22, 0 3px 8px rgba(0,0,0,0.14)`
               : showingAvatar
@@ -237,8 +517,11 @@ export default function QRme({
                 // had a drift/scale keyframe) puts the actual scannable
                 // pattern in motion too — real cameras need a still target
                 // to lock onto a QR's finder patterns, confirmed live
-                // (2026-09-16) against local.cleaker's own QR.
-                : `0 0 0 2px ${theme.palette.primary.main}, 0 0 14px 3px ${theme.palette.primary.main}40, 0 8px 18px rgba(0,0,0,0.14)`,
+                // (2026-09-16) against local.cleaker's own QR. Uses
+                // ringAccent (warning/error while `status` says so, the
+                // theme's own primary color otherwise) so this glow doubles
+                // as the QR's connection-status signal.
+                : `0 0 0 2px ${ringAccent}, 0 0 14px 3px ${ringAccent}40, 0 8px 18px rgba(0,0,0,0.14)`,
             overflow: 'hidden',
           }}
         >
@@ -401,6 +684,7 @@ export default function QRme({
         </Box>
       </Box>
       </Box>
+    </Box>
     </>
   );
 }
