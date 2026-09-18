@@ -52,6 +52,19 @@ export type QRmeProps = {
   defaultFace?: 'qr' | 'avatar';
   hoverFlip?: boolean;
   clickFlip?: boolean;
+  /**
+   * Overrides the hover cursor QRme would otherwise pick on its own
+   * (`clickFlip ? 'pointer' : 'default'`). Needed when a CALLER wraps this
+   * component in its own click handler (e.g. CleakerLanding's bubble,
+   * which toggles size rather than using QRme's own flip-to-avatar) --
+   * without this, QRme's own root element still carries its
+   * clickFlip-driven `cursor: 'default'`, which wins over the wrapper's
+   * `cursor: 'pointer'` and silently kills the hand cursor a person
+   * expects over anything clickable. Omit to keep the existing
+   * clickFlip-tied default (e.g. monad.ai.tsx's purely decorative QR,
+   * which is correctly non-interactive).
+   */
+  cursor?: React.CSSProperties['cursor'];
   showAvatarLabel?: boolean;
   /**
    * Connection-verification state for whatever `value` currently points
@@ -181,6 +194,7 @@ export default function QRme({
   defaultFace = 'qr',
   hoverFlip = true,
   clickFlip = true,
+  cursor,
   showAvatarLabel = false,
   status = 'idle',
   statusLabel,
@@ -468,7 +482,7 @@ export default function QRme({
         height: effectiveDiameter,
         display: 'inline-flex',
         perspective: `${effectiveDiameter * 6}px`,
-        cursor: clickFlip ? 'pointer' : 'default',
+        cursor: cursor ?? (clickFlip ? 'pointer' : 'default'),
         userSelect: 'none',
       }}
     >

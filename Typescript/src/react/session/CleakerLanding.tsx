@@ -572,6 +572,13 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
             hoverFlip={false}
             clickFlip={false}
+            // clickFlip is off (no flip-to-avatar here), but this bubble
+            // IS clickable -- the wrapping Box above toggles expanded/
+            // collapsed. Without this override, QRme's own root element
+            // still carries its clickFlip-tied `cursor: 'default'`, which
+            // wins over the wrapper's `cursor: 'pointer'` and silently
+            // kills the hand cursor on hover ("manita como de push").
+            cursor="pointer"
             status={qrStatus}
             statusLabel={qrStatusLabel}
             // The namespace/expression itself draws AROUND the QR's own
