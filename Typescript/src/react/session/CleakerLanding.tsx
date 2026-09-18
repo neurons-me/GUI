@@ -1866,6 +1866,13 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace) });
   }, [verifiedRoot.promote]);
 
+  // Always first -- "back to the start of everything" needs to lead the
+  // list, not sit wherever the .me-backed items or the auth-gated extras
+  // happen to land. A plain '/' link, not part of useCleakerRootSidebar's
+  // own .me-backed composition (that hook answers "what does THIS
+  // namespace declare", not "how do I get back to the root shell").
+  const homeElement: LeftBarElement = { type: 'link', props: { id: 'home', label: 'Home', to: '/', icon: 'home' } };
+
   const extraElements: LeftBarElement[] = [
     ...(authenticated
       ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain', icon: 'key' } }]
@@ -1874,7 +1881,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   ];
 
   return (
-    <Layout LeftBar={{ elements: [...resolved.map((r) => r.element), ...extraElements] }}>
+    <Layout LeftBar={{ elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements] }}>
       <Routes>
         <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
         <Route path="users" element={<CleakerUsersView {...props} />} />
