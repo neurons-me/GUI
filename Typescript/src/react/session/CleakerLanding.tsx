@@ -504,14 +504,15 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        // Was 4 -- flagged live as far too much air between the QR/Beatle
-        // group and whatever renders below it (the sign-in form, or the
-        // authenticated hash+Salir block) -- cut hard per that feedback.
-        // NOT the literal 80% first tried (0.8): the QR's own perimeter
-        // label already sits close to its outer edge, so that value
-        // collided the "Hello, I am…" heading straight into it -- this is
-        // as tight as it goes before overlapping the QR's own label.
-        gap: 1.5,
+        // Was 4, then cut to 1.5 after that read as far too much air
+        // between the QR/Beatle group and whatever renders below it --
+        // flagged live again afterward as having overcorrected, both here
+        // (QR to "Hello, I am…") and one level down (that heading to the
+        // credentials inputs, which share this same gap -- see the
+        // credentials Box below, a direct sibling of the heading Box
+        // within this same flex container). Settled between the two:
+        // real breathing room without returning to the original excess.
+        gap: 2.5,
         px: 3,
         py: 6,
         boxSizing: 'border-box',
