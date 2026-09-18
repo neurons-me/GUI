@@ -358,6 +358,45 @@ export function useCleakerAuth(options: UseCleakerAuthOptions): UseCleakerAuthRe
     onAuthenticated?.(nextProfile, args.action);
     onViewModeChange?.('profile');
     window.setTimeout(() => setAuthStatus('idle'), 1200);
+
+    // buildAuthenticatedProfile above only ever reads session.read() -- the
+    // session's own LOCAL kernel mirror, hydrated once at open()/claim()
+    // and never re-synced after -- so it can lag or simply miss whatever
+    // the namespace's real, current name/email/phone/claim time actually
+    // is (changed from another tab/device, or never mirrored into THIS
+    // session at all). That local snapshot is still what renders instantly
+    // above, unchanged -- this is a background refinement, not a
+    // replacement: a genuine, disclosure-checked readConfirmed() against
+    // the namespace's own monad, and only if it resolves to something
+    // actually different does the caller hear about it again. Best-effort
+    // by construction (readConfirmed is optional on SeedSession, and any
+    // single field can fail independently) -- a namespace/session that
+    // can't answer just leaves the already-applied local profile as final.
+    const { session, action } = args;
+    const readConfirmed = session.readConfirmed;
+    if (typeof readConfirmed === 'function') {
+      void (async () => {
+        const [confirmedName, confirmedEmail, confirmedPhone, confirmedClaimedAt] = await Promise.all([
+          readConfirmed<string>('name').catch(() => undefined),
+          readConfirmed<string>('email').catch(() => undefined),
+          readConfirmed<string>('phone').catch(() => undefined),
+          readConfirmed<number>('auth.claimed_at').catch(() => undefined),
+        ]);
+        const refinedProfile: CleakerProfileSnapshot = {
+          ...nextProfile,
+          name: cleanString(confirmedName) || nextProfile.name,
+          email: cleanString(confirmedEmail) || nextProfile.email,
+          phone: cleanString(confirmedPhone) || nextProfile.phone,
+          claimedAt: toTimestamp(confirmedClaimedAt) || nextProfile.claimedAt,
+        };
+        const changed = refinedProfile.name !== nextProfile.name
+          || refinedProfile.email !== nextProfile.email
+          || refinedProfile.phone !== nextProfile.phone
+          || refinedProfile.claimedAt !== nextProfile.claimedAt;
+        if (changed) onAuthenticated?.(refinedProfile, action);
+      })();
+    }
+
     return nextProfile;
   }, [activeProfile, identityNamespace, onAuthenticated, onViewModeChange]);
 

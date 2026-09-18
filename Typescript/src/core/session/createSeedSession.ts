@@ -6,6 +6,7 @@ import {
   claimNamespace,
   createMonadClient,
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
+  MonadClientError,
   type MonadClaimResult,
   type MonadClient,
   type MonadClientOptions,
@@ -277,6 +278,34 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
     },
     read(path) {
       return readMeValue(me, path, { allowBarePath: true });
+    },
+    // Mirrors createCleakerSession.ts's own readConfirmed exactly (same
+    // contract, same doc comment on the SeedSession interface above) — this
+    // backend was missing it entirely, which meant every caller reading
+    // profile-shaped values (name/email/phone/...) through a plain
+    // createSeedSession() session had no way to ask for anything but the
+    // local mirror, no matter how stale. A genuine GET against this
+    // session's own monad/namespace, resolved from the SAME activeNamespace
+    // closure variable read()/write() already share.
+    async readConfirmed<TValue = unknown>(expression: string): Promise<TValue | undefined> {
+      const semanticNamespace = normalizeRequiredNamespace(activeNamespace);
+      if (!semanticNamespace) {
+        throw new SeedSessionError('NAMESPACE_REQUIRED', 'An active namespace is required for readConfirmed.');
+      }
+      try {
+        const result = await monad.readNamespacePath<TValue>({
+          semanticNamespace,
+          transportOrigin,
+          path: expression,
+        });
+        try { writeMeValue(me, expression, result.value as any, { allowBarePath: true }); } catch { /* local mirror is best-effort */ }
+        return result.value;
+      } catch (cause) {
+        if (cause instanceof MonadClientError && (cause.code === 'NOT_FOUND' || cause.code === 'PATH_NOT_FOUND')) {
+          return undefined;
+        }
+        throw cause;
+      }
     },
     async write(expression, value, writeOptions = {}) {
       const semanticNamespace = normalizeRequiredNamespace(activeNamespace);
