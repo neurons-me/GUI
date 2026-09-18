@@ -27,8 +27,6 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
-import DisplayNameProvenanceDemo from '@/gui/All.This/Cleaker/Provenance/DisplayNameProvenanceDemo';
-import { SidebarCompositionShell } from '@/gui/Layout/Sidebars/Composition/SidebarCompositionDemo';
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
@@ -1782,90 +1780,21 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
   );
 };
 
-// Minimal, self-contained proof that two independent GUI interfaces can
-// operate on the same `.me` meaning through the REAL authorized/persisted
-// write channel — see DisplayNameProvenanceDemo.tsx's own doc comment for
-// the full rationale. This view is just the page shell (title, back link);
-// all the actual session/kernel wiring lives in that component.
-const CleakerProvenanceDemoView: React.FC<CleakerLandingProps> = ({ sx }) => (
-  <Box
-    data-gui-node-id="CleakerProvenanceDemoView"
-    data-gui-component="CleakerProvenanceDemoView"
-    sx={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      px: 3,
-      py: 6,
-      boxSizing: 'border-box',
-      ...sx,
-    }}
-  >
-    <Box sx={{ width: '100%', maxWidth: 480 }}>
-      <LinkIconButton
-        component={Link}
-        to="/"
-        aria-label="Back to .me"
-        data-gui-node-id="CleakerProvenanceDemoView.back"
-        sx={{ mb: 1, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-      >
-        <Icon name="arrow_back" fontSize={18 as any} />
-      </LinkIconButton>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
-        profile.displayName
-      </Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-        Two interfaces, one `.me` meaning — real signed writes, real server reads.
-      </Typography>
-      <DisplayNameProvenanceDemo />
-    </Box>
-  </Box>
-);
-
-// TEMPORARY, remove once the Layout/sidebar scope-composition step closes
-// (see gui/Layout/Sidebars/Composition/SidebarCompositionDemo.tsx).
-// SidebarCompositionShell renders through the REAL Layout/LeftBar (its own
-// full-page chrome) and owns a NESTED <Routes> for /proyecto and
-// /proyecto/noticias -- mounted ONCE here at the "/layout-demo/*" wildcard,
-// so Layout/LeftBarProvider persist across navigation between those two
-// pages instead of remounting per route (see that file's own doc comment).
-const CleakerSidebarCompositionShellView: React.FC<CleakerLandingProps> = () => (
-  <>
-    <LinkIconButton
-      component={Link}
-      to="/"
-      aria-label="Back to .me"
-      data-gui-node-id="CleakerSidebarCompositionShellView.back"
-      sx={{
-        position: 'fixed', top: 20, right: 20, zIndex: 2100,
-        width: 40, height: 40, border: '1px solid', borderColor: 'divider',
-        borderRadius: '50%', bgcolor: 'background.paper', color: 'text.secondary',
-        '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
-      }}
-    >
-      <Icon name="arrow_back" fontSize={18 as any} />
-    </LinkIconButton>
-    <SidebarCompositionShell />
-  </>
-);
-
 // Mounts the REAL Layout/LeftBar once for Cleaker's own navigation (/,
-// /users, /blockchain, /url, /keychain) -- same shared-Layout pattern
-// proven in SidebarCompositionShell (nested <Routes> inside one Layout
-// instance, so it never remounts across these pages). Users/Blockchain/URL
-// come from useCleakerRootSidebar (the .me-backed composition: the VISITED
-// namespace's own public root scope first -- readable with or without a
-// session -- then the authenticated identity's own preferences layered on
-// top if signed in, with these JS labels as the last-resort fallback).
-// Keychain and the two lab-access icons are added via Layout's own native
-// `elements` merge (LeftBar.tsx's mergeLeftSidebarCollections) since
-// they're a client auth-state fact and dev scaffolding respectively, not
-// shared .me structure -- and Keychain's real gate is still `authenticated`
-// here, never whether it happens to be visible in some namespace's own
-// declared sidebar. /keychain/claim, /keychain/admin-sign,
-// /provenance-demo, and /layout-demo/* are deliberately NOT nested here --
-// they stay separate sibling routes (CleakerRoutes below), unchanged.
+// /users, /blockchain, /url, /keychain) -- nested <Routes> inside one
+// Layout instance, so it never remounts across these pages.
+// Users/Blockchain/URL come from useCleakerRootSidebar (the .me-backed
+// composition: the VISITED namespace's own public root scope first --
+// readable with or without a session -- then the authenticated identity's
+// own preferences layered on top if signed in, with these JS labels as
+// the last-resort fallback). Keychain and Netget are added via Layout's
+// own native `elements` merge (LeftBar.tsx's mergeLeftSidebarCollections)
+// since Keychain is a client auth-state fact, not shared .me structure --
+// its real gate is still `authenticated` here, never whether it happens
+// to be visible in some namespace's own declared sidebar.
+// /keychain/claim and /keychain/admin-sign are deliberately NOT nested
+// here -- they stay separate sibling routes (CleakerRoutes below),
+// unchanged.
 const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
@@ -1915,10 +1844,6 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
       ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain', icon: 'key' } }]
       : []),
     { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget', icon: 'router' } },
-    // TEMPORARY lab-access icons, kept clearly labeled -- same destinations
-    // as before, just relocated from CleakerLandingHome's own icon row.
-    { type: 'link' as const, props: { id: 'provenance-demo', label: 'profile.displayName demo (temporary)', to: '/provenance-demo', icon: 'science' } },
-    { type: 'link' as const, props: { id: 'layout-demo', label: 'Layout sidebar demo (temporary)', to: '/layout-demo/proyecto', icon: 'view_sidebar' } },
   ];
 
   return (
@@ -1944,8 +1869,6 @@ const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
     <Route path="/*" element={<CleakerLayoutShell {...props} />} />
     <Route path="/keychain/claim" element={<CleakerNetgetClaimView {...props} />} />
     <Route path="/keychain/admin-sign" element={<CleakerNetgetAdminSignView {...props} />} />
-    <Route path="/provenance-demo" element={<CleakerProvenanceDemoView {...props} />} />
-    <Route path="/layout-demo/*" element={<CleakerSidebarCompositionShellView {...props} />} />
   </Routes>
 );
 
