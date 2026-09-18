@@ -3,8 +3,8 @@
 // calls. Exists ALONGSIDE createSeedSession.ts, not replacing it (see
 // SeedSessionProvider.tsx's pluggable backend) — this is what actually
 // "mounts you onto the .me kernel" rather than just validating a secret
-// against the server: it constructs a real kernel (ME(username, secret)),
-// binds it to a namespace (ME.bindNamespace), and lets cleaker's own
+// against the server: it constructs a real kernel already bound to a
+// namespace (ME(username, secret, { namespace })), and lets cleaker's own
 // claim/signIn send a REAL signed proof (me['!'].prove()) alongside the
 // secret. monadClient.ts's claimNamespace()/openNamespace() send only
 // { secret, identityHash } — the server accepts an unverified, self-asserted
@@ -20,7 +20,6 @@ import cleaker from 'cleaker';
 import type { CleakerNode, MeKernel } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
 import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
-import type { MeLike } from '@/react/types';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
 import { deriveWireSecretFromRootBytes, hexToBytes } from '@/core/identity/recoveryPhrase';
 import {
@@ -185,23 +184,36 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     // Explicit root (e.g. phrase-derived): the 1-arg raw-seed constructor,
     // same form createSeedSession.ts's loginWithSeed already uses — but
     // THAT path never sets #activeExpression (no username involved at
-    // all), so prove()/bindNamespace() below need it set explicitly via
-    // the '@' identity call (Axiom A1) before anything else touches the
-    // kernel. me.ts's persistSeed() never fires for an explicit seed
-    // either way (see this.me's own seed-persistence fix) — this root
-    // only ever gets stored where THIS session explicitly puts it (see
+    // all), so prove() below needs it set explicitly via the '@' identity
+    // call (Axiom A1) before anything else touches the kernel. me.ts's
+    // persistSeed() never fires for an explicit seed either way (see
+    // this.me's own seed-persistence fix) — this root only ever gets
+    // stored where THIS session explicitly puts it (see
     // localIdentityVault.ts), never as a plaintext side effect here.
+    //
+    // Namespace binding can't go through the (who, secret, {namespace})
+    // constructor shape below -- this is the 1-arg raw-seed constructor,
+    // which has no "who" until '@' runs one line down, and ME's own
+    // namespace-binding requires an active expression already set. Written
+    // directly instead, via the exact same profile.rootNamespace/
+    // profile.namespace paths that constructor shape writes internally --
+    // `me` here is already the path-DSL proxy ME's constructor returns, so
+    // this needs no special method, just the same generic writes any other
+    // stored value would use.
     me = new (ME as any)(explicitIdentityRootHex);
     me['@'](username);
+    me.profile.rootNamespace(rootNamespace);
+    me.profile.namespace(`${username}.${rootNamespace}`);
   } else {
     // Default: the 2-arg constructor both derives the compound seed AND
-    // sets #activeExpression in one step — required for prove()/
-    // bindNamespace() to work at all (confirmed live: the 1-arg seed-string
-    // form createSeedSession.ts uses never sets it, and prove() throws
-    // ACTIVE_EXPRESSION_REQUIRED without it).
-    me = new (ME as any)(username, password);
+    // sets #activeExpression in one step — required for prove() to work at
+    // all (confirmed live: the 1-arg seed-string form createSeedSession.ts
+    // uses never sets it, and prove() throws ACTIVE_EXPRESSION_REQUIRED
+    // without it). Passing `namespace` in the options bag here binds it in
+    // the SAME constructor call, using #activeExpression the moment it's
+    // set — see MEOptions.namespace's own doc comment.
+    me = new (ME as any)(username, password, { namespace: rootNamespace });
   }
-  (me as unknown as MeLike & { bindNamespace: (root: string) => unknown }).bindNamespace(rootNamespace);
 
   // Lazy + memoized: deriveWireSecretFromRootBytes is WebCrypto-async, and
   // this function itself stays synchronous (its existing contract — see
