@@ -1489,13 +1489,23 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
   const session = ctx?.session ?? null;
   const transportOrigin = ctx?.transportOrigin ?? '';
 
-  // Identical reasoning and identical check as CleakerNetgetClaimView's
-  // own allowedReturnOrigin above -- see that one's comment for the full
-  // explanation of why this is a same-origin fetch to THIS page's own
-  // "/main-server-namespace", never derived from transportOrigin. Kept
-  // as its own effect rather than a shared hook: this is the only other
-  // place in this file that needs it, and duplicating ~20 lines once is
-  // clearer than a premature shared abstraction for two call sites.
+  // Two DIFFERENT jobs, easy to conflate: (1) this resolves WHERE to send
+  // the cross-origin admin-session calls below (netget's own origin) --
+  // still needed as a fetch target regardless of trust; (2) whether that
+  // destination is trustworthy at all. This flow has no server-side
+  // "waiting session" until a challenge is actually requested (unlike
+  // CleakerNetgetClaimView's gatewaySetupSession.ts-backed one), so there
+  // is nothing for an upfront, verified check to consult yet -- the real
+  // trust decision instead happens where a genuine session record DOES
+  // exist: adminSession.ts commits each challenge to the exact
+  // returnOrigin/returnPath supplied when it's requested (see the
+  // challenge/verify calls below), and refuses to mint a session if verify
+  // time doesn't match. This client-side guess stays only as an early,
+  // best-effort heads-up (same fetch/parse as CleakerNetgetClaimView's own
+  // allowedReturnOrigin, kept separate rather than shared: this is the
+  // only other call site, and duplicating ~20 lines once is clearer than a
+  // premature shared abstraction) -- it is not, and no longer needs to be,
+  // the actual security boundary.
   const [allowedReturnOrigin, setAllowedReturnOrigin] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -1506,8 +1516,15 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
         const body = await res.json().catch(() => null);
         const mainServerName = typeof body?.mainServerName === 'string' ? body.mainServerName.trim() : '';
         const isLocalMesh = !mainServerName || /^(localhost|127\.0\.0\.1|local|local\..+)$/i.test(mainServerName);
+        // Same fix, same reasoning as netgetSetupClient.ts's own
+        // localCleakerOrigin(): scheme comes from THIS page's own
+        // window.location.protocol, never a hardcoded 'http://' literal --
+        // that literal here mismatches the moment this page loads over
+        // https, making the /admin-session/challenge and /admin-session/verify
+        // fetches below target the wrong origin (or a scheme mismatch that
+        // fails outright) in exactly the deployment shape this fix exists for.
         const netgetOrigin = isLocalMesh
-          ? 'http://local.netget'
+          ? `${window.location.protocol}//local.netget`
           : /^https?:\/\//i.test(mainServerName) ? mainServerName.replace(/\/+$/, '') : `https://${mainServerName}`;
         if (!cancelled) setAllowedReturnOrigin(new URL(netgetOrigin).origin);
       } catch {
@@ -1556,10 +1573,17 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
         }
       }
 
+      // returnOrigin/returnPath commit THIS challenge to this exact
+      // destination server-side (adminSession.ts's own
+      // issueAdminSessionChallenge) -- verify below must present the same
+      // values, or the server refuses to mint a session, regardless of
+      // what allowedReturnOrigin's own client-side guess concluded above.
+      // Real defense against the destination being swapped mid-flow, not
+      // just a repeat of the same client guess.
       const challengeRes = await fetch(`${allowedReturnOrigin}/admin-session/challenge`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ identityHash }),
+        body: JSON.stringify({ identityHash, returnOrigin: returnToUrl.origin, returnPath: returnToUrl.pathname }),
       });
       const challengeBody = await challengeRes.json().catch(() => null);
       if (!challengeRes.ok || !challengeBody?.challenge) {
@@ -1578,7 +1602,10 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
       const verifyRes = await fetch(`${allowedReturnOrigin}/admin-session/verify`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ identityHash, namespace: semanticNamespace, keyId: selectedKey.keyId, signature }),
+        body: JSON.stringify({
+          identityHash, namespace: semanticNamespace, keyId: selectedKey.keyId, signature,
+          returnOrigin: returnToUrl.origin, returnPath: returnToUrl.pathname,
+        }),
       });
       const verifyBody = await verifyRes.json().catch(() => null);
       if (!verifyRes.ok || !verifyBody?.sessionToken) {
