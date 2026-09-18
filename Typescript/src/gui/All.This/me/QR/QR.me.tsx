@@ -1,5 +1,6 @@
 import React from 'react';
 import { Avatar, Box, Typography } from '@/gui/Atoms';
+import Icon from '@/gui/Atoms/Icon/Icon';
 import { useGuiTheme } from '@/gui-internals/Hooks';
 import QR, { getQrModuleCount, snapQrCellSize } from '../QR';
 import PixelWordmark from './PixelWordmark';
@@ -123,6 +124,32 @@ export type QRmeProps = {
    * label, just colored differently.
    */
   perimeterHandleHref?: string;
+  /**
+   * Shows a small pencil affordance in the QR's corner, revealed on
+   * hover, that lets a person edit `editableRootValue` inline -- opt-in
+   * only (every other mount of this component, e.g. monad.ai.tsx's
+   * decorative QR or the old Cleaker.tsx surface, keeps rendering exactly
+   * as before). Exists because the namespace this QR encodes/displays is
+   * so far always GUESSED from `window.location` (see CleakerLanding.tsx's
+   * deriveNamespaceRootLabel) -- a guess that can silently diverge from
+   * what a server actually resolves a given root string to (confirmed
+   * live: "localhost" claims land under a monad's own configured root,
+   * e.g. "local.cleaker", but a later sign-in re-guessing "localhost"
+   * from the URL bar never learns that and fails). Editing here is the
+   * fix at the source: the root becomes something a person states
+   * directly, not something inferred from wherever the page happens to
+   * be loaded from.
+   */
+  editableRoot?: boolean;
+  /** Current value shown in the inline editor when it opens. Ignored unless `editableRoot` is true. */
+  editableRootValue?: string;
+  /**
+   * Fires once with the new, trimmed value when a person commits an edit
+   * (Enter, or blurring after a real change) -- never fires for an
+   * unchanged or empty draft. Required for `editableRoot` to do anything;
+   * this component holds no namespace state of its own.
+   */
+  onEditableRootChange?: (next: string) => void;
   className?: string;
   style?: React.CSSProperties;
   'data-gui-node-id'?: string;
@@ -201,6 +228,9 @@ export default function QRme({
   perimeterLabel,
   perimeterRootLabel,
   perimeterHandleHref,
+  editableRoot = false,
+  editableRootValue = '',
+  onEditableRootChange,
   className,
   style,
   'data-gui-node-id': dataGuiNodeId,
@@ -243,6 +273,30 @@ export default function QRme({
   }, [value, resolvedDiameter, isTopbar]);
   const [hovered, setHovered] = React.useState(false);
   const [pinned, setPinned] = React.useState(defaultFace === 'avatar');
+  const [editingRoot, setEditingRoot] = React.useState(false);
+  const [rootDraft, setRootDraft] = React.useState(editableRootValue);
+  // Independent of `hovered`/hoverFlip above -- CleakerLanding (the only
+  // real caller of editableRoot so far) sets hoverFlip=false, so that
+  // state never turns true and would leave the edit icon permanently
+  // invisible if reused here.
+  const [rootEditHovered, setRootEditHovered] = React.useState(false);
+  const rootEditInputRef = React.useRef<HTMLInputElement>(null);
+
+  const openRootEditor = () => {
+    setRootDraft(editableRootValue);
+    setEditingRoot(true);
+  };
+  const commitRootEdit = () => {
+    const next = rootDraft.trim();
+    if (next && next !== editableRootValue) onEditableRootChange?.(next);
+    setEditingRoot(false);
+  };
+  const cancelRootEdit = () => setEditingRoot(false);
+  // Autofocus the moment the editor mounts -- a person just clicked an
+  // edit icon specifically to type, not to click again into the field.
+  React.useEffect(() => {
+    if (editingRoot) rootEditInputRef.current?.focus();
+  }, [editingRoot]);
 
   const showingAvatar = pinned || (hoverFlip && hovered);
   const faceRotation = showingAvatar ? 180 : 0;
@@ -402,6 +456,8 @@ export default function QRme({
         alignItems: 'center',
         justifyContent: 'center',
       }}
+      onMouseEnter={editableRoot ? () => setRootEditHovered(true) : undefined}
+      onMouseLeave={editableRoot ? () => setRootEditHovered(false) : undefined}
     >
       {showPerimeterLabel && (
         <svg
@@ -698,6 +754,97 @@ export default function QRme({
         </Box>
       </Box>
       </Box>
+
+      {editableRoot && (
+        editingRoot ? (
+          <Box
+            component="form"
+            onSubmit={(event: React.FormEvent) => { event.preventDefault(); commitRootEdit(); }}
+            onClick={(event: React.MouseEvent) => event.stopPropagation()}
+            sx={{
+              position: 'absolute',
+              top: -38,
+              right: 0,
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              px: 1,
+              py: 0.5,
+              borderRadius: 999,
+              bgcolor: theme.palette.background.paper,
+              border: '1px solid',
+              borderColor,
+              boxShadow: '0 6px 16px rgba(0,0,0,0.18)',
+            }}
+            data-gui-node-id="QR.me.rootEdit.form"
+          >
+            <input
+              ref={rootEditInputRef}
+              value={rootDraft}
+              onChange={(event) => setRootDraft(event.target.value)}
+              onBlur={commitRootEdit}
+              onKeyDown={(event) => {
+                // Stopped unconditionally -- CleakerLanding's own bubble
+                // wrapper listens for Enter/Space at the document level to
+                // toggle expanded/collapsed, which would otherwise also
+                // fire while someone is simply typing a namespace in here.
+                event.stopPropagation();
+                if (event.key === 'Escape') { event.preventDefault(); cancelRootEdit(); }
+              }}
+              placeholder="cleaker.me"
+              spellCheck={false}
+              autoComplete="off"
+              style={{
+                width: Math.max(96, Math.round(effectiveDiameter * 0.9)),
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontFamily: 'monospace',
+                fontSize: '0.78rem',
+                color: theme.palette.text.primary,
+              }}
+              data-gui-node-id="QR.me.rootEdit.input"
+            />
+          </Box>
+        ) : (
+          <Box
+            component="button"
+            type="button"
+            className="qrme-root-edit-trigger"
+            aria-label="Edit namespace"
+            onClick={(event: React.MouseEvent) => { event.stopPropagation(); openRootEditor(); }}
+            sx={{
+              position: 'absolute',
+              top: -6,
+              right: -6,
+              zIndex: 2,
+              width: 24,
+              height: 24,
+              p: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              border: '1px solid',
+              borderColor,
+              bgcolor: theme.palette.background.paper,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.16)',
+              cursor: 'pointer',
+              opacity: rootEditHovered ? 1 : 0,
+              transition: 'opacity 160ms ease',
+              // Keep it out of the way (and unclickable) whenever it's
+              // faded out -- an invisible button still sitting right on
+              // top of the QR's own click-to-expand region would otherwise
+              // steal that click.
+              pointerEvents: rootEditHovered ? 'auto' : 'none',
+            }}
+            data-gui-node-id="QR.me.rootEdit.trigger"
+          >
+            <Icon name="edit" fontSize="0.9rem" />
+          </Box>
+        )
+      )}
     </Box>
     </>
   );

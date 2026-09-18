@@ -189,9 +189,22 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
   // password" step.
   const [recoveryComplete, setRecoveryComplete] = useState(false);
   const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  // A person's own explicit override, entered via the QR's edit affordance
+  // below -- takes over from deriveNamespaceRootLabel(resolvedEndpoint)'s
+  // window.location-guessed default the moment it's set. Exists because
+  // that guess can genuinely diverge from what a server actually resolves
+  // a given root string to (confirmed live: claiming under a guessed
+  // "localhost" landed under a monad's real configured root instead, e.g.
+  // "local.cleaker", and a later sign-in re-guessing "localhost" from the
+  // URL bar had no way to know that and failed) -- stating the root
+  // directly sidesteps that guess entirely, rather than trying to make the
+  // guess itself smarter. Session-only (not persisted): a stale override
+  // surviving a reload/different device would be its own, worse kind of
+  // silent mismatch.
+  const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
   const namespaceRootLabel = useMemo(
-    () => deriveNamespaceRootLabel(resolvedEndpoint),
-    [resolvedEndpoint],
+    () => namespaceOverride || deriveNamespaceRootLabel(resolvedEndpoint),
+    [namespaceOverride, resolvedEndpoint],
   );
 
   // Real crypto capability of the page THIS component is actually running
@@ -593,6 +606,12 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             perimeterLabel={perimeterLabel}
             perimeterRootLabel={namespaceRootLabel}
             perimeterHandleHref={perimeterHandleHref}
+            // Editable only pre-auth -- once a real session is open, the
+            // namespace is whatever that session actually claimed/opened,
+            // not a guess left to edit further.
+            editableRoot={!authenticated}
+            editableRootValue={namespaceRootLabel}
+            onEditableRootChange={setNamespaceOverride}
             data-gui-node-id="CleakerLanding.bubble"
             style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           />
