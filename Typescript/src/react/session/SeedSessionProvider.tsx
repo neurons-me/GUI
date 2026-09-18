@@ -8,6 +8,7 @@ import {
   type SeedSession,
   type SeedSessionOptions,
   type SeedSessionWriteOptions,
+  type CreateSessionRuntime,
 } from '@/core/session/createSeedSession';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
 import {
@@ -60,10 +61,12 @@ export type ResolveSeedFromCredentials = (
   input: SeedCredentialsLoginInput,
 ) => Promise<SeedCredentialResolution> | SeedCredentialResolution;
 
-export type CreateSeedSessionRuntime = (
-  me: MeLike,
-  context: { semanticNamespace: string | null; transportOrigin: string },
-) => RuntimeAdapter;
+// The one definition lives in createSeedSession.ts (both this provider and
+// createCleakerSession.ts need it, and that file is the lower-level module
+// both already depend on) -- re-exported here under this file's original
+// name so existing importers of CreateSeedSessionRuntime from THIS module
+// keep working unchanged.
+export type CreateSeedSessionRuntime = CreateSessionRuntime;
 
 export type SeedSessionProviderProps = MonadClientOptions & {
   children: React.ReactNode;
@@ -101,6 +104,21 @@ export type SeedSessionProviderProps = MonadClientOptions & {
    *   2-arg ME(who, secret) constructor does).
    */
   sessionBackend?: 'monad' | 'cleaker';
+  /**
+   * 'cleaker' backend only. Keeps every remote path this session's kernel
+   * reads current over cleaker's own live channel (binder.ts's
+   * ensureLiveChannel/RemoteSlot, the monad's /nrp WebSocket) instead of
+   * the default fetch-once-and-cache. GUI never opens a WebSocket itself
+   * for this — cleaker is the one live-transport mechanism (see
+   * modules/cleaker's live/liveChannel.ts and CleakerEvents['value:changed']'s
+   * own doc comments); this flag just asks createCleakerSession() to pass
+   * `live: true` through to cleaker(me, ...) and wire its own
+   * createMeRuntime(me) to re-render on cleaker's 'value:changed' event.
+   * Ignored (has no effect) when `createRuntime` is also passed — that
+   * caller owns the runtime entirely and is assumed to have its own answer
+   * for staying live, or to not want one.
+   */
+  live?: boolean;
 };
 
 export type SeedSessionContextErrorCode =
@@ -381,6 +399,7 @@ export function SeedSessionProvider({
   headers,
   createRuntime,
   sessionBackend = 'monad',
+  live,
 }: SeedSessionProviderProps) {
   const defaultTransportOrigin = React.useMemo(
     () => normalizeMonadTransportOrigin(transportOrigin),
@@ -561,6 +580,8 @@ export function SeedSessionProvider({
         fetchImpl,
         headers,
         identityRootHex,
+        createRuntime,
+        live,
       });
       const shouldAutoOpen = input.autoOpen !== false;
 
@@ -580,7 +601,7 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, defaultTransportOrigin, fail, fetchImpl, headers],
+    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const registerWithCredentials = React.useCallback(
@@ -620,6 +641,8 @@ export function SeedSessionProvider({
         fetchImpl,
         headers,
         identityRootHex: String(input.identityRootHex || '').trim() || undefined,
+        createRuntime,
+        live,
       });
       const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
 
@@ -642,7 +665,7 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, defaultTransportOrigin, fail, fetchImpl, headers],
+    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const recoverWithPhrase = React.useCallback(
@@ -691,6 +714,8 @@ export function SeedSessionProvider({
         fetchImpl,
         headers,
         identityRootHex,
+        createRuntime,
+        live,
       });
       const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
 
@@ -716,7 +741,7 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, defaultTransportOrigin, fail, fetchImpl, headers],
+    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const loginWithCredentials = React.useCallback(

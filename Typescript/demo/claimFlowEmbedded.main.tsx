@@ -58,7 +58,11 @@ function Root() {
   // therefore GatewaySetup's own `endpoint`, resolve to THIS origin, the
   // one thing that actually puts the fix under test.
   return (
-    <SeedSessionProvider transportOrigin={monadOrigin} sessionBackend="cleaker">
+    <SeedSessionProvider
+      transportOrigin={monadOrigin}
+      sessionBackend="cleaker"
+      live
+    >
       <CleakerLanding netgetMonadOrigin={monadOrigin} cleakerEndpoint={window.location.origin} />
     </SeedSessionProvider>
   );

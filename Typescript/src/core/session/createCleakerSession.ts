@@ -40,7 +40,9 @@ import {
   writeLocalSessionState,
   type SeedSession,
   type SeedSessionWriteOptions,
+  type CreateSessionRuntime,
 } from './createSeedSession';
+import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 
 export type CleakerSessionOptions = MonadClientOptions & {
   username: string;
@@ -56,6 +58,18 @@ export type CleakerSessionOptions = MonadClientOptions & {
   /** Root namespace to bind into, e.g. "local.cleaker" or "cleaker.me". */
   namespace: string;
   runtime?: RuntimeAdapter | null;
+  /** See CreateSessionRuntime's own doc comment (createSeedSession.ts). */
+  createRuntime?: CreateSessionRuntime;
+  /**
+   * Passed straight through to cleaker(me, { live }) -- see
+   * BindKernelOptions.live's own doc comment (modules/cleaker's binder.ts)
+   * for what it actually does. When true and `createRuntime` was NOT also
+   * given, the default createMeRuntime(me) this session builds is wired
+   * to re-render on cleaker's own 'value:changed' event, so declarative
+   * reads (useMeValue) stay current without GUI ever opening a socket
+   * itself.
+   */
+  live?: boolean;
   /**
    * Overrides what BOTH the kernel's identity root (`#seed`) AND the wire
    * `secret` are derived from. Default (omitted): `#seed` AND `secret`
@@ -234,7 +248,6 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     return secretForWirePromise;
   };
 
-  const runtime = options.runtime || createMeRuntime(me);
   const monad = createMonadClient(options);
   const transportOrigin = normalizeMonadTransportOrigin(
     options.transportOrigin || DEFAULT_MONAD_TRANSPORT_ORIGIN,
@@ -267,7 +280,31 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   const node: CleakerNode = cleaker(me as unknown as MeKernel, {
     bootstrap: [transportOrigin],
     fetcher: options.fetchImpl,
+    // See CleakerSessionOptions.live's own doc comment -- this is what
+    // makes cleaker itself (not a second, parallel GUI-side WebSocket
+    // client) the one place that keeps a remote path current after the
+    // first read.
+    live: options.live,
   });
+
+  // The runtime factory (createRuntime) stays for a caller that genuinely
+  // needs full control -- but the ordinary way to get live updates is
+  // `live: true` above, which needs nothing from the caller except this:
+  // wrap the same createMeRuntime(me) every non-live session already gets,
+  // and re-render whenever cleaker's own 'value:changed' fires (emitted
+  // from binder.ts's live channel, AFTER the kernel's memory is already
+  // updated -- see that event's own doc comment in types/kernel.ts).
+  // GUI never talks to a WebSocket directly for this; it only listens to
+  // an event cleaker already emits.
+  const runtime = options.createRuntime
+    ? options.createRuntime(me, {
+        semanticNamespace: buildGuessedFullNamespace(username, rootNamespace),
+        transportOrigin,
+      })
+    : (options.runtime || createMeRuntime(me));
+  if (!options.runtime && !options.createRuntime && options.live && typeof node.on === 'function') {
+    node.on('value:changed', () => runtime.notify?.());
+  }
 
   let activeNamespace: string | null = null;
   let identityHash = '';

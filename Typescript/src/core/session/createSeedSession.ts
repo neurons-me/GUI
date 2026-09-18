@@ -43,6 +43,24 @@ export type SeedSessionOptions = MonadClientOptions & {
   semanticNamespace?: string | null;
 };
 
+/**
+ * A runtime FACTORY, not a pre-built RuntimeAdapter -- both session
+ * backends (this file's createSeedSession, and createCleakerSession.ts)
+ * construct their own `me` internally, so a caller can never hand over a
+ * ready-made runtime bound to it in advance. Pass e.g.
+ * `(me, ctx) => createWsMeRuntime(me, ctx)` for a session whose declarative
+ * reads (useMeValue) stay live against the real namespace tree over the
+ * monad's own /nrp WebSocket channel, instead of the default
+ * createMeRuntime(me) — local-only, reflects nothing this session didn't
+ * itself write or read. SeedSessionProvider.tsx re-exports this under the
+ * same name it originally defined it under (CreateSeedSessionRuntime) --
+ * this is the one definition, not two independently-typed copies.
+ */
+export type CreateSessionRuntime = (
+  me: MeLike,
+  context: { semanticNamespace: string | null; transportOrigin: string },
+) => RuntimeAdapter;
+
 export type SeedSessionWriteOptions<TValue = unknown> = Omit<
   MonadWriteInput<TValue>,
   'semanticNamespace' | 'identityHash' | 'transportOrigin' | 'fetchImpl' | 'headers' | 'expression' | 'value'
