@@ -75,6 +75,30 @@ export function getActiveNamespaceRoot(): string | null {
   return (globalThis as any)[ACTIVE_NAMESPACE_ROOT_KEY] || null;
 }
 
+// The one formula for "this browser's own guess at a full namespace" --
+// every caller that needs it (SeedSessionProvider.tsx's loginWithCleaker/
+// registerWithCredentials, and the local identity vault's own save key in
+// RegisterMe.tsx/RecoverAccount.tsx) MUST use this exact function, not its
+// own inline copy. Root cause of a real, live-confirmed bug otherwise: the
+// server can canonicalize a root string differently than this browser
+// guessed it (e.g. "localhost" -> this monad's real configured root,
+// confirmed live against a disposable monad) -- claimNamespace()/
+// openNamespace() on the server already normalize consistently between
+// claim and open, so THAT part is never the mismatch. What broke was the
+// LOCAL vault's own storage key: RegisterMe.tsx used to save it under the
+// server-CONFIRMED semanticNamespace (post-canonicalization), while
+// loginWithCleaker looked it up under this same guessed (pre-
+// canonicalization) key -- two independently-computed strings that only
+// coincidentally matched when no aliasing was in play. Vault miss ->
+// silent fallback to a completely different (compound-seed) identity ->
+// a real, correct IDENTITY_MISMATCH rejection from the server. Keying the
+// vault off THIS guess instead (what it already resolves to on every
+// subsequent visit, alias or not) closes that gap without this browser
+// ever needing to know how the server's canonicalization works.
+export function buildGuessedFullNamespace(username: string, rootNamespace: string): string {
+  return `${String(username || '').trim().toLowerCase()}.${String(rootNamespace || '').trim()}`;
+}
+
 // Same formula this.me's ME_RESEED uses internally (me/Typescript/src/me.ts,
 // deriveCompoundSeed) — exposed here so a caller can derive the identical
 // seed WITHOUT going through a .me kernel instance, e.g. to open a real

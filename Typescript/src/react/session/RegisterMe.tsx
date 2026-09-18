@@ -18,6 +18,7 @@ import {
   generateRecoveryPhrase,
 } from '@/core/identity/recoveryPhrase';
 import { saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 
 // Same bubble CleakerLanding's sign-in form shows — kept here too (not just
@@ -124,7 +125,15 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       // for never having raw root bytes sitting in state any longer than
       // this one call needs them.
       const rootBytes = await deriveIdentityRootBytesFromPhrase(words);
-      await saveLocalIdentityVault(semanticNamespace, rootBytes, password);
+      // Keyed by THIS browser's own guessed full namespace (username +
+      // the `namespace` prop it just claimed into) -- NOT semanticNamespace
+      // (the server's post-canonicalization confirmed value, e.g.
+      // "local.cleaker" when `namespace` was the guessed "localhost").
+      // loginWithCleaker looks the vault up under that same guess later
+      // (buildGuessedFullNamespace's own doc comment has the full story) --
+      // saving under the server's answer instead was a real, live-confirmed
+      // bug: a vault that silently never matched its own later lookup.
+      await saveLocalIdentityVault(buildGuessedFullNamespace(username, namespace || ''), rootBytes, password);
       setStep('done');
       // The phrase has done its job (claim proven, root wrapped into the
       // local vault) — nothing downstream needs the plaintext words in

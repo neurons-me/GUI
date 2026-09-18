@@ -13,6 +13,7 @@ import TextField from '@mui/material/TextField';
 import Passphrase from '@/gui/All.This/Cleaker/Passphrase/Passphrase';
 import { deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
 import { saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 
 export interface RecoverAccountProps {
@@ -74,7 +75,12 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
       // reasoning as RegisterMe's own vault step: raw root bytes live in
       // memory only as long as this one call needs them.
       const rootBytes = await deriveIdentityRootBytesFromPhrase(words);
-      await saveLocalIdentityVault(semanticNamespace, rootBytes, newPassword);
+      // Same fix as RegisterMe.tsx's own vault save -- keyed by this
+      // browser's own guessed full namespace, matching what
+      // loginWithCleaker looks up later, not semanticNamespace's
+      // server-confirmed (possibly differently-canonicalized) value. See
+      // buildGuessedFullNamespace's own doc comment for the full story.
+      await saveLocalIdentityVault(buildGuessedFullNamespace(username, namespace || ''), rootBytes, newPassword);
       setStep('done');
       setWords(Array.from({ length: WORD_COUNT }, () => ''));
       setUsername('');

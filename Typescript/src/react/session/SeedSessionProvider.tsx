@@ -19,7 +19,7 @@ import {
   type MonadOpenResult,
   type MonadWriteResult,
 } from '@/core/session/monadClient';
-import { getActiveNamespaceRoot, fetchGatewayHostname } from '@/gui/All.This/Cleaker/signedRequest';
+import { getActiveNamespaceRoot, fetchGatewayHostname, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
 import { hasLocalIdentityVault, loadLocalIdentityVault } from '@/core/identity/localIdentityVault';
 
@@ -518,7 +518,7 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
-      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
 
       // Day-to-day sign-in for a phrase-registered identity: if this
       // browser holds a local vault for this exact namespace (written at
@@ -621,7 +621,7 @@ export function SeedSessionProvider({
         headers,
         identityRootHex: String(input.identityRootHex || '').trim() || undefined,
       });
-      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
 
       try {
         // Deliberate register action — always claims, never tries open()
@@ -692,7 +692,7 @@ export function SeedSessionProvider({
         headers,
         identityRootHex,
       });
-      const fullNamespace = `${username.toLowerCase()}.${rootNamespace}`;
+      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
 
       try {
         // open(), deliberately never claim(): recovery reconnects to an
