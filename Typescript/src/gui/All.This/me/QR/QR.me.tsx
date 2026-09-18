@@ -792,7 +792,13 @@ export default function QRme({
                 event.stopPropagation();
                 if (event.key === 'Escape') { event.preventDefault(); cancelRootEdit(); }
               }}
-              placeholder="cleaker.me"
+              // Generic placeholder on purpose -- no example namespace
+              // here, real or fictional. This component doesn't know
+              // (and shouldn't act like it knows) which root a caller
+              // "should" use; the field is prefilled from
+              // editableRootValue anyway, so this only ever shows if
+              // someone clears it entirely.
+              placeholder="namespace root"
               spellCheck={false}
               autoComplete="off"
               style={{
