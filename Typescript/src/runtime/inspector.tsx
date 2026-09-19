@@ -657,6 +657,7 @@ export function RuntimeInspector({
         elementTag: metaSource.tagName.toLowerCase(),
         resolvedTag: host.tagName.toLowerCase(),
         resolvedPath: buildResolvedPath(metaSource, host),
+        domComponentAttr: host.getAttribute('data-gui-component') || undefined,
       });
       rightSidebar?.setView?.('expanded');
       return true;
@@ -1272,7 +1273,7 @@ export function RuntimeInspector({
             </div>
             <div style={{ marginBottom: 10 }}>
               <div style={{ opacity: 0.75 }}>type</div>
-              <code>{selected?.type ?? 'unknown'}</code>
+              <code>{selected?.type ?? selectedMeta?.domComponentAttr ?? 'unknown'}</code>
             </div>
             {selected?.part && (
               <div style={{ marginBottom: 10 }}>

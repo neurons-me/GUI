@@ -5,6 +5,21 @@ export type SelectionMeta = {
   elementTag?: string;
   resolvedTag?: string;
   resolvedPath?: string[];
+  /**
+   * The selected element's own `data-gui-component` DOM attribute, captured
+   * at click time regardless of whether a matching record was ever
+   * registered (registerNode/useRegisterGuiNode). A hand-written component
+   * can tag itself `data-gui-node-id`/`data-gui-component` for hit-testing
+   * and path-building (buildResolvedPath) without ever calling
+   * useRegisterGuiNode -- CleakerLanding.tsx does this at 31 call sites,
+   * none registered. Without this fallback the Inspector's own type field
+   * showed "unknown" for every one of them despite the DOM plainly naming
+   * itself. Never a substitute for a real registration: still no
+   * provenance/explain contract, no resolvedProps, nothing else a genuine
+   * registerNode() call provides -- purely the display-level fallback for
+   * "what does the DOM itself call this."
+   */
+  domComponentAttr?: string;
 };
 
 export type SelectionStateCore = {
