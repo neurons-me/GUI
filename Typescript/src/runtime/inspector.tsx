@@ -665,6 +665,32 @@ export function RuntimeInspector({
     [resolveNodeId, selectNode, setSelectedMeta, buildResolvedPath, rightSidebar]
   );
 
+  // Turning the Inspector ON with nothing selected starts at the tree's root
+  // instead of leaving the first click to land on whatever child is closest
+  // (the outermost node wraps everything, so that was almost never it and
+  // reaching it meant "Select parent" up the whole chain). "Root" here is
+  // the same thing Alt+click's "topmost" means: a tagged element with no
+  // tagged ancestor in the DOM -- deliberately NOT derived from the
+  // registry's parentId links, which only some nodes declare (a layout's
+  // own internal registrations look like parentless "roots" too). Only
+  // acted on when that is unambiguous (exactly one such element); anything
+  // else leaves behavior exactly as before. Only on an off -> on transition
+  // after mount, never on initial load: an inspector that starts enabled
+  // (mount()'s `inspector: true`) must not pop its panel open on every
+  // page view.
+  const prevInspectorEnabledRef = React.useRef<boolean>(inspectorEnabled);
+  React.useEffect(() => {
+    const wasEnabled = prevInspectorEnabledRef.current;
+    prevInspectorEnabledRef.current = inspectorEnabled;
+    if (!inspectorEnabled || wasEnabled) return;
+    if (selectedNodeId) return;
+
+    const topmost = Array.from(document.querySelectorAll<HTMLElement>('[data-gui-node-id]')).filter(
+      (el) => !el.parentElement?.closest('[data-gui-node-id]') && !el.closest('[data-gui-inspector-control="true"]')
+    );
+    if (topmost.length === 1) selectHostElement(topmost[0], topmost[0]);
+  }, [inspectorEnabled]);
+
   const getSelectedHostElement = React.useCallback(() => {
     if (!selectedNodeId) return null;
     let host: HTMLElement | null = null;
