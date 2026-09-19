@@ -10,12 +10,7 @@ import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
 import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
-import {
-  neighbours,
-  resolveQuery,
-  type InspectorQuery,
-  type QueryAxis,
-} from './inspectorQuery';
+import { around } from './inspectorNav';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -56,18 +51,20 @@ type TreeRow =
 type TreeView = {
   /** Root -> focus. */
   path: TreeEntry[];
-  /** Sideways from the focus: the sibling before / after, and its position. */
-  side: { prev: TreeEntry | null; next: TreeEntry | null; at: number; total: number };
+  /** Where you can go from the focus: parent, sibling before / after, first child. */
+  around: {
+    parent: TreeEntry | null;
+    prev: TreeEntry | null;
+    next: TreeEntry | null;
+    child: TreeEntry | null;
+    at: number;
+    total: number;
+  };
   /** The tree as a diagram: the root, and whatever is expanded below it. */
   rows: TreeRow[];
 };
-type QueryView = {
-  /** What the query found. */
-  result: TreeEntry[];
-};
 const TREE_ROW_LIMIT = 80;
 const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
-const QUERY_MARK_ATTR = 'data-gui-inspector-picked';
 
 // Two different things feed this tree, and they are kept apart on purpose:
 //  - the GUI's own declarations (the node registry: id, parentId, enabled).
@@ -188,145 +185,78 @@ function readTreeView(
     }
   };
   walk(path[0].id, 0, [], true);
-  const nb = neighbours(model, selectedId);
+  const nb = around(model, selectedId);
+  const entry = (id: string | null) => (id ? model.entryFor(id) : null);
   return {
     path,
     rows,
-    side: {
-      prev: nb.prev ? model.entryFor(nb.prev) : null,
-      next: nb.next ? model.entryFor(nb.next) : null,
+    around: {
+      parent: entry(nb.parent),
+      prev: entry(nb.prev),
+      next: entry(nb.next),
+      child: entry(nb.child),
       at: nb.at,
       total: nb.total,
     },
   };
 }
 
-function readQueryView(query: InspectorQuery | null, model = buildTreeModel()): QueryView | null {
-  if (!query) return null;
-  return { result: resolveQuery(model, query).map(model.entryFor) };
-}
-
-function queryViewSignature(view: QueryView | null): string {
-  if (!view) return '';
-  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.rendered}`;
-  return view.result.map(key).join(',');
-}
-
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
   const rowKey = (r: TreeRow) => (r.kind === 'node' ? `${key(r.entry)}|${r.prefix}|${r.hasChildren}|${r.open}` : `${r.id}|${r.count}`);
-  return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}#${view.side.prev?.id}|${view.side.next?.id}|${view.side.at}/${view.side.total}`;
+  return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}#${view.around.parent?.id}|${view.around.prev?.id}|${view.around.next?.id}|${view.around.child?.id}|${view.around.at}/${view.around.total}`;
 }
 
-// One labelled move through the tree. The word is the point: direction is
-// spelled out (up/down = depth, left/right = siblings), never left to icons.
-function StepButton({
-  label,
+// One neighbour of the focus, with its arrow and its NAME -- so it is clear
+// where the move goes before you make it. Empty (faint arrow, no name) where
+// there is nothing that way.
+function NavCell({
+  dir,
+  entry,
   hint,
-  disabled,
-  onClick,
-  icon,
-  iconAfter,
-  active,
+  onGo,
+  onHover,
 }: {
-  label: string;
+  dir: 'up' | 'down' | 'left' | 'right';
+  entry: TreeEntry | null;
   hint: string;
-  disabled?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  /** This is the option currently in effect. */
-  active?: boolean;
-  /** Icon goes after the word (Next →) instead of before it (← Prev). */
-  iconAfter?: boolean;
+  onGo: (entry: TreeEntry) => void;
+  onHover: (entry: TreeEntry | null) => void;
 }) {
-  const svg = (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {icon}
-    </svg>
-  );
+  const arrow = { up: '↑', down: '↓', left: '←', right: '→' }[dir];
+  const off = !entry;
   return (
     <button
       type="button"
-      title={hint}
-      disabled={disabled}
-      onClick={onClick}
-      aria-pressed={active === undefined ? undefined : active}
+      disabled={off}
+      title={entry ? `${hint}: ${entry.id}` : `${hint} — none`}
+      aria-label={hint}
+      onClick={() => entry && onGo(entry)}
+      onMouseEnter={() => onHover(entry)}
+      onMouseLeave={() => onHover(null)}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 4,
-        padding: '3px 8px',
+        gap: 5,
+        maxWidth: '100%',
+        padding: '2px 8px',
         border: '1px solid currentColor',
         borderRadius: 999,
-        background: active ? 'color-mix(in srgb, currentColor 18%, transparent)' : 'transparent',
-        fontWeight: active ? 700 : 400,
+        background: 'transparent',
         color: 'inherit',
         fontSize: 11,
         fontFamily: 'inherit',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.3 : 0.9,
+        cursor: off ? 'default' : 'pointer',
+        opacity: off ? 0.28 : 0.95,
+        flexDirection: dir === 'right' ? 'row-reverse' : 'row',
       }}
     >
-      {!iconAfter && svg}
-      {label}
-      {iconAfter && svg}
+      <span aria-hidden="true">{arrow}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {entry ? entry.label : '—'}
+      </span>
     </button>
-  );
-}
-
-// A joined row of small options (segmented control). Compact on purpose.
-function Seg<T extends string>({
-  label,
-  value,
-  options,
-  onPick,
-  disabled,
-}: {
-  label: string;
-  value: T | null | undefined;
-  options: { value: T; label: string; hint: string; disabled?: boolean }[];
-  onPick: (value: T) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={label}
-      style={{
-        display: 'inline-flex',
-        border: '1px solid currentColor',
-        borderRadius: 999,
-        overflow: 'hidden',
-        opacity: disabled ? 0.35 : 0.95,
-      }}
-    >
-      {options.map((opt, i) => (
-        <button
-          key={opt.value}
-          type="button"
-          title={opt.hint}
-          disabled={disabled || opt.disabled}
-          aria-pressed={value === opt.value}
-          onClick={() => onPick(opt.value)}
-          style={{
-            padding: '1px 8px',
-            border: 'none',
-            borderLeft: i === 0 ? 'none' : '1px solid color-mix(in srgb, currentColor 35%, transparent)',
-            background: value === opt.value ? 'color-mix(in srgb, currentColor 22%, transparent)' : 'transparent',
-            fontWeight: value === opt.value ? 700 : 400,
-            color: 'inherit',
-            fontSize: 10.5,
-            lineHeight: '17px',
-            fontFamily: 'inherit',
-            cursor: disabled || opt.disabled ? 'default' : 'pointer',
-            opacity: opt.disabled ? 0.35 : 1,
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -1187,11 +1117,6 @@ export function RuntimeInspector({
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
-  // QUERY (from where, over which relation) is state of its own;
-  // RESULT is derived from it; FOCUS is the store's selectedNodeId. Choosing
-  // a result to look at changes the focus and nothing else.
-  const [query, setQuery] = React.useState<InspectorQuery | null>(null);
-  const [queryView, setQueryView] = React.useState<QueryView | null>(null);
   // Which nodes of the tree diagram are open. The focus and its ancestors are
   // always opened when the focus moves (so its children show); anything else
   // opens and closes only when asked.
@@ -1200,13 +1125,10 @@ export function RuntimeInspector({
     if (!open) {
       setTreeView(null);
       setLayoutInfo(null);
-      setQuery(null);
-      setQueryView(null);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastSig = '\0';
-    let lastQuerySig = '\0';
     let lastLayoutSig = '\0';
     const refresh = () => {
       const model = buildTreeModel();
@@ -1215,12 +1137,6 @@ export function RuntimeInspector({
       if (sig !== lastSig) {
         lastSig = sig;
         setTreeView(next);
-      }
-      const nextQuery = readQueryView(query, model);
-      const querySig = queryViewSignature(nextQuery);
-      if (querySig !== lastQuerySig) {
-        lastQuerySig = querySig;
-        setQueryView(nextQuery);
       }
       const layout = readLayout(selectedNodeId);
       const layoutSig = layoutSignature(layout);
@@ -1264,7 +1180,7 @@ export function RuntimeInspector({
       resizeObserver?.disconnect();
       window.removeEventListener('resize', scheduleRefresh);
     };
-  }, [open, selectedNodeId, query, expanded]);
+  }, [open, selectedNodeId, expanded]);
 
   const focusPathKey = treeView ? treeView.path.map((e) => e.id).join('>') : '';
   React.useEffect(() => {
@@ -1318,32 +1234,6 @@ export function RuntimeInspector({
     [hoverTreeNode, selectHostElement, selectNode, setSelectedMeta]
   );
 
-  // Run a query and put the focus on the first thing it found. An empty
-  // result leaves the focus where it was: nothing else is chosen for you.
-  const applyQuery = React.useCallback(
-    (next: InspectorQuery) => {
-      const model = buildTreeModel();
-      const view = readQueryView(next, model);
-      setQuery(next);
-      setQueryView(view);
-      if (view && view.result.length > 0) selectTreeNode(view.result[0]);
-    },
-    [selectTreeNode]
-  );
-  const runAxis = React.useCallback(
-    (axis: QueryAxis) => {
-      if (!selectedNodeId) return;
-      applyQuery({ axis, originId: selectedNodeId });
-    },
-    [selectedNodeId, applyQuery]
-  );
-  // Reducing the set to one is its own action: the query becomes "just this
-  // node". Clicking a result to look at it never does this.
-  const keepOnlyFocus = React.useCallback(() => {
-    if (!selectedNodeId) return;
-    applyQuery({ axis: 'self', originId: selectedNodeId });
-  }, [selectedNodeId, applyQuery]);
-
   // Arrow keys walk the diagram like any tree widget: up/down through the
   // visible rows, right to open (then step into the first child), left to
   // close (then step out to the parent).
@@ -1378,19 +1268,6 @@ export function RuntimeInspector({
     },
     [treeView, selectedNodeId, toggleExpanded, selectTreeNode]
   );
-
-  // The page shows the whole result set, not just the focused node.
-  React.useEffect(() => {
-    if (!open || !queryView) return;
-    const marked: HTMLElement[] = [];
-    queryView.result.forEach((entry) => {
-      const el = findTaggedElement(entry.id);
-      if (!el) return;
-      el.setAttribute(QUERY_MARK_ATTR, '');
-      marked.push(el);
-    });
-    return () => marked.forEach((el) => el.removeAttribute(QUERY_MARK_ATTR));
-  }, [open, queryView]);
 
   const imagePreviews = React.useMemo(() => {
     const results: { path: string; src: string }[] = [];
@@ -1567,14 +1444,10 @@ export function RuntimeInspector({
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
         outline-offset: -2px !important;
       }
-      [${QUERY_MARK_ATTR}] {
-        outline: 2px dashed color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 75%, transparent) !important;
-        outline-offset: -2px !important;
-      }
-      .gui-inspector-steps button:not(:disabled):hover {
+      [aria-label="Move from the focus"] button:not(:disabled):hover {
         background: color-mix(in srgb, currentColor 14%, transparent);
       }
-      .gui-inspector-steps button:not(:disabled):active {
+      [aria-label="Move from the focus"] button:not(:disabled):active {
         background: color-mix(in srgb, currentColor 24%, transparent);
       }
       .gui-grid-overlay-active [data-gui-node-id] {
@@ -2097,49 +1970,54 @@ export function RuntimeInspector({
                   <div style={{ fontSize: 11, opacity: 0.7 }}>level {treeView.path.length - 1}</div>
                 </div>
 
-                {/* Selection controls, one line: what to find from the focus,
-                    and which of it to keep. */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 6, color: ui.fg }}>
-                  <Seg
-                    label="Find from the focus"
-                    value={query?.axis === 'self' ? null : query?.axis}
-                    onPick={runAxis}
-                    options={[
-                      { value: 'parent', label: '↑ parent', hint: 'The node directly above the focus' },
-                      { value: 'children', label: '↓ children', hint: 'Every node directly below the focus' },
-                    ]}
-                  />
-                  {/* Sideways is a move of the focus, one sibling at a time. */}
-                  <Seg
-                    label="Move sideways"
-                    value={null}
-                    onPick={(dir: 'prev' | 'next') => {
-                      const target = treeView.side[dir];
-                      if (target) selectTreeNode(target);
+                {/* Where you can go from here, one step at a time:
+                          parent
+                    prev  [ focus ]  next
+                          child               */}
+                <div
+                  role="group"
+                  aria-label="Move from the focus"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                    alignItems: 'center',
+                    justifyItems: 'center',
+                    gap: '3px 8px',
+                    marginBottom: 8,
+                    color: ui.fg,
+                  }}
+                >
+                  <span />
+                  <NavCell dir="up" entry={treeView.around.parent} hint="Parent — one level up" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span />
+                  <NavCell dir="left" entry={treeView.around.prev} hint="Previous sibling — same level, before this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span
+                    title={`${treeView.path[treeView.path.length - 1].id} — position among its siblings`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'baseline',
+                      gap: 6,
+                      padding: '3px 12px',
+                      borderRadius: 8,
+                      border: `1px solid ${ui.fg}`,
+                      background: ui.fillActive,
+                      fontWeight: 700,
+                      maxWidth: '100%',
                     }}
-                    options={[
-                      { value: 'prev', label: '←', hint: 'Previous sibling — same level, before this one', disabled: !treeView.side.prev },
-                      { value: 'next', label: '→', hint: 'Next sibling — same level, after this one', disabled: !treeView.side.next },
-                    ]}
-                  />
-                  <span style={{ fontSize: 10.5, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }} title="Position among its siblings">
-                    {treeView.side.total > 1 ? `${treeView.side.at + 1}/${treeView.side.total}` : '1/1'}
-                  </span>
-                  {query && queryView && (
-                    <>
-                      <span style={{ fontSize: 10.5, opacity: 0.7 }} title="Inspector query, not .me path syntax">
-                        {queryView.result.length === 0 ? 'none' : `${queryView.result.length} selected`}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {treeEntryLabel(treeView.path[treeView.path.length - 1])}
+                    </span>
+                    {treeView.around.total > 1 && (
+                      <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
+                        {treeView.around.at + 1}/{treeView.around.total}
                       </span>
-                      <StepButton
-                        label="only"
-                        hint="Keep only the focused node in the selection"
-                        disabled={queryView.result.length < 2 || !queryView.result.some((e) => e.id === selectedNodeId)}
-                        onClick={keepOnlyFocus}
-                        icon={<path d="M5 12l5 5 9-10" />}
-                      />
-                      <StepButton label="clear" hint="Drop the selection (the focus stays)" onClick={() => setQuery(null)} icon={<path d="M6 6l12 12M18 6L6 18" />} />
-                    </>
-                  )}
+                    )}
+                  </span>
+                  <NavCell dir="right" entry={treeView.around.next} hint="Next sibling — same level, after this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span />
+                  <NavCell dir="down" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span />
                 </div>
 
                 {/* The tree, as a diagram. Arrow keys walk it. */}
@@ -2172,7 +2050,6 @@ export function RuntimeInspector({
                     }
                     const { entry } = row;
                     const focused = entry.id === selectedNodeId;
-                    const inSet = !!queryView?.result.some((r) => r.id === entry.id);
                     const state = treeEntryState(entry);
                     return (
                       <div
@@ -2210,9 +2087,6 @@ export function RuntimeInspector({
                         >
                           {row.hasChildren ? (row.open ? '▾' : '▸') : '·'}
                         </span>
-                        <span style={{ width: 12, color: ui.accent, userSelect: 'none' }} title={inSet ? 'In the selection' : undefined}>
-                          {inSet ? '●' : ''}
-                        </span>
                         <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal' }}>{entry.label}</span>
                         {state && <span style={{ color: ui.fgMuted, fontWeight: 400 }}>{` · ${state}`}</span>}
                       </div>
@@ -2220,7 +2094,7 @@ export function RuntimeInspector({
                   })}
                 </div>
                 <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4 }}>
-                  ↑↓ walk · ←→ close/open · ● selected · italic = only in the DOM
+                  ↑↓ walk · ←→ close/open · italic = only in the DOM
                 </div>
               </div>
             )}
