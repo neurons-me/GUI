@@ -233,6 +233,11 @@ type CleakerLandingHomeProps = DocumentPageProps & {
 // (BlocksTable rows etc.) hang from GUI in the render tree but their data
 // lives in the namespace, not under GUI.
 const GUI_ROOT_ID = 'GUI';
+// 'monad:d8bb83d5e71a…' (64 hex) -> 'monad:d8bb83d5…dab6d0': recognisable, readable.
+function shortMonadId(id: string): string {
+  const m = /^(monad:)?([0-9a-f]{20,})$/i.exec(String(id || ''));
+  return m ? `${m[1] ?? ''}${m[2].slice(0, 8)}…${m[2].slice(-6)}` : String(id || '');
+}
 // Where the GUI document (runtime/GUI.document.json) declares the landing page.
 const LANDING_ID = 'GUI.content.landing';
 
@@ -2068,21 +2073,22 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   // own GUI branch.
   const guiRootProvenance = useMemo(() => {
     const confirmed = verifiedRoot.status === 'confirmed' && verifiedRoot.monad;
+    // Short on purpose: what the GUI is, the .me it reads, the monad by NAME.
+    // (A monad's raw id is 64 hex characters -- nobody can read it; the name
+    // and a short form of the id are enough to tell monads apart.)
     return {
       semanticPath: 'GUI',
-      note: 'Root of the GUI engine tree. GUI.* is the local .me kernel mirror (window.location, theme); the monad below is what this page is actually reading from.',
+      note: 'Generative User Interface',
       ...(confirmed
         ? {
-            source: verifiedRoot.transportOrigin,
-            binding: verifiedRoot.monad!.id,
-            monad: verifiedRoot.monad,
             namespace: namespaceRootLabel,
+            monad: { name: verifiedRoot.monad!.name, id: shortMonadId(verifiedRoot.monad!.id) },
+            source: verifiedRoot.transportOrigin,
             selfSignature: verifiedRoot.signature,
-            gatewayId: verifiedRoot.netget.available ? verifiedRoot.netget.gatewayId : null,
           }
         : { verification: verifiedRoot.status }),
     };
-  }, [verifiedRoot.status, verifiedRoot.monad, verifiedRoot.transportOrigin, verifiedRoot.signature, verifiedRoot.netget.available, verifiedRoot.netget.gatewayId, namespaceRootLabel]);
+  }, [verifiedRoot.status, verifiedRoot.monad, verifiedRoot.transportOrigin, verifiedRoot.signature, namespaceRootLabel]);
   useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, guiRootProvenance);
   const { resolved } = useCleakerRootSidebar(rootSeed.label, verifiedRoot.transportOrigin, session);
 

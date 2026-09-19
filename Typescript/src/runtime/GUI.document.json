@@ -1,9 +1,9 @@
 {
   "GUI": {
-    "note": "Root of the GUI document. Static and self-contained: the GUI can boot from this alone, with no runtime attached. A connected .me kernel resolves it (values, visibility, authorization); it does not replace it.",
+    "note": "Generative User Interface: a static declaration the GUI can boot from; a connected .me resolves it.",
     "children": {
       "bars": {
-        "note": "The edge bars around the content area. All five are part of the document; which ones are on is resolved at runtime from what the app configures.",
+        "note": "The edge bars around the content. All five are declared; which are on is resolved at runtime.",
         "children": {
           "top": {
             "note": "Top bar."
@@ -23,12 +23,12 @@
         }
       },
       "content": {
-        "note": "Where the current page renders. Each child is a page: `component` names the React component that implements it (looked up in the registry the app passes to renderGuiDocumentPage), `route` is where it is served.",
+        "note": "Where the current page renders. Each child is a page: `component` implements it, `route` serves it.",
         "children": {
           "landing": {
             "component": "CleakerLanding",
             "route": "/",
-            "note": "Landing: the .me QR and the sign-in / register / recover forms. Behavior (forms, session, Beatle) stays in the component; the document only says the page exists, where it lives and what implements it."
+            "note": "The .me QR and sign-in / register / recover. Behavior stays in the component."
           },
           "users": {
             "component": "CleakerUsersView",
