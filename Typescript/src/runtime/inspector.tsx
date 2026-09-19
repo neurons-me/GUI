@@ -73,6 +73,64 @@ function treeSignature(view: TreeView | null): string {
   return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}`;
 }
 
+type LayoutInfo = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  padding: string;
+  margin: string;
+  display: string;
+  position: string;
+  // Only present for the layout mode that has something to say.
+  tracks?: { label: string; value: string }[];
+};
+
+function boxSides(cs: CSSStyleDeclaration, prop: 'padding' | 'margin'): string {
+  const px = (v: string) => String(Math.round(parseFloat(v) || 0));
+  return [`${prop}Top`, `${prop}Right`, `${prop}Bottom`, `${prop}Left`]
+    .map((k) => px((cs as any)[k]))
+    .join(' ');
+}
+
+// What the browser actually laid the selected element out as -- measured, not
+// declared, so it stays true to what the grid overlay draws around it.
+function readLayout(selectedId: string | null): LayoutInfo | null {
+  if (!selectedId) return null;
+  const host = findTaggedElement(selectedId);
+  if (!host) return null;
+  const rect = host.getBoundingClientRect();
+  const cs = getComputedStyle(host);
+  const info: LayoutInfo = {
+    x: Math.round(rect.left),
+    y: Math.round(rect.top),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    padding: boxSides(cs, 'padding'),
+    margin: boxSides(cs, 'margin'),
+    display: cs.display,
+    position: cs.position,
+  };
+  if (cs.display.includes('grid')) {
+    info.tracks = [
+      { label: 'columns', value: cs.gridTemplateColumns },
+      { label: 'rows', value: cs.gridTemplateRows },
+      { label: 'gap', value: cs.gap },
+    ];
+  } else if (cs.display.includes('flex')) {
+    info.tracks = [
+      { label: 'direction', value: cs.flexDirection },
+      { label: 'wrap', value: cs.flexWrap },
+      { label: 'gap', value: cs.gap },
+    ];
+  }
+  return info;
+}
+
+function layoutSignature(info: LayoutInfo | null): string {
+  return info ? JSON.stringify(info) : '';
+}
+
 const PANEL_WIDTH_KEY = 'this.gui:inspectorWidth';
 const PANEL_WIDTH_DEFAULT = 380;
 const PANEL_WIDTH_MIN = 280;
@@ -688,6 +746,7 @@ export function RuntimeInspector({
     inspectorEnabled,
     setInspectorEnabled,
     gridEnabled,
+    setGridEnabled,
     selectedNodeId,
     selected,
     selectNode,
@@ -905,19 +964,29 @@ export function RuntimeInspector({
   const open = inspectorEnabled && !!selectedNodeId;
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
+  const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
   React.useEffect(() => {
     if (!open) {
       setTreeView(null);
+      setLayoutInfo(null);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastSig = '\0';
+    let lastLayoutSig = '\0';
     const refresh = () => {
       const next = readTreeView(selectedNodeId);
       const sig = treeSignature(next);
-      if (sig === lastSig) return;
-      lastSig = sig;
-      setTreeView(next);
+      if (sig !== lastSig) {
+        lastSig = sig;
+        setTreeView(next);
+      }
+      const layout = readLayout(selectedNodeId);
+      const layoutSig = layoutSignature(layout);
+      if (layoutSig !== lastLayoutSig) {
+        lastLayoutSig = layoutSig;
+        setLayoutInfo(layout);
+      }
     };
     refresh();
     // The page keeps changing under the panel (route changes, live data), so
@@ -934,9 +1003,21 @@ export function RuntimeInspector({
       attributes: true,
       attributeFilter: ['data-gui-node-id', 'data-gui-component'],
     });
+    // Geometry changes without any DOM mutation (window or panel resized,
+    // CSS transitions), so watch the element's own box and the viewport too.
+    const scheduleRefresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 150);
+    };
+    const host = selectedNodeId ? findTaggedElement(selectedNodeId) : null;
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(scheduleRefresh) : null;
+    if (host) resizeObserver?.observe(host);
+    window.addEventListener('resize', scheduleRefresh);
     return () => {
       clearTimeout(timer);
       observer.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', scheduleRefresh);
     };
   }, [open, selectedNodeId]);
 
@@ -1685,6 +1766,52 @@ export function RuntimeInspector({
                 )}
               </div>
             )}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <div style={{ opacity: 0.75, fontWeight: 700 }}>LAYOUT</div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={gridEnabled}
+                  onClick={() => setGridEnabled(!gridEnabled)}
+                  title="Outline every tagged element on the page"
+                  style={{
+                    ...treeButtonStyle,
+                    background: gridEnabled ? ui.fillActive : 'transparent',
+                    fontWeight: gridEnabled ? 700 : 400,
+                  }}
+                >
+                  Grid overlay: {gridEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+              {layoutInfo && (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'max-content 1fr',
+                    columnGap: 12,
+                    rowGap: 2,
+                  }}
+                >
+                  <span style={{ opacity: 0.75 }}>size</span>
+                  <code>{layoutInfo.width} × {layoutInfo.height}</code>
+                  <span style={{ opacity: 0.75 }}>at</span>
+                  <code>{layoutInfo.x}, {layoutInfo.y}</code>
+                  <span style={{ opacity: 0.75 }}>display</span>
+                  <code>{layoutInfo.display} · {layoutInfo.position}</code>
+                  <span style={{ opacity: 0.75 }}>padding</span>
+                  <code>{layoutInfo.padding}</code>
+                  <span style={{ opacity: 0.75 }}>margin</span>
+                  <code>{layoutInfo.margin}</code>
+                  {layoutInfo.tracks?.map((t) => (
+                    <React.Fragment key={t.label}>
+                      <span style={{ opacity: 0.75 }}>{t.label}</span>
+                      <code>{t.value}</code>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{ marginBottom: 10 }}>
               <div style={{ opacity: 0.75 }}>nodeId</div>
               <code>{selectedNodeId}</code>
