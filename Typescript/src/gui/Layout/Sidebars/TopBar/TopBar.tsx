@@ -188,8 +188,8 @@ export default function TopBar(props: TopBarProps) {
   return (
     <AppBar
       id={id}
-      data-gui-node-id="TopBar"
-      data-gui-component="TopBar"
+      data-gui-node-id="GUI.top"
+      data-gui-component="top"
       className={className}
       position={position}
       elevation={0}

@@ -111,8 +111,6 @@ function Layout({
       <RightBarProvider initialView={rightInitialView}>
         <Box
           id="layout-root"
-          data-gui-node-id="Layout"
-          data-gui-component="Layout"
           sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
         >
           {topBarChild ?? (hasTopBar && (

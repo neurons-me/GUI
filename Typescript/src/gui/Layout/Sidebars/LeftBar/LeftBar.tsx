@@ -100,10 +100,10 @@ const LeftSidebar = ({
   const hasFooterElements =
     Array.isArray(resolvedFooterElements) && resolvedFooterElements.length > 0;
   const initialViewApplied = useRef(false);
-  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'LeftSidebar';
+  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.left';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
-    'data-gui-component': dataGuiComponent || 'LeftSidebar',
+    'data-gui-component': dataGuiComponent || 'left',
   };
   const toggleButtonNodeId = `${adminNodeId}.toggleButton`;
   const headerNodeId = `${adminNodeId}.header`;
@@ -376,7 +376,7 @@ const LeftSidebar = ({
         >
           <IconButton
             aria-label="Abrir navegación"
-            data-gui-node-id="LeftSidebar.mobileToggle"
+            data-gui-node-id={`${adminNodeId}.mobileToggle`}
             onClick={() => setMobileOpen(true)}
             sx={{
               borderRadius: '0 16px 16px 0',
