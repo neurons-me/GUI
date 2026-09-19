@@ -209,22 +209,30 @@ function treeSignature(view: TreeView | null): string {
 }
 
 // One neighbour of the focus, with its arrow and its NAME -- so it is clear
-// where the move goes before you make it. Empty (faint arrow, no name) where
-// there is nothing that way.
+// where the move goes before you make it. Empty (faint, no name) where there
+// is nothing that way. `caption` ("Parent:", "Child:") says what kind of move.
 function NavCell({
   dir,
   entry,
   hint,
+  caption,
+  icon,
+  label,
   onGo,
   onHover,
 }: {
-  dir: 'up' | 'down' | 'left' | 'right';
+  dir: 'up' | 'down' | 'left' | 'right' | 'root';
   entry: TreeEntry | null;
   hint: string;
+  caption?: string;
+  /** Overrides the arrow (the root shortcut uses its own glyph). */
+  icon?: string;
+  /** Overrides the node name (the root shortcut just says "Root"). */
+  label?: string;
   onGo: (entry: TreeEntry) => void;
   onHover: (entry: TreeEntry | null) => void;
 }) {
-  const arrow = { up: '↑', down: '↓', left: '←', right: '→' }[dir];
+  const arrow = icon ?? { up: '↑', down: '↓', left: '←', right: '→', root: '⤒' }[dir];
   const off = !entry;
   return (
     <button
@@ -238,23 +246,25 @@ function NavCell({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 5,
+        gap: 4,
         maxWidth: '100%',
         padding: '2px 8px',
-        border: '1px solid currentColor',
-        borderRadius: 999,
-        background: 'transparent',
+        border: 'none',
+        borderRadius: 7,
+        background: 'color-mix(in srgb, currentColor 9%, transparent)',
         color: 'inherit',
         fontSize: 11,
+        lineHeight: '16px',
         fontFamily: 'inherit',
         cursor: off ? 'default' : 'pointer',
-        opacity: off ? 0.28 : 0.95,
+        opacity: off ? 0.3 : 1,
         flexDirection: dir === 'right' ? 'row-reverse' : 'row',
       }}
     >
-      <span aria-hidden="true">{arrow}</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {entry ? entry.label : '—'}
+      {caption && <span style={{ opacity: 0.6 }}>{caption}</span>}
+      <span aria-hidden="true" style={{ opacity: 0.75 }}>{arrow}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+        {label ?? (entry ? entry.label : '—')}
       </span>
     </button>
   );
@@ -1445,10 +1455,10 @@ export function RuntimeInspector({
         outline-offset: -2px !important;
       }
       [aria-label="Move from the focus"] button:not(:disabled):hover {
-        background: color-mix(in srgb, currentColor 14%, transparent);
+        background: color-mix(in srgb, currentColor 20%, transparent) !important;
       }
       [aria-label="Move from the focus"] button:not(:disabled):active {
-        background: color-mix(in srgb, currentColor 24%, transparent);
+        background: color-mix(in srgb, currentColor 30%, transparent) !important;
       }
       .gui-grid-overlay-active [data-gui-node-id] {
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
@@ -1971,9 +1981,9 @@ export function RuntimeInspector({
                 </div>
 
                 {/* Where you can go from here, one step at a time:
-                          parent
-                    prev  [ focus ]  next
-                          child               */}
+                          Parent: bars            Root
+                    prev  [ focus  3/5 ]  next
+                          Child: header             */}
                 <div
                   role="group"
                   aria-label="Move from the focus"
@@ -1982,15 +1992,30 @@ export function RuntimeInspector({
                     gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
                     alignItems: 'center',
                     justifyItems: 'center',
-                    gap: '3px 8px',
+                    gap: '4px 6px',
                     marginBottom: 8,
+                    padding: '6px 8px',
+                    borderRadius: 10,
+                    border: `1px solid ${ui.line}`,
+                    background: ui.fillFaint,
                     color: ui.fg,
                   }}
                 >
                   <span />
-                  <NavCell dir="up" entry={treeView.around.parent} hint="Parent — one level up" onGo={selectTreeNode} onHover={hoverTreeNode} />
-                  <span />
-                  <NavCell dir="left" entry={treeView.around.prev} hint="Previous sibling — same level, before this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <NavCell dir="up" caption="Parent:" entry={treeView.around.parent} hint="Parent — one level up" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span style={{ justifySelf: 'end' }}>
+                    <NavCell
+                      dir="root"
+                      label="Root"
+                      entry={treeView.path.length > 1 ? treeView.path[0] : null}
+                      hint="Root node — jump to the top of the tree"
+                      onGo={selectTreeNode}
+                      onHover={hoverTreeNode}
+                    />
+                  </span>
+                  <span style={{ justifySelf: 'end', maxWidth: '100%', minWidth: 0 }}>
+                    <NavCell dir="left" entry={treeView.around.prev} hint="Previous sibling — same level, before this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  </span>
                   <span
                     title={`${treeView.path[treeView.path.length - 1].id} — position among its siblings`}
                     style={{
@@ -1999,8 +2024,8 @@ export function RuntimeInspector({
                       gap: 6,
                       padding: '3px 12px',
                       borderRadius: 8,
-                      border: `1px solid ${ui.fg}`,
                       background: ui.fillActive,
+                      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${ui.fg} 45%, transparent)`,
                       fontWeight: 700,
                       maxWidth: '100%',
                     }}
@@ -2014,9 +2039,11 @@ export function RuntimeInspector({
                       </span>
                     )}
                   </span>
-                  <NavCell dir="right" entry={treeView.around.next} hint="Next sibling — same level, after this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span style={{ justifySelf: 'start', maxWidth: '100%', minWidth: 0 }}>
+                    <NavCell dir="right" entry={treeView.around.next} hint="Next sibling — same level, after this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  </span>
                   <span />
-                  <NavCell dir="down" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <NavCell dir="down" caption="Child:" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
                   <span />
                 </div>
 
