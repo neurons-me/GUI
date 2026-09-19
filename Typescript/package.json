@@ -99,7 +99,7 @@
     "build:umd:bootstrap": "UMD=true UMD_TARGET=bootstrap vite build",
     "build:umd:searchbar": "UMD=true UMD_TARGET=searchbar vite build",
     "build:umd": "npm run build:umd:core && npm run build:umd:bootstrap && npm run build:umd:searchbar",
-    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts && tsx tests/registryMetaCoverage.test.ts && tsx tests/sidebarComposition.test.ts",
+    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts && tsx tests/registryMetaCoverage.test.ts && tsx tests/sidebarComposition.test.ts && tsx tests/inspectorQuery.test.ts",
     "pack:local": "npm run build && npm pack",
     "prepublishOnly": "npm run build",
     "dev": "vite",

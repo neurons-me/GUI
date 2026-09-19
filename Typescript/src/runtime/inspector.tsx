@@ -10,6 +10,12 @@ import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
 import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
+import {
+  resolveQuery,
+  type InspectorQuery,
+  type QueryAxis,
+  type QueryPick,
+} from './inspectorQuery';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -36,14 +42,16 @@ type TreeEntry = {
    */
   rendered: boolean;
 };
-type TreeView = {
-  path: TreeEntry[];
-  children: TreeEntry[];
-  /** The selected node's siblings (itself included), in tree order. */
-  siblings: TreeEntry[];
+type TreeView = { path: TreeEntry[] };
+type QueryView = {
+  /** Everything the relation yields, before picking. */
+  candidates: TreeEntry[];
+  /** What the query found: candidates after All / First / Last / Random. */
+  result: TreeEntry[];
 };
 const TREE_CHILDREN_LIMIT = 60;
 const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
+const QUERY_MARK_ATTR = 'data-gui-inspector-picked';
 
 // Two different things feed this tree, and they are kept apart on purpose:
 //  - the GUI's own declarations (the node registry: id, parentId, enabled).
@@ -67,8 +75,10 @@ function findTaggedElement(id: string, nth = 0): HTMLElement | null {
   }
 }
 
-function readTreeView(selectedId: string | null): TreeView | null {
-  if (!selectedId) return null;
+// The tree as the Inspector sees it right now: the GUI's declarations plus
+// whatever the DOM shows that nobody declared. Built once per refresh and
+// shared by the breadcrumb and the query.
+function buildTreeModel() {
   const records = selectionStore.getState().records;
 
   // First rendered element per tagged id, in DOM order.
@@ -104,39 +114,58 @@ function readTreeView(selectedId: string | null): TreeView | null {
     };
   };
 
-  const path: TreeEntry[] = [];
-  const seen = new Set<string>();
-  for (let cursor: string | null = selectedId; cursor && !seen.has(cursor); cursor = parentOf(cursor)) {
-    seen.add(cursor);
-    path.unshift(entryFor(cursor));
-  }
-
-  // Declared nodes first (registry order), then detected ones (DOM order).
-  const universe = [...Object.keys(records), ...elements.keys()].filter((id, i, all) => all.indexOf(id) === i);
-  // Parts the GUI document declares come first, in the document's own order
-  // (so the "tracks" read top, sticky, left, right, footer, not in whatever
-  // order components happened to register); everything else keeps its order.
+  // A defined, stable order for "First" and "Last": the GUI document's own
+  // order first (top, sticky, left, right, footer); then position on the
+  // page (DOM order); then registration order for anything with neither.
+  // Registration order alone is not stable -- re-registering a node moves it
+  // to the end -- so it is only ever the last tiebreak.
   const docOrder = flattenGuiDocument().map((e) => e.id);
-  const orderKey = (id: string) => {
-    const at = docOrder.indexOf(id);
-    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+  const domOrder = [...elements.keys()];
+  const universe = [...Object.keys(records), ...elements.keys()].filter((id, i, all) => all.indexOf(id) === i);
+  const rank = (id: string) => {
+    const d = docOrder.indexOf(id);
+    const p = domOrder.indexOf(id);
+    return [d === -1 ? Infinity : d, p === -1 ? Infinity : p, universe.indexOf(id)];
   };
-  const childrenOf = (id: string) =>
+  const childrenOf = (id: string): string[] =>
     universe
       .filter((c) => c !== id && parentOf(c) === id)
-      .map((c, i) => ({ c, i }))
-      .sort((a, b) => orderKey(a.c) - orderKey(b.c) || a.i - b.i)
-      .map(({ c }) => entryFor(c));
-  const children = childrenOf(selectedId);
-  const parentId = path.length > 1 ? path[path.length - 2].id : null;
-  const siblings = parentId ? childrenOf(parentId) : [path[path.length - 1]];
-  return { path, children, siblings };
+      .sort((a, b) => {
+        const ra = rank(a);
+        const rb = rank(b);
+        return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
+      });
+
+  return { parentOf, childrenOf, entryFor };
+}
+
+function readTreeView(selectedId: string | null, model = buildTreeModel()): TreeView | null {
+  if (!selectedId) return null;
+  const path: TreeEntry[] = [];
+  const seen = new Set<string>();
+  for (let cursor: string | null = selectedId; cursor && !seen.has(cursor); cursor = model.parentOf(cursor)) {
+    seen.add(cursor);
+    path.unshift(model.entryFor(cursor));
+  }
+  return { path };
+}
+
+function readQueryView(query: InspectorQuery | null, model = buildTreeModel()): QueryView | null {
+  if (!query) return null;
+  const { candidates, result } = resolveQuery(model, query);
+  return { candidates: candidates.map(model.entryFor), result: result.map(model.entryFor) };
+}
+
+function queryViewSignature(view: QueryView | null): string {
+  if (!view) return '';
+  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.rendered}`;
+  return `${view.candidates.length}|${view.result.map(key).join(',')}`;
 }
 
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
-  return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}|${view.siblings.map((e) => e.id).join(',')}`;
+  return view.path.map(key).join('>');
 }
 
 // One labelled move through the tree. The word is the point: direction is
@@ -148,12 +177,15 @@ function StepButton({
   onClick,
   icon,
   iconAfter,
+  active,
 }: {
   label: string;
   hint: string;
   disabled?: boolean;
   onClick: () => void;
   icon: React.ReactNode;
+  /** This is the option currently in effect. */
+  active?: boolean;
   /** Icon goes after the word (Next →) instead of before it (← Prev). */
   iconAfter?: boolean;
 }) {
@@ -168,6 +200,7 @@ function StepButton({
       title={hint}
       disabled={disabled}
       onClick={onClick}
+      aria-pressed={active === undefined ? undefined : active}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -175,7 +208,8 @@ function StepButton({
         padding: '3px 8px',
         border: '1px solid currentColor',
         borderRadius: 999,
-        background: 'transparent',
+        background: active ? 'color-mix(in srgb, currentColor 18%, transparent)' : 'transparent',
+        fontWeight: active ? 700 : 400,
         color: 'inherit',
         fontSize: 11,
         fontFamily: 'inherit',
@@ -1047,21 +1081,36 @@ export function RuntimeInspector({
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
+  // QUERY (from where, over which relation, how to pick) is state of its own;
+  // RESULT is derived from it; FOCUS is the store's selectedNodeId. Choosing
+  // a result to look at changes the focus and nothing else.
+  const [query, setQuery] = React.useState<InspectorQuery | null>(null);
+  const [queryView, setQueryView] = React.useState<QueryView | null>(null);
   React.useEffect(() => {
     if (!open) {
       setTreeView(null);
       setLayoutInfo(null);
+      setQuery(null);
+      setQueryView(null);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastSig = '\0';
+    let lastQuerySig = '\0';
     let lastLayoutSig = '\0';
     const refresh = () => {
-      const next = readTreeView(selectedNodeId);
+      const model = buildTreeModel();
+      const next = readTreeView(selectedNodeId, model);
       const sig = treeSignature(next);
       if (sig !== lastSig) {
         lastSig = sig;
         setTreeView(next);
+      }
+      const nextQuery = readQueryView(query, model);
+      const querySig = queryViewSignature(nextQuery);
+      if (querySig !== lastQuerySig) {
+        lastQuerySig = querySig;
+        setQueryView(nextQuery);
       }
       const layout = readLayout(selectedNodeId);
       const layoutSig = layoutSignature(layout);
@@ -1105,7 +1154,7 @@ export function RuntimeInspector({
       resizeObserver?.disconnect();
       window.removeEventListener('resize', scheduleRefresh);
     };
-  }, [open, selectedNodeId]);
+  }, [open, selectedNodeId, query]);
 
   const hoveredTreeEl = React.useRef<HTMLElement | null>(null);
   const hoverTreeNode = React.useCallback((entry: TreeEntry | null) => {
@@ -1134,6 +1183,54 @@ export function RuntimeInspector({
     },
     [hoverTreeNode, selectHostElement, selectNode, setSelectedMeta]
   );
+
+  // Run a query and put the focus on the first thing it found. An empty
+  // result leaves the focus where it was: nothing else is chosen for you.
+  const applyQuery = React.useCallback(
+    (next: InspectorQuery) => {
+      const model = buildTreeModel();
+      const view = readQueryView(next, model);
+      setQuery(next);
+      setQueryView(view);
+      if (view && view.result.length > 0) selectTreeNode(view.result[0]);
+    },
+    [selectTreeNode]
+  );
+  const runAxis = React.useCallback(
+    (axis: QueryAxis) => {
+      if (!selectedNodeId) return;
+      applyQuery({ axis, originId: selectedNodeId, pick: 'all', seed: Math.random() });
+    },
+    [selectedNodeId, applyQuery]
+  );
+  const changePick = React.useCallback(
+    (pick: QueryPick) => {
+      if (!query) return;
+      // Random draws a fresh seed on every Random action (including choosing
+      // it again); it is fixed from then on, so re-renders never change it.
+      applyQuery({ ...query, pick, seed: pick === 'random' ? Math.random() : query.seed });
+    },
+    [query, applyQuery]
+  );
+  // Reducing the set to one is its own action: the query becomes "just this
+  // node". Clicking a result to look at it never does this.
+  const keepOnlyFocus = React.useCallback(() => {
+    if (!selectedNodeId) return;
+    applyQuery({ axis: 'self', originId: selectedNodeId, pick: 'all', seed: 0 });
+  }, [selectedNodeId, applyQuery]);
+
+  // The page shows the whole result set, not just the focused node.
+  React.useEffect(() => {
+    if (!open || !queryView) return;
+    const marked: HTMLElement[] = [];
+    queryView.result.forEach((entry) => {
+      const el = findTaggedElement(entry.id);
+      if (!el) return;
+      el.setAttribute(QUERY_MARK_ATTR, '');
+      marked.push(el);
+    });
+    return () => marked.forEach((el) => el.removeAttribute(QUERY_MARK_ATTR));
+  }, [open, queryView]);
 
   const imagePreviews = React.useMemo(() => {
     const results: { path: string; src: string }[] = [];
@@ -1308,6 +1405,10 @@ export function RuntimeInspector({
       }
       [${TREE_HOVER_ATTR}] {
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
+        outline-offset: -2px !important;
+      }
+      [${QUERY_MARK_ATTR}] {
+        outline: 2px dashed color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 75%, transparent) !important;
         outline-offset: -2px !important;
       }
       .gui-inspector-steps button:not(:disabled):hover {
@@ -1661,20 +1762,6 @@ export function RuntimeInspector({
     fontSize: 11,
     fontFamily: 'inherit',
   };
-  const deck = React.useMemo(() => {
-    if (!treeView) return null;
-    const { path, children, siblings } = treeView;
-    const at = siblings.findIndex((e) => e.id === selectedNodeId);
-    return {
-      top: path.length > 1 ? path[0] : null,
-      parent: path.length > 1 ? path[path.length - 2] : null,
-      prev: at > 0 ? siblings[at - 1] : null,
-      next: at >= 0 && at < siblings.length - 1 ? siblings[at + 1] : null,
-      child: children[0] ?? null,
-      pos: at >= 0 && siblings.length > 1 ? `${at + 1}/${siblings.length}` : null,
-    };
-  }, [treeView, selectedNodeId]);
-
   // Two different reasons a declared part isn't on the page, kept apart:
   //  off         -- the app didn't configure it (a bar it wasn't given)
   //  not mounted -- configured, but nothing is rendering it right now
@@ -1888,42 +1975,98 @@ export function RuntimeInspector({
                     );
                   })}
                 </div>
-                <div className="gui-inspector-steps" role="group" aria-label="Walk the tree" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10, color: ui.fg }}>
-                  <StepButton label="Root" hint="Jump to the root (Alt + click on the page)" disabled={!deck?.top} onClick={() => deck?.top && selectTreeNode(deck.top)} icon={<><path d="M6 5h12" /><path d="M6 18l6-6 6 6" /></>} />
-                  <StepButton label="Parent" hint="One level up (Shift + click on the page)" disabled={!deck?.parent} onClick={() => deck?.parent && selectTreeNode(deck.parent)} icon={<path d="M6 15l6-6 6 6" />} />
-                  <StepButton label="Child" hint="One level down, into the first part below (Ctrl/⌘ + click on the page)" disabled={!deck?.child} onClick={() => deck?.child && selectTreeNode(deck.child)} icon={<path d="M6 9l6 6 6-6" />} />
-                  <span style={{ width: 1, height: 16, background: ui.line, margin: '0 2px' }} />
-                  <StepButton label="Prev" hint="Previous sibling — same level, before this one" disabled={!deck?.prev} onClick={() => deck?.prev && selectTreeNode(deck.prev)} icon={<path d="M15 6l-6 6 6 6" />} />
-                  <span style={{ fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums', opacity: deck?.pos ? 0.85 : 0.4 }} title="Which sibling this is, at its level">
-                    {deck?.pos ? deck.pos.replace('/', ' of ') : 'only one'}
-                  </span>
-                  <StepButton label="Next" hint="Next sibling — same level, after this one" disabled={!deck?.next} onClick={() => deck?.next && selectTreeNode(deck.next)} icon={<path d="M9 6l6 6-6 6" />} iconAfter />
+                {/* QUERY: from the focus, over one relation. */}
+                <div className="gui-inspector-steps" role="group" aria-label="Find related nodes" style={{ marginBottom: 8, color: ui.fg }}>
+                  <div style={{ opacity: 0.7, fontSize: 11, marginBottom: 4 }}>
+                    Find, from <code>{selectedNodeId}</code>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <StepButton label="Parent" hint="The node directly above the focus" active={query?.axis === 'parent'} onClick={() => runAxis('parent')} icon={<path d="M6 15l6-6 6 6" />} />
+                    <StepButton label="Children" hint="Every node directly below the focus" active={query?.axis === 'children'} onClick={() => runAxis('children')} icon={<path d="M6 9l6 6 6-6" />} />
+                    <StepButton label="Siblings" hint="The other nodes under the same parent (never the focus itself)" active={query?.axis === 'siblings'} onClick={() => runAxis('siblings')} icon={<path d="M9 6l-6 6 6 6M15 6l6 6-6 6" />} />
+                  </div>
                 </div>
-                <div style={{ opacity: 0.75, marginBottom: 4 }}>
-                  children ({treeView.children.length})
-                </div>
-                {treeView.children.length === 0 ? (
-                  <div style={{ opacity: 0.55 }}>No children</div>
-                ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {treeView.children.slice(0, TREE_CHILDREN_LIMIT).map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        title={treeEntryTitle(entry)}
-                        onClick={() => selectTreeNode(entry)}
-                        onMouseEnter={() => hoverTreeNode(entry)}
-                        onMouseLeave={() => hoverTreeNode(null)}
-                        style={treeEntryStyle(entry)}
-                      >
-                        {treeEntryLabel(entry)}
-                      </button>
-                    ))}
-                    {treeView.children.length > TREE_CHILDREN_LIMIT && (
-                      <span style={{ opacity: 0.6, padding: '2px 4px' }}>
-                        +{treeView.children.length - TREE_CHILDREN_LIMIT} more
+
+                {query && queryView && (
+                  <div style={{ border: `1px solid ${ui.line}`, borderRadius: 10, padding: 8, marginBottom: 8 }}>
+                    {/* The query, in words. Not .me path syntax. */}
+                    <div style={{ marginBottom: 6 }}>
+                      <b>{{ parent: 'Parent', children: 'Children', siblings: 'Siblings', self: 'Just' }[query.axis]}</b>
+                      {query.axis === 'self' ? ' ' : ' of '}
+                      <code>{query.originId}</code>
+                      <span style={{ opacity: 0.7 }}>
+                        {' — '}
+                        {queryView.result.length === 0
+                          ? 'none'
+                          : query.pick === 'all'
+                            ? `${queryView.result.length} found`
+                            : `${queryView.result.length} of ${queryView.candidates.length}`}
                       </span>
+                    </div>
+                    <div role="group" aria-label="Pick from the found nodes" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, color: ui.fg }}>
+                      {(['all', 'first', 'last', 'random'] as const).map((pick) => (
+                        <StepButton
+                          key={pick}
+                          label={{ all: 'All', first: 'First', last: 'Last', random: 'Random' }[pick]}
+                          hint={{
+                            all: 'Every node found',
+                            first: 'The first one, in the tree order',
+                            last: 'The last one, in the tree order',
+                            random: 'One at random, drawn once per click (click again to draw again)',
+                          }[pick]}
+                          active={query.pick === pick}
+                          disabled={query.axis === 'self'}
+                          onClick={() => changePick(pick)}
+                          icon={<path d="M5 12h14" />}
+                        />
+                      ))}
+                    </div>
+                    {queryView.result.length === 0 ? (
+                      <div style={{ opacity: 0.6 }}>
+                        Nothing found: that relation is empty here. The focus stays where it was.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {queryView.result.slice(0, TREE_CHILDREN_LIMIT).map((entry) => {
+                          const focused = entry.id === selectedNodeId;
+                          return (
+                            <button
+                              key={entry.id}
+                              type="button"
+                              title={treeEntryTitle(entry)}
+                              aria-pressed={focused}
+                              onClick={() => selectTreeNode(entry)}
+                              onMouseEnter={() => hoverTreeNode(entry)}
+                              onMouseLeave={() => hoverTreeNode(null)}
+                              style={{
+                                ...treeEntryStyle(entry),
+                                ...(focused ? { background: ui.fillActive, fontWeight: 700, borderColor: ui.fg } : null),
+                              }}
+                            >
+                              {treeEntryLabel(entry)}
+                            </button>
+                          );
+                        })}
+                        {queryView.result.length > TREE_CHILDREN_LIMIT && (
+                          <span style={{ opacity: 0.6, padding: '2px 4px' }}>
+                            +{queryView.result.length - TREE_CHILDREN_LIMIT} more
+                          </span>
+                        )}
+                      </div>
                     )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8, color: ui.fg }}>
+                      <StepButton
+                        label="Keep only the focus"
+                        hint="Reduce the found set to just the node in focus"
+                        disabled={queryView.result.length < 2 || !queryView.result.some((e) => e.id === selectedNodeId)}
+                        onClick={keepOnlyFocus}
+                        icon={<path d="M5 12l5 5 9-10" />}
+                      />
+                      <StepButton label="Clear" hint="Drop the query (the focus stays)" onClick={() => setQuery(null)} icon={<path d="M6 6l12 12M18 6L6 18" />} />
+                    </div>
+                    <div style={{ fontSize: 10, opacity: 0.5, marginTop: 6 }}>
+                      An Inspector query — not .me path syntax. Clicking a result changes the focus, not the set.
+                    </div>
                   </div>
                 )}
                 <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8 }}>
