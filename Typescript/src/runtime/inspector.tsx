@@ -2238,6 +2238,76 @@ export function RuntimeInspector({
                   <div style={{ fontSize: 11, opacity: 0.7 }}>level {treeView.path.length - 1}</div>
                 </div>
 
+                {/* WHERE YOU CAN GO from the node in focus:
+                          Parent: ↑ x              ↑ Root
+                    ← prev   [ name 1/8 ]   next →
+                          Child: ↓ y                    */}
+                <div
+                  role="group"
+                  aria-label="Move from the focus"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                    alignItems: 'center',
+                    justifyItems: 'center',
+                    gap: '5px 8px',
+                    marginBottom: 8,
+                    padding: '6px 10px',
+                    borderRadius: 10,
+                    border: `1px solid ${ui.line}`,
+                    background: ui.fillFaint,
+                    color: ui.fg,
+                  }}
+                >
+                  <span />
+                  <NavCell dir="up" caption="Parent:" entry={treeView.around.parent} hint="Parent — one level up" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span style={{ justifySelf: 'end' }}>
+                    <NavCell
+                      dir="root"
+                      label="Root"
+                      entry={treeView.path.length > 1 ? treeView.path[0] : null}
+                      hint="Root node — jump to the top of the tree"
+                      onGo={selectTreeNode}
+                      onHover={hoverTreeNode}
+                    />
+                  </span>
+
+                  <span style={{ justifySelf: 'end', minWidth: 0, maxWidth: '100%' }}>
+                    <NavCell dir="left" entry={treeView.around.prev} hint="Previous sibling — same level, before this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  </span>
+                  <span
+                    title={`${treeView.path[treeView.path.length - 1].id} — position among its siblings`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'baseline',
+                      gap: 6,
+                      minWidth: 0,
+                      maxWidth: '100%',
+                      padding: '3px 12px',
+                      borderRadius: 8,
+                      background: ui.fillActive,
+                      boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${ui.fg} 45%, transparent)`,
+                      fontWeight: 700,
+                    }}
+                  >
+                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {treeEntryLabel(treeView.path[treeView.path.length - 1])}
+                    </span>
+                    {treeView.around.total > 1 && (
+                      <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
+                        {treeView.around.at + 1}/{treeView.around.total}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ justifySelf: 'start', minWidth: 0, maxWidth: '100%' }}>
+                    <NavCell dir="right" entry={treeView.around.next} hint="Next sibling — same level, after this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  </span>
+
+                  <span />
+                  <NavCell dir="down" caption="Child:" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
+                  <span />
+                </div>
+
                 {/* The tree, as a diagram. Arrow keys walk it. */}
                 <div
                   role="tree"
@@ -2315,70 +2385,19 @@ export function RuntimeInspector({
                   ↑↓ walk · ←→ close/open · italic = only in the DOM
                 </div>
 
-                {/* ONE card for the selected node: who it is, where you can go
-                    from it, and its box.
-                      [name 1/8]     Parent: ↑ x        ↑ Root
-                      [← prev]   [ margin/padding/size ]   [next →]
-                                      Child: ↓ y            */}
+                {/* DIMENSIONS of the selected node only: the box, editable. */}
                 <div
-                  role="group"
-                  aria-label="Move from the focus"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
-                    alignItems: 'center',
-                    justifyItems: 'center',
-                    gap: '6px 8px',
                     marginTop: 8,
-                    padding: '8px 10px',
+                    padding: '6px 10px 8px',
                     borderRadius: 10,
                     border: `1px solid ${ui.line}`,
                     background: ui.fillFaint,
                     color: ui.fg,
                   }}
                 >
-                  <span
-                    title={`${treeView.path[treeView.path.length - 1].id} — position among its siblings`}
-                    style={{ justifySelf: 'start', minWidth: 0, maxWidth: '100%', display: 'inline-flex', alignItems: 'baseline', gap: 6, fontWeight: 700 }}
-                  >
-                    <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {treeEntryLabel(treeView.path[treeView.path.length - 1])}
-                    </span>
-                    {treeView.around.total > 1 && (
-                      <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
-                        {treeView.around.at + 1}/{treeView.around.total}
-                      </span>
-                    )}
-                  </span>
-                  <NavCell dir="up" caption="Parent:" entry={treeView.around.parent} hint="Parent — one level up" onGo={selectTreeNode} onHover={hoverTreeNode} />
-                  <span style={{ justifySelf: 'end' }}>
-                    <NavCell
-                      dir="root"
-                      label="Root"
-                      entry={treeView.path.length > 1 ? treeView.path[0] : null}
-                      hint="Root node — jump to the top of the tree"
-                      onGo={selectTreeNode}
-                      onHover={hoverTreeNode}
-                    />
-                  </span>
-
-                  <span style={{ justifySelf: 'end', minWidth: 0, maxWidth: '100%' }}>
-                    <NavCell dir="left" entry={treeView.around.prev} hint="Previous sibling — same level, before this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
-                  </span>
-                  {layoutInfo ? (
-                    <BoxModel info={layoutInfo} ui={ui} onEdit={editLayout} />
-                  ) : (
-                    <span style={{ opacity: 0.55, fontSize: 11, padding: '14px 8px', textAlign: 'center' }}>Nothing rendered for this node.</span>
-                  )}
-                  <span style={{ justifySelf: 'start', minWidth: 0, maxWidth: '100%' }}>
-                    <NavCell dir="right" entry={treeView.around.next} hint="Next sibling — same level, after this one" onGo={selectTreeNode} onHover={hoverTreeNode} />
-                  </span>
-
-                  <span style={{ justifySelf: 'start', fontSize: 10.5, opacity: 0.7, display: 'flex', flexWrap: 'wrap', gap: '0 8px', minWidth: 0 }}>
-                    {layoutInfo && layoutMeta(layoutInfo).map((line) => <span key={line}>{line}</span>)}
-                  </span>
-                  <NavCell dir="down" caption="Child:" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
-                  <span style={{ justifySelf: 'end' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>DIMENSIONS</span>
                     {layoutEdited && (
                       <button
                         type="button"
@@ -2389,7 +2408,21 @@ export function RuntimeInspector({
                         reset
                       </button>
                     )}
-                  </span>
+                  </div>
+                  {layoutInfo ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <BoxModel info={layoutInfo} ui={ui} onEdit={editLayout} />
+                      {layoutMeta(layoutInfo).length > 0 && (
+                        <div style={{ fontSize: 10.5, opacity: 0.7, display: 'flex', flexWrap: 'wrap', gap: '0 10px', justifyContent: 'center' }}>
+                          {layoutMeta(layoutInfo).map((line) => (
+                            <span key={line}>{line}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ opacity: 0.55, fontSize: 11, textAlign: 'center', padding: '10px 0' }}>Nothing rendered for this node.</div>
+                  )}
                 </div>
               </div>
             )}
