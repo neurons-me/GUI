@@ -477,6 +477,27 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
         throw cause;
       }
     },
+    // Live remote read via cleaker's own <owner>.cleaker.<path> convention
+    // (modules/cleaker's binder.ts) -- walks the node's own path-DSL proxy
+    // programmatically since `owner`/`path` are dynamic here, then awaits
+    // the (possibly "thenable" facade, possibly already-resolved) result.
+    // First call for a given owner/path is a real network round-trip
+    // (subscribing live too, if this session's `live` option was set);
+    // later calls answer from cleaker's own remoteOverlay cache -- see
+    // that module's getOrCreateRemoteSlot for exactly which.
+    async readOwnerPath<TValue = unknown>(owner: string, path: string): Promise<TValue | undefined> {
+      const segments = [owner, 'cleaker', ...String(path || '').split('.').filter(Boolean)];
+      let facade: any = node;
+      for (const segment of segments) facade = facade[segment];
+      const raw = await facade;
+      if (raw && typeof raw === 'object' && 'ok' in raw) {
+        return raw.ok ? (raw.data?.value as TValue) : undefined;
+      }
+      return raw as TValue;
+    },
+    onOwnerPathChange(handler: (key: string, value: unknown) => void): () => void {
+      return node.on('value:changed', (payload) => handler(payload.path, payload.value));
+    },
     clear,
     logout() {
       clear();

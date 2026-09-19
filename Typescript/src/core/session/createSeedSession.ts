@@ -117,6 +117,25 @@ export interface SeedSession {
    * a path that genuinely doesn't exist yet, rather than throwing.
    */
   readConfirmed?<TValue = unknown>(expression: string): Promise<TValue | undefined>;
+  /**
+   * Live read of ANOTHER identity's (or this same one's, addressed by its
+   * own username) namespace value, over cleaker's own `<owner>.cleaker.
+   * <path>` remote convention (modules/cleaker's binder.ts -- see
+   * BindKernelOptions.live's own doc comment). Only createCleakerSession()
+   * can offer this (it's the only backend that constructs a real
+   * cleaker(me, ...) node) -- optional so a caller can feature-detect
+   * rather than assume. Returns undefined for a path that doesn't resolve,
+   * same convention as readConfirmed.
+   */
+  readOwnerPath?<TValue = unknown>(owner: string, path: string): Promise<TValue | undefined>;
+  /**
+   * Fires whenever a path previously read via readOwnerPath changes on the
+   * server, pushed live (requires the session's own `live: true`) --
+   * `key` is `"<owner>.cleaker.<path>"`, matching what readOwnerPath was
+   * called with (joined by '.'). Returns an unsubscribe function. Optional
+   * for the same reason readOwnerPath is.
+   */
+  onOwnerPathChange?(handler: (key: string, value: unknown) => void): () => void;
   clear(): void;
   logout(): void;
 }

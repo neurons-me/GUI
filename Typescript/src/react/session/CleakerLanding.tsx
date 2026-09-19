@@ -24,6 +24,8 @@ import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
 import BlocksTable from '@/gui/All.This/Cleaker/Namespace/Blocks/BlocksTable';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
+import { useOptionalSeedSession } from '@/react/session/useSeedSession';
+import type { SeedSession } from '@/core/session/createSeedSession';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -164,9 +166,82 @@ type CleakerLandingHomeProps = CleakerLandingProps & {
   sharedRootStatus?: CleakerRootStatus;
 };
 
+const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
+type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
+
+// The first real GUI consumer of cleaker's own live channel (this
+// session's own work: modules/cleaker's binder.ts ensureLiveChannel/
+// RemoteSlot, wired through session.readOwnerPath/onOwnerPathChange).
+// Deliberately reads THIS identity's own profile through the SAME
+// <owner>.cleaker.<path> convention meant for viewing someone ELSE's
+// namespace, just pointed at your own username -- there is no separate
+// "read my own stuff live" primitive, and building one wasn't the point
+// of this first pass. Two tabs/devices signed into the SAME identity:
+// change profile.name from one (a disposable-infra signed write, today --
+// there is no edit UI yet, a deliberately separate piece of work), and
+// this component updates on its own, no refresh, the moment
+// 'value:changed' fires. Read-only, and silently renders nothing if the
+// backend can't offer readOwnerPath (createSeedSession()'s plain 'monad'
+// backend has no cleaker node to walk).
+const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ session, username }) => {
+  const [fields, setFields] = useState<Partial<Record<LiveProfileField, string>>>({});
+
+  useEffect(() => {
+    setFields({});
+    if (!username || typeof session.readOwnerPath !== 'function') return undefined;
+    let cancelled = false;
+
+    LIVE_PROFILE_FIELDS.forEach((field) => {
+      session.readOwnerPath!<string>(username, `profile.${field}`)
+        .then((value) => {
+          if (cancelled || value === undefined) return;
+          const trimmed = String(value).trim();
+          if (trimmed) setFields((prev) => ({ ...prev, [field]: trimmed }));
+        })
+        .catch(() => { /* Best-effort — this is a live convenience, not a required read. */ });
+    });
+
+    const keyPrefix = `${username}.cleaker.profile.`;
+    const unsubscribe = session.onOwnerPathChange?.((key, value) => {
+      if (!key.startsWith(keyPrefix)) return;
+      const field = key.slice(keyPrefix.length) as LiveProfileField;
+      if (!LIVE_PROFILE_FIELDS.includes(field)) return;
+      setFields((prev) => ({ ...prev, [field]: String(value ?? '').trim() }));
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [session, username]);
+
+  if (!fields.name && !fields.email && !fields.phone) return null;
+
+  return (
+    <Box
+      data-gui-node-id="CleakerLanding.liveOwnProfile"
+      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}
+    >
+      {fields.name && <Typography variant="body2" sx={{ fontWeight: 600 }}>{fields.name}</Typography>}
+      {fields.email && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fields.email}</Typography>}
+      {fields.phone && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fields.phone}</Typography>}
+    </Box>
+  );
+};
+
 const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
+  // Separate from `username` above (that one's the sign-in FORM's own
+  // field, empty once authenticated) -- this identity's real username,
+  // for LiveOwnProfile below. Derived from the session's own confirmed
+  // semanticNamespace (e.g. "jabellae.local.cleaker") rather than trusting
+  // anything client-guessed, same reasoning as buildGuessedFullNamespace's
+  // own doc comment: the session's own answer is authoritative once it
+  // exists, a guess never is.
+  const seedSessionCtx = useOptionalSeedSession();
+  const activeSession = seedSessionCtx?.session ?? null;
+  const ownUsername = String(activeSession?.semanticNamespace || '').split('.')[0] || '';
   const [expanded, setExpanded] = useState(false);
   // Sign in / Register are two distinct, explicit forms now (see
   // SeedSessionProvider.tsx's openExistingNamespace — signing in no longer
@@ -645,6 +720,9 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
             {label}
           </Typography>
+          {activeSession && ownUsername && (
+            <LiveOwnProfile session={activeSession} username={ownUsername} />
+          )}
           <Box sx={{ display: 'flex', gap: 1 }}>
             {/* Keychain moved to the shared sidebar (CleakerLayoutShell,
                 shown only once authenticated -- same condition as before,
