@@ -17,6 +17,62 @@ const ADMIN_VIEW_SCOPE_SET_EVENT = 'this.gui:adminView:scope:set';
 const ADMIN_VIEW_SCOPE_CHANGED_EVENT = 'this.gui:adminView:scope:changed';
 type AdminScopeMode = 'global' | 'scoped';
 
+type TreeEntry = { id: string; nth: number; label: string };
+type TreeView = { path: TreeEntry[]; children: TreeEntry[] };
+const TREE_CHILDREN_LIMIT = 60;
+const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
+
+// The tree is read from the DOM, not from the registry's parentId links: the
+// DOM nesting of `data-gui-node-id` elements is what the page actually is,
+// and it also contains the many hand-written elements that tag themselves
+// without ever calling registerNode (the registry alone would omit them).
+function isInspectorElement(el: Element): boolean {
+  return !!el.closest('[data-gui-inspector-control="true"]');
+}
+
+function tagOf(el: Element): TreeEntry {
+  const id = el.getAttribute('data-gui-node-id') || '';
+  let nth = 0;
+  try {
+    nth = Array.from(document.querySelectorAll(`[data-gui-node-id="${CSS.escape(id)}"]`)).indexOf(el);
+  } catch {}
+  return { id, nth: Math.max(0, nth), label: el.getAttribute('data-gui-component') || id };
+}
+
+function findTaggedElement(id: string, nth = 0): HTMLElement | null {
+  try {
+    const all = document.querySelectorAll<HTMLElement>(`[data-gui-node-id="${CSS.escape(id)}"]`);
+    return all[nth] ?? all[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readTreeView(selectedId: string | null): TreeView | null {
+  if (!selectedId) return null;
+  const host = findTaggedElement(selectedId);
+  if (!host) return null;
+  const path: TreeEntry[] = [tagOf(host)];
+  let cursor = host.parentElement?.closest('[data-gui-node-id]') ?? null;
+  while (cursor) {
+    path.unshift(tagOf(cursor));
+    cursor = cursor.parentElement?.closest('[data-gui-node-id]') ?? null;
+  }
+  const children: TreeEntry[] = [];
+  host.querySelectorAll('[data-gui-node-id]').forEach((el) => {
+    if (el.parentElement?.closest('[data-gui-node-id]') !== host) return;
+    if (isInspectorElement(el)) return;
+    children.push(tagOf(el));
+  });
+  return { path, children };
+}
+
+function treeSignature(view: TreeView | null): string {
+  if (!view) return '';
+  const key = (e: TreeEntry) => `${e.id}#${e.nth}:${e.label}`;
+  return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}`;
+}
+
 const PANEL_WIDTH_KEY = 'this.gui:inspectorWidth';
 const PANEL_WIDTH_DEFAULT = 380;
 const PANEL_WIDTH_MIN = 280;
@@ -845,6 +901,66 @@ export function RuntimeInspector({
     if (!child) return;
     selectHostElement(child, child);
   }, [findNearestChildNode, getSelectedHostElement, selectHostElement]);
+
+  const open = inspectorEnabled && !!selectedNodeId;
+
+  const [treeView, setTreeView] = React.useState<TreeView | null>(null);
+  React.useEffect(() => {
+    if (!open) {
+      setTreeView(null);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastSig = '\0';
+    const refresh = () => {
+      const next = readTreeView(selectedNodeId);
+      const sig = treeSignature(next);
+      if (sig === lastSig) return;
+      lastSig = sig;
+      setTreeView(next);
+    };
+    refresh();
+    // The page keeps changing under the panel (route changes, live data), so
+    // re-read on DOM mutations -- debounced, and only committed to state when
+    // the tree's shape actually differs. <body> only: the panel itself lives
+    // on <html>, so its own updates never feed back into this observer.
+    const observer = new MutationObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 150);
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-gui-node-id', 'data-gui-component'],
+    });
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [open, selectedNodeId]);
+
+  const hoveredTreeEl = React.useRef<HTMLElement | null>(null);
+  const hoverTreeNode = React.useCallback((entry: TreeEntry | null) => {
+    hoveredTreeEl.current?.removeAttribute(TREE_HOVER_ATTR);
+    hoveredTreeEl.current = null;
+    if (!entry) return;
+    const el = findTaggedElement(entry.id, entry.nth);
+    if (!el) return;
+    el.setAttribute(TREE_HOVER_ATTR, '');
+    hoveredTreeEl.current = el;
+  }, []);
+  React.useEffect(() => () => hoverTreeNode(null), [hoverTreeNode]);
+
+  const selectTreeNode = React.useCallback(
+    (entry: TreeEntry) => {
+      hoverTreeNode(null);
+      const el = findTaggedElement(entry.id, entry.nth);
+      if (el) selectHostElement(el, el);
+    },
+    [hoverTreeNode, selectHostElement]
+  );
+
   const imagePreviews = React.useMemo(() => {
     const results: { path: string; src: string }[] = [];
     const maxDepth = 6;
@@ -1016,6 +1132,10 @@ export function RuntimeInspector({
         padding-right: 1em;
         text-align: right;
       }
+      [${TREE_HOVER_ATTR}] {
+        outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
+        outline-offset: -2px !important;
+      }
       .gui-grid-overlay-active [data-gui-node-id] {
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
         outline-offset: -1px;
@@ -1131,7 +1251,6 @@ export function RuntimeInspector({
     return () => window.removeEventListener('click', onClickCapture, true);
   }, [inspectorEnabled, findNearestChildNode, selectHostElement]);
 
-  const open = inspectorEnabled && !!selectedNodeId;
 
   const [panelWidth, setPanelWidth] = React.useState<number>(() => readPanelWidth());
   const [resizing, setResizing] = React.useState(false);
@@ -1346,6 +1465,16 @@ export function RuntimeInspector({
     cursor: 'pointer',
     fontSize: 11,
   };
+  const treeButtonStyle: React.CSSProperties = {
+    border: `1px solid ${ui.lineStrong}`,
+    background: 'transparent',
+    color: ui.fg,
+    borderRadius: 6,
+    padding: '2px 6px',
+    cursor: 'pointer',
+    fontSize: 11,
+    fontFamily: 'inherit',
+  };
   const explainToneStyle = React.useMemo<React.CSSProperties | null>(() => {
     if (!explainSummary) return null;
     if (explainSummary.tone === 'redacted') {
@@ -1495,6 +1624,67 @@ export function RuntimeInspector({
           </header>
 
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
+            {treeView && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>TREE</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginBottom: 8 }}>
+                  {treeView.path.map((entry, i) => {
+                    const last = i === treeView.path.length - 1;
+                    return (
+                      <React.Fragment key={`${entry.id}#${entry.nth}`}>
+                        {i > 0 && <span style={{ opacity: 0.5 }}>›</span>}
+                        {last ? (
+                          <span
+                            title={entry.id}
+                            style={{ fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: ui.fillActive }}
+                          >
+                            {entry.label}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            title={entry.id}
+                            onClick={() => selectTreeNode(entry)}
+                            onMouseEnter={() => hoverTreeNode(entry)}
+                            onMouseLeave={() => hoverTreeNode(null)}
+                            style={treeButtonStyle}
+                          >
+                            {entry.label}
+                          </button>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                <div style={{ opacity: 0.75, marginBottom: 4 }}>
+                  children ({treeView.children.length})
+                </div>
+                {treeView.children.length === 0 ? (
+                  <div style={{ opacity: 0.55 }}>No tagged children</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {treeView.children.slice(0, TREE_CHILDREN_LIMIT).map((entry) => (
+                      <button
+                        key={`${entry.id}#${entry.nth}`}
+                        type="button"
+                        title={entry.id}
+                        onClick={() => selectTreeNode(entry)}
+                        onMouseEnter={() => hoverTreeNode(entry)}
+                        onMouseLeave={() => hoverTreeNode(null)}
+                        style={treeButtonStyle}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                    {treeView.children.length > TREE_CHILDREN_LIMIT && (
+                      <span style={{ opacity: 0.6, padding: '2px 4px' }}>
+                        +{treeView.children.length - TREE_CHILDREN_LIMIT} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ marginBottom: 10 }}>
               <div style={{ opacity: 0.75 }}>nodeId</div>
               <code>{selectedNodeId}</code>
