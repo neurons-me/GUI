@@ -27,6 +27,7 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
+import { useRegisterGuiNode } from '@/runtime/selection';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -213,6 +214,26 @@ type CleakerLandingHomeProps = CleakerLandingProps & {
   sharedRootStatus?: CleakerRootStatus;
 };
 
+// The ONE root of this page's Inspector tree. `GUI` is the same branch name
+// writeKernelWindowLocation/writeKernelThemeFacts already use in `.me`
+// (GUI.window.location, GUI.theme.*) -- the tree the Inspector shows and
+// the branch the kernel holds share one name, so "everything hangs under
+// GUI" is literally true of both. Only the ROOT declares a semanticPath:
+// GUI itself is a real branch (its leaves exist). Children stay
+// provenance-less on purpose -- CleakerLanding/CleakerUsersView/... are
+// render containers, not values, and pointing a semanticPath at a path
+// nothing ever wrote would make Explain fail rather than say "not
+// declared." Data-driven nodes (BlocksTable rows etc.) get their own real
+// namespace paths when someone declares them; they hang from GUI in the
+// render tree but their data lives in the namespace, not under GUI.
+// Module-level (stable reference): useRegisterGuiNode has provenance in
+// its effect deps.
+const GUI_ROOT_ID = 'GUI';
+const GUI_ROOT_PROVENANCE = {
+  semanticPath: 'GUI',
+  note: 'Root of the GUI engine tree. Mirrors the GUI.* branch of the local .me kernel (window.location, theme).',
+};
+
 const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
 type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
 
@@ -296,6 +317,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 };
 
 const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
+  useRegisterGuiNode('CleakerLanding', 'CleakerLanding', GUI_ROOT_ID);
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
   // Separate from `username` above (that one's the sign-in FORM's own
@@ -1021,6 +1043,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
 const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
+  useRegisterGuiNode('CleakerUsersView', 'CleakerUsersView', GUI_ROOT_ID);
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1051,6 +1074,7 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
 const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
+  useRegisterGuiNode('CleakerBlockchainView', 'CleakerBlockchainView', GUI_ROOT_ID);
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1993,6 +2017,7 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
 const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
+  useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, GUI_ROOT_PROVENANCE);
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
@@ -2053,41 +2078,43 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   ];
 
   return (
-    <Layout
-      LeftBar={{
-        elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],
-        // Same footer slot netget's own NetGetShell (App.jsx) uses for both
-        // of these exact components -- ThemeLauncher and DevToolsLauncher
-        // are real, already-built launchers (this.gui's own ThemeContext/
-        // ThemesCatalog, and the Semantic Inspector's on/off toggle),
-        // nothing new built for this page. `useLauncherPopover` degrades to
-        // local state with no provider (see runtime/launcherPopover.tsx's
-        // own doc comment), so both work standalone here, coordinating with
-        // each other the same way they already do in NetGetShell.
-        // DevToolsLauncher itself renders nothing (useOptionalSelection()
-        // returns null) unless the app's own mount() call actually
-        // requested the inspector infrastructure -- see main.jsx's own
-        // devtools option.
-        footerElements: [
-          { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
-          { type: 'action', props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
-        ],
-      }}
-    >
-      <ThemeKernelMirror session={session} />
-      <Routes>
-        <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
-        <Route path="users" element={<CleakerUsersView {...props} />} />
-        <Route path="blockchain" element={<CleakerBlockchainView {...props} />} />
-        <Route path="url" element={<CleakerUrlView {...props} />} />
-        <Route path="keychain" element={<CleakerKeychainView {...props} />} />
-        <Route path="netget" element={<CleakerNetgetView netget={{
-          endpoint: verifiedRoot.cleakerEndpoint,
-          available: verifiedRoot.netget.available,
-          gatewayId: verifiedRoot.netget.gatewayId,
-        }} />} />
-      </Routes>
-    </Layout>
+    <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
+      <Layout
+        LeftBar={{
+          elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],
+          // Same footer slot netget's own NetGetShell (App.jsx) uses for both
+          // of these exact components -- ThemeLauncher and DevToolsLauncher
+          // are real, already-built launchers (this.gui's own ThemeContext/
+          // ThemesCatalog, and the Semantic Inspector's on/off toggle),
+          // nothing new built for this page. `useLauncherPopover` degrades to
+          // local state with no provider (see runtime/launcherPopover.tsx's
+          // own doc comment), so both work standalone here, coordinating with
+          // each other the same way they already do in NetGetShell.
+          // DevToolsLauncher itself renders nothing (useOptionalSelection()
+          // returns null) unless the app's own mount() call actually
+          // requested the inspector infrastructure -- see main.jsx's own
+          // devtools option.
+          footerElements: [
+            { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
+            { type: 'action', props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
+          ],
+        }}
+      >
+        <ThemeKernelMirror session={session} />
+        <Routes>
+          <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
+          <Route path="users" element={<CleakerUsersView {...props} />} />
+          <Route path="blockchain" element={<CleakerBlockchainView {...props} />} />
+          <Route path="url" element={<CleakerUrlView {...props} />} />
+          <Route path="keychain" element={<CleakerKeychainView {...props} />} />
+          <Route path="netget" element={<CleakerNetgetView netget={{
+            endpoint: verifiedRoot.cleakerEndpoint,
+            available: verifiedRoot.netget.available,
+            gatewayId: verifiedRoot.netget.gatewayId,
+          }} />} />
+        </Routes>
+      </Layout>
+    </Box>
   );
 };
 
