@@ -9,6 +9,7 @@ import { alpha, getContrastRatio } from '@mui/material/styles';
 import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
+import { findGuiDocumentEntry } from './guiDocument';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -1455,6 +1456,17 @@ export function RuntimeInspector({
     () => resolveExplainPath(provenance),
     [provenance]
   );
+  // A part the GUI document declares is explainable on its own terms -- no
+  // runtime and no kernel path needed: it says where it is declared, what it
+  // resolved to, and that nothing is bound to the kernel (yet).
+  const documentEntry = React.useMemo(
+    () =>
+      provenance?.source === 'document'
+        ? findGuiDocumentEntry(String(provenance.documentPath || selectedNodeId || ''))
+        : null,
+    [provenance, selectedNodeId]
+  );
+  const documentOnly = Boolean(documentEntry) && !explainPath;
   const [explainState, setExplainState] = React.useState<ExplainPanelState>({
     status: 'idle',
     sourcePath: null,
@@ -1929,8 +1941,30 @@ export function RuntimeInspector({
               >
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ opacity: 0.75 }}>explain path</div>
-                  <code>{explainPath || 'Not declared'}</code>
+                  <code>{explainPath || (documentEntry ? 'none — declared in the GUI document' : 'Not declared')}</code>
                 </div>
+                {documentEntry && (
+                  <>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ opacity: 0.75 }}>declared in</div>
+                      <code>GUI.document.json › {documentEntry.id}</code>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ opacity: 0.75 }}>resolved</div>
+                      <code>{selected?.enabled === false ? 'off (declared, not rendered)' : 'on'}</code>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ opacity: 0.75 }}>declares</div>
+                      <code>{documentEntry.childIds.length ? documentEntry.childIds.join(', ') : 'no parts below'}</code>
+                    </div>
+                    {documentEntry.note && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ opacity: 0.75 }}>note</div>
+                        <span>{documentEntry.note}</span>
+                      </div>
+                    )}
+                  </>
+                )}
                 {provenance?.policy && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ opacity: 0.75 }}>policy</div>
@@ -1955,7 +1989,7 @@ export function RuntimeInspector({
                     <code>{explainState.inspectMethod}</code>
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                {!documentOnly && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                   <button
                     type="button"
                     onClick={handleExplain}
@@ -1980,8 +2014,8 @@ export function RuntimeInspector({
                       Attach a kernel with <code>{'{ me }'}</code> or <code>{'{ runtime: render(me) }'}</code> to enable Explain.
                     </span>
                   )}
-                </div>
-                {!explainPath && (
+                </div>}
+                {!explainPath && !documentOnly && (
                   <div
                     style={{
                       border: `1px solid ${ui.warning.border}`,

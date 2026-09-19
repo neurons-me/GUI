@@ -75,6 +75,7 @@ export type GuiDeclaredNode = {
   parentId?: string;
   /** false = the GUI knows this part exists but it isn't rendered right now. */
   enabled?: boolean;
+  provenance?: GuiNodeProvenance;
 };
 
 // Declares several parts of the GUI at once (a component that knows its own
@@ -91,7 +92,7 @@ export function useRegisterGuiNodes(nodes: GuiDeclaredNode[]) {
     if (!registerNode || !unregisterNode) return;
     const list = JSON.parse(key) as GuiDeclaredNode[];
     list.forEach((n) =>
-      registerNode({ id: n.id, type: n.type, spec: { type: n.type }, path: n.id, parentId: n.parentId, enabled: n.enabled })
+      registerNode({ id: n.id, type: n.type, spec: { type: n.type }, path: n.id, parentId: n.parentId, enabled: n.enabled, provenance: n.provenance })
     );
     return () => list.forEach((n) => unregisterNode(n.id));
   }, [registerNode, unregisterNode, key]);

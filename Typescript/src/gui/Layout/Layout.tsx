@@ -1,5 +1,6 @@
 // Layout/Layout/Layout.tsx
 import { useRegisterGuiNodes } from '@/runtime/selection';
+import { flattenGuiDocument } from '@/runtime/guiDocument';
 import { LeftBarProvider } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { RightBarProvider } from '@/gui-internals/Contexts/RightSidebarContext';
 import Box from '@/gui/Atoms/Box/Box';
@@ -107,26 +108,28 @@ function Layout({
           </Content>
         );
 
-  // The GUI states its own shape here instead of leaving the tree to be
-  // inferred from the DOM: every bar Layout can have is declared, rendered or
-  // not (enabled: false = known, currently off).
-  const barOn = {
+  // The parts come from the GUI document (runtime/GUI.document.json), not
+  // from a list written here: the document declares WHAT exists, Layout only
+  // resolves which bars are actually on (enabled: false = declared, off).
+  const barOn: Record<string, boolean> = {
     top: Boolean(topBarChild) || hasTopBar,
     sticky: Boolean(stickyOptionsChild) || hasStickyOptions,
     left: Boolean(leftBarElement) || hasLeftBar,
     right: Boolean(rightBarChild) || hasRightBar,
     footer: Boolean(footerChild) || Boolean(resolvedFooter),
   };
-  useRegisterGuiNodes([
-    { id: 'GUI.bars', type: 'bars', parentId: 'GUI' },
-    ...(['top', 'sticky', 'left', 'right', 'footer'] as const).map((bar) => ({
-      id: `GUI.bars.${bar}`,
-      type: bar,
-      parentId: 'GUI.bars',
-      enabled: barOn[bar],
-    })),
-    { id: 'GUI.content', type: 'content', parentId: 'GUI' },
-  ]);
+  useRegisterGuiNodes(
+    flattenGuiDocument()
+      // The root (GUI) belongs to whoever mounts the GUI, not to Layout.
+      .filter((entry) => entry.parentId)
+      .map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        parentId: entry.parentId,
+        enabled: entry.parentId === 'GUI.bars' ? barOn[entry.type] : true,
+        provenance: { source: 'document', documentPath: entry.id, note: entry.note },
+      }))
+  );
 
   return (
     <LeftBarProvider initialView={leftInitialView}>

@@ -1,0 +1,18 @@
+{
+  "GUI": {
+    "note": "Root of the GUI document. Static and self-contained: the GUI can boot from this alone, with no runtime attached. A connected .me kernel resolves it (values, visibility, authorization); it does not replace it.",
+    "children": {
+      "bars": {
+        "note": "The edge bars around the content area. All five are part of the document; which ones are on is resolved at runtime from what the app configures.",
+        "children": {
+          "top": { "note": "Top bar." },
+          "sticky": { "note": "Sticky options strip under the top bar." },
+          "left": { "note": "Left sidebar." },
+          "right": { "note": "Right sidebar." },
+          "footer": { "note": "Footer bar." }
+        }
+      },
+      "content": { "note": "Where the current page renders." }
+    }
+  }
+}
