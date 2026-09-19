@@ -139,46 +139,53 @@ function treeSignature(view: TreeView | null): string {
   return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}|${view.siblings.map((e) => e.id).join(',')}`;
 }
 
-// Transport controls for walking the tree, record-player style: skip to the
-// start (root), back (parent), previous/next track (sibling), play (child).
-function DeckButton({
+// One labelled move through the tree. The word is the point: direction is
+// spelled out (up/down = depth, left/right = siblings), never left to icons.
+function StepButton({
   label,
-  title,
+  hint,
   disabled,
   onClick,
-  children,
+  icon,
+  iconAfter,
 }: {
   label: string;
-  title: string;
+  hint: string;
   disabled?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  icon: React.ReactNode;
+  /** Icon goes after the word (Next →) instead of before it (← Prev). */
+  iconAfter?: boolean;
 }) {
+  const svg = (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {icon}
+    </svg>
+  );
   return (
     <button
       type="button"
-      aria-label={label}
-      title={title}
+      title={hint}
       disabled={disabled}
       onClick={onClick}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        width: 28,
-        height: 24,
-        padding: 0,
-        border: 'none',
+        gap: 4,
+        padding: '3px 8px',
+        border: '1px solid currentColor',
         borderRadius: 999,
         background: 'transparent',
         color: 'inherit',
+        fontSize: 11,
+        fontFamily: 'inherit',
         cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.3 : 1,
+        opacity: disabled ? 0.3 : 0.9,
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
-        {children}
-      </svg>
+      {!iconAfter && svg}
+      {label}
+      {iconAfter && svg}
     </button>
   );
 }
@@ -1303,10 +1310,10 @@ export function RuntimeInspector({
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
         outline-offset: -2px !important;
       }
-      .gui-inspector-deck button:not(:disabled):hover {
+      .gui-inspector-steps button:not(:disabled):hover {
         background: color-mix(in srgb, currentColor 14%, transparent);
       }
-      .gui-inspector-deck button:not(:disabled):active {
+      .gui-inspector-steps button:not(:disabled):active {
         background: color-mix(in srgb, currentColor 24%, transparent);
       }
       .gui-grid-overlay-active [data-gui-node-id] {
@@ -1845,44 +1852,11 @@ export function RuntimeInspector({
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
             {treeView && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                   <div style={{ opacity: 0.75, fontWeight: 700 }}>TREE</div>
-                  <div
-                    className="gui-inspector-deck"
-                    role="group"
-                    aria-label="Walk the tree"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 1,
-                      padding: '2px 4px',
-                      borderRadius: 999,
-                      border: `1px solid ${ui.lineStrong}`,
-                      background: ui.fillFaint,
-                      color: ui.fg,
-                    }}
-                  >
-                    <DeckButton label="Topmost" title="Topmost — jump to the root (Alt + click on the page)" disabled={!deck?.top} onClick={() => deck?.top && selectTreeNode(deck.top)}>
-                      <path d="M6 5v14" fill="none" />
-                      <path d="M19 6v12L9 12z" />
-                    </DeckButton>
-                    <DeckButton label="Parent" title="Parent — one level up (Shift + click on the page)" disabled={!deck?.parent} onClick={() => deck?.parent && selectTreeNode(deck.parent)}>
-                      <path d="M17 6v12L7 12z" />
-                    </DeckButton>
-                    <span style={{ width: 1, height: 14, background: ui.line, margin: '0 3px' }} />
-                    <DeckButton label="Previous sibling" title="Previous sibling" disabled={!deck?.prev} onClick={() => deck?.prev && selectTreeNode(deck.prev)}>
-                      <path d="M15 6l-6 6 6 6" fill="none" />
-                    </DeckButton>
-                    <span style={{ minWidth: 30, textAlign: 'center', fontSize: 10, fontVariantNumeric: 'tabular-nums', opacity: deck?.pos ? 0.85 : 0.35 }} title="Position among siblings">
-                      {deck?.pos ?? '—'}
-                    </span>
-                    <DeckButton label="Next sibling" title="Next sibling" disabled={!deck?.next} onClick={() => deck?.next && selectTreeNode(deck.next)}>
-                      <path d="M9 6l6 6-6 6" fill="none" />
-                    </DeckButton>
-                    <span style={{ width: 1, height: 14, background: ui.line, margin: '0 3px' }} />
-                    <DeckButton label="Child" title="Child — first part below (Ctrl/⌘ + click on the page)" disabled={!deck?.child} onClick={() => deck?.child && selectTreeNode(deck.child)}>
-                      <path d="M8 5v14l11-7z" />
-                    </DeckButton>
+                  {/* Where you are, in words: how deep. Which sibling sits between Prev and Next. */}
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>
+                    level {treeView.path.length - 1}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginBottom: 8 }}>
@@ -1913,6 +1887,17 @@ export function RuntimeInspector({
                       </React.Fragment>
                     );
                   })}
+                </div>
+                <div className="gui-inspector-steps" role="group" aria-label="Walk the tree" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 10, color: ui.fg }}>
+                  <StepButton label="Root" hint="Jump to the root (Alt + click on the page)" disabled={!deck?.top} onClick={() => deck?.top && selectTreeNode(deck.top)} icon={<><path d="M6 5h12" /><path d="M6 18l6-6 6 6" /></>} />
+                  <StepButton label="Parent" hint="One level up (Shift + click on the page)" disabled={!deck?.parent} onClick={() => deck?.parent && selectTreeNode(deck.parent)} icon={<path d="M6 15l6-6 6 6" />} />
+                  <StepButton label="Child" hint="One level down, into the first part below (Ctrl/⌘ + click on the page)" disabled={!deck?.child} onClick={() => deck?.child && selectTreeNode(deck.child)} icon={<path d="M6 9l6 6 6-6" />} />
+                  <span style={{ width: 1, height: 16, background: ui.line, margin: '0 2px' }} />
+                  <StepButton label="Prev" hint="Previous sibling — same level, before this one" disabled={!deck?.prev} onClick={() => deck?.prev && selectTreeNode(deck.prev)} icon={<path d="M15 6l-6 6 6 6" />} />
+                  <span style={{ fontSize: 11, minWidth: 38, textAlign: 'center', fontVariantNumeric: 'tabular-nums', opacity: deck?.pos ? 0.85 : 0.4 }} title="Which sibling this is, at its level">
+                    {deck?.pos ? deck.pos.replace('/', ' of ') : 'only one'}
+                  </span>
+                  <StepButton label="Next" hint="Next sibling — same level, after this one" disabled={!deck?.next} onClick={() => deck?.next && selectTreeNode(deck.next)} icon={<path d="M9 6l6 6-6 6" />} iconAfter />
                 </div>
                 <div style={{ opacity: 0.75, marginBottom: 4 }}>
                   children ({treeView.children.length})
