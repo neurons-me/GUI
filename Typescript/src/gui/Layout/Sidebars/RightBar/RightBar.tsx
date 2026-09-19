@@ -94,7 +94,7 @@ const RightBar = ({
   const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.bars.right';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
-    'data-gui-component': dataGuiComponent || 'bars.right',
+    'data-gui-component': dataGuiComponent || 'right',
   };
 
   useEffect(() => {

@@ -82,6 +82,7 @@ function mergeRecord(
     path: incoming.path || current.path,
     part: incoming.part ?? current.part,
     parentId: incoming.parentId ?? current.parentId,
+    enabled: incoming.enabled ?? current.enabled,
     provenance: mergedProvenance,
     spec: {
       ...(current.spec ?? {}),
@@ -105,6 +106,7 @@ function isSameRecord(
     current.resolvedProps === next.resolvedProps &&
     current.part === next.part &&
     current.parentId === next.parentId &&
+    current.enabled === next.enabled &&
     current.provenance === next.provenance &&
     current.spec?.type === next.spec?.type &&
     current.spec?.props === next.spec?.props &&

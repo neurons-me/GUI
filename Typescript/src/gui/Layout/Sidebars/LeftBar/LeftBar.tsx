@@ -104,7 +104,7 @@ const LeftSidebar = ({
   const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.bars.left';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
-    'data-gui-component': dataGuiComponent || 'bars.left',
+    'data-gui-component': dataGuiComponent || 'left',
   };
   const toggleButtonNodeId = `${adminNodeId}.toggle`;
   const headerNodeId = `${adminNodeId}.header`;
@@ -199,10 +199,10 @@ const LeftSidebar = ({
       : [
           {
             id: adminNodeId,
-            type: dataGuiComponent || 'bars.left',
+            type: dataGuiComponent || 'left',
             path: rootPath,
             spec: {
-              type: dataGuiComponent || 'bars.left',
+              type: dataGuiComponent || 'left',
               props: EMPTY_SYNTHETIC_PROPS,
             },
           },

@@ -31,6 +31,11 @@ export type ResolvedNodeRecord = {
   part?: string;
   parentId?: string;
   provenance?: GuiNodeProvenance;
+  /**
+   * Declared by the GUI but not currently rendered (e.g. a bar Layout knows
+   * about but wasn't given). Absent means true. Such a node has no element.
+   */
+  enabled?: boolean;
 };
 
 export type RendererOptions = {

@@ -1,4 +1,5 @@
 // Layout/Layout/Layout.tsx
+import { useRegisterGuiNodes } from '@/runtime/selection';
 import { LeftBarProvider } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { RightBarProvider } from '@/gui-internals/Contexts/RightSidebarContext';
 import Box from '@/gui/Atoms/Box/Box';
@@ -105,6 +106,27 @@ function Layout({
             {contentExtras.length ? contentExtras : children}
           </Content>
         );
+
+  // The GUI states its own shape here instead of leaving the tree to be
+  // inferred from the DOM: every bar Layout can have is declared, rendered or
+  // not (enabled: false = known, currently off).
+  const barOn = {
+    top: Boolean(topBarChild) || hasTopBar,
+    sticky: Boolean(stickyOptionsChild) || hasStickyOptions,
+    left: Boolean(leftBarElement) || hasLeftBar,
+    right: Boolean(rightBarChild) || hasRightBar,
+    footer: Boolean(footerChild) || Boolean(resolvedFooter),
+  };
+  useRegisterGuiNodes([
+    { id: 'GUI.bars', type: 'bars', parentId: 'GUI' },
+    ...(['top', 'sticky', 'left', 'right', 'footer'] as const).map((bar) => ({
+      id: `GUI.bars.${bar}`,
+      type: bar,
+      parentId: 'GUI.bars',
+      enabled: barOn[bar],
+    })),
+    { id: 'GUI.content', type: 'content', parentId: 'GUI' },
+  ]);
 
   return (
     <LeftBarProvider initialView={leftInitialView}>

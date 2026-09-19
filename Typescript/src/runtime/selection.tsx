@@ -69,6 +69,34 @@ export function useRegisterGuiNode(
   }, [registerNode, unregisterNode, id, type, parentId, provenance]);
 }
 
+export type GuiDeclaredNode = {
+  id: string;
+  type: string;
+  parentId?: string;
+  /** false = the GUI knows this part exists but it isn't rendered right now. */
+  enabled?: boolean;
+};
+
+// Declares several parts of the GUI at once (a component that knows its own
+// shape -- e.g. Layout and its bars -- states it, instead of leaving the tree
+// to be inferred from whatever happens to be in the DOM). Re-declares when
+// the description changes; withdraws it on unmount. No-ops outside a
+// SelectionProvider.
+export function useRegisterGuiNodes(nodes: GuiDeclaredNode[]) {
+  const ctx = React.useContext(SelectionContext);
+  const registerNode = ctx?.registerNode;
+  const unregisterNode = ctx?.unregisterNode;
+  const key = JSON.stringify(nodes);
+  React.useEffect(() => {
+    if (!registerNode || !unregisterNode) return;
+    const list = JSON.parse(key) as GuiDeclaredNode[];
+    list.forEach((n) =>
+      registerNode({ id: n.id, type: n.type, spec: { type: n.type }, path: n.id, parentId: n.parentId, enabled: n.enabled })
+    );
+    return () => list.forEach((n) => unregisterNode(n.id));
+  }, [registerNode, unregisterNode, key]);
+}
+
 export function SelectionProvider({
   children,
   initialInspectorEnabled = false,
