@@ -28,6 +28,7 @@ import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode } from '@/runtime/selection';
+import { findGuiDocumentEntry, renderGuiDocumentPage } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -212,6 +213,10 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
 type CleakerLandingHomeProps = CleakerLandingProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
+  // Handed in by the renderer (renderGuiDocumentPage): the document path
+  // this page was declared at. Defaults keep the component usable on its own.
+  'data-gui-node-id'?: string;
+  'data-gui-component'?: string;
 };
 
 // The ONE root of this page's Inspector tree. `GUI` is the same branch name
@@ -225,6 +230,8 @@ type CleakerLandingHomeProps = CleakerLandingProps & {
 // (BlocksTable rows etc.) hang from GUI in the render tree but their data
 // lives in the namespace, not under GUI.
 const GUI_ROOT_ID = 'GUI';
+// Where the GUI document (runtime/GUI.document.json) declares the landing page.
+const LANDING_ID = 'GUI.content.landing';
 
 const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
 type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
@@ -279,7 +286,7 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 
   return (
     <Box
-      data-gui-node-id="CleakerLanding.liveOwnProfile"
+      data-gui-node-id={`${LANDING_ID}.profile`}
       sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}
     >
       {fields.name && <Typography variant="body2" sx={{ fontWeight: 600 }}>{fields.name}</Typography>}
@@ -308,8 +315,9 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
   return null;
 };
 
-const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
-  useRegisterGuiNode('CleakerLanding', 'CleakerLanding', 'GUI.content');
+const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'CleakerLanding' }) => {
+  // No useRegisterGuiNode here: the page is declared by the GUI document
+  // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
   // Separate from `username` above (that one's the sign-in FORM's own
@@ -662,8 +670,8 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 
   return (
     <Box
-      data-gui-node-id="CleakerLanding"
-      data-gui-component="CleakerLanding"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={{
         minHeight: '100vh',
         display: 'flex',
@@ -704,7 +712,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
           onSelectResult={visitUser}
           placeholder="Search .me"
           ariaLabel="Search .me"
-          data-gui-node-id="CleakerLanding.search"
+          data-gui-node-id={`${nodeId}.search`}
         />
       </Box>
 
@@ -724,7 +732,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
         <Box
           role="button"
           tabIndex={0}
-          data-gui-node-id="CleakerLanding.qrToggle"
+          data-gui-node-id={`${nodeId}.qr`}
           aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
           onClick={() => setExpanded((value) => !value)}
           onKeyDown={(event) => {
@@ -768,7 +776,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             editableRoot={!authenticated}
             editableRootValue={namespaceRootLabel}
             onEditableRootChange={setNamespaceOverride}
-            data-gui-node-id="CleakerLanding.bubble"
+            data-gui-node-id={`${nodeId}.qr.bubble`}
             style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           />
         </Box>
@@ -814,7 +822,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               component="button"
               type="button"
               onClick={onLogout}
-              data-gui-node-id="CleakerLanding.logout"
+              data-gui-node-id={`${nodeId}.logout`}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -869,7 +877,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
                 the answer to this sentence, not a repeat of it. The page
                 reads as one continuous line: "Hello, I am…" [namespace]
                 [username] [secret] ".me". */}
-            <Typography variant="h4" data-gui-node-id="CleakerLanding.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+            <Typography variant="h4" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
               Hello, I am…
             </Typography>
             {/* The connection badge that used to live here (a separate
@@ -917,7 +925,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
                       window.location.href = window.location.href.replace(/^http:/, 'https:');
                     }
                   }}
-                  data-gui-node-id="CleakerLanding.openHttps"
+                  data-gui-node-id={`${nodeId}.https`}
                 >
                   Abrir HTTPS
                 </Button>
@@ -930,7 +938,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             <>
               <TextField
                 label="Username"
-                data-gui-node-id="CleakerLanding.username"
+                data-gui-node-id={`${nodeId}.username`}
                 value={credentialsForm.username}
                 onChange={(e) => credentialsForm.setUsername(e.target.value)}
                 disabled={pending || !secureContextOk}
@@ -939,7 +947,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               />
               <TextField
                 label="Secret"
-                data-gui-node-id="CleakerLanding.secret"
+                data-gui-node-id={`${nodeId}.secret`}
                 type="password"
                 value={credentialsForm.password}
                 onChange={(e) => credentialsForm.setPassword(e.target.value)}
@@ -959,7 +967,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             type="button"
             onClick={handleEnter}
             disabled={pending || !secureContextOk || (!!credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password))}
-            data-gui-node-id="CleakerLanding.submit"
+            data-gui-node-id={`${nodeId}.submit`}
             sx={{
               display: 'flex',
               alignItems: 'center',
@@ -986,7 +994,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               type="button"
               onClick={() => { setRegistrationComplete(false); setMode('register'); }}
               disabled={!secureContextOk}
-              data-gui-node-id="CleakerLanding.switchToRegister"
+              data-gui-node-id={`${nodeId}.register`}
               sx={{
                 background: 'transparent',
                 border: 0,
@@ -1008,7 +1016,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               type="button"
               onClick={() => { setRecoveryComplete(false); setMode('recover'); }}
               disabled={!secureContextOk}
-              data-gui-node-id="CleakerLanding.switchToRecover"
+              data-gui-node-id={`${nodeId}.recover`}
               sx={{
                 background: 'transparent',
                 border: 0,
@@ -2097,6 +2105,13 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget', icon: 'router' } },
   ];
 
+  const landingRoute = documentRoute(findGuiDocumentEntry(LANDING_ID)?.route);
+  const landingElement = renderGuiDocumentPage(LANDING_ID, {
+    React,
+    registry: DOCUMENT_PAGES,
+    props: { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status },
+  });
+
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
@@ -2122,7 +2137,10 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
       >
         <ThemeKernelMirror session={session} />
         <Routes>
-          <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
+          {/* Declared by the GUI document (GUI.content.landing), rendered
+              through the same renderer mount(spec) uses -- the document
+              decides what renders here and where it is served. */}
+          {landingRoute.index ? <Route index element={landingElement} /> : landingRoute.path ? <Route path={landingRoute.path} element={landingElement} /> : null}
           <Route path="users" element={<CleakerUsersView {...props} />} />
           <Route path="blockchain" element={<CleakerBlockchainView {...props} />} />
           <Route path="url" element={<CleakerUrlView {...props} />} />
@@ -2137,6 +2155,18 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     </Box>
   );
 };
+
+// Components the GUI document may name (`component`), by that name.
+const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
+  CleakerLanding: CleakerLandingHome,
+};
+
+// A document `route` ("/" or "/users") as react-router wants it: the index
+// route, or a path relative to the shell.
+function documentRoute(route?: string): { index?: true; path?: string } {
+  if (!route) return {};
+  return route === '/' ? { index: true } : { path: route.replace(/^\//, '') };
+}
 
 const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
   <Routes>

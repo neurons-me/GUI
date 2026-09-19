@@ -26,7 +26,15 @@ type TreeEntry = {
   enabled: boolean;
   /** 'declared' = the GUI registered it; 'dom' = only detected in the page. */
   source: 'declared' | 'dom';
+  /** Has an element of its own. */
   hasElement: boolean;
+  /**
+   * Actually on the page: an element of its own, or -- for a group like
+   * GUI.bars -- one below it. Distinct from `enabled`: a page that is
+   * declared and configured but whose route isn't active is enabled and not
+   * rendered.
+   */
+  rendered: boolean;
 };
 type TreeView = { path: TreeEntry[]; children: TreeEntry[] };
 const TREE_CHILDREN_LIMIT = 60;
@@ -87,6 +95,7 @@ function readTreeView(selectedId: string | null): TreeView | null {
       enabled: rec?.enabled !== false,
       source: rec ? 'declared' : 'dom',
       hasElement: !!el,
+      rendered: !!el || [...elements.keys()].some((k) => k.startsWith(`${id}.`)),
     };
   };
 
@@ -105,7 +114,7 @@ function readTreeView(selectedId: string | null): TreeView | null {
 
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
-  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}`;
+  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
   return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}`;
 }
 
@@ -1467,6 +1476,20 @@ export function RuntimeInspector({
     [provenance, selectedNodeId]
   );
   const documentOnly = Boolean(documentEntry) && !explainPath;
+  // "Rendered" is a fact about the page right now (an element for this part,
+  // or -- for a group -- for something below it), NOT the same as the app
+  // having configured it. Re-read whenever the tree view refreshes.
+  const documentRendered = React.useMemo(() => {
+    if (!documentEntry) return false;
+    try {
+      return !!document.querySelector(
+        `[data-gui-node-id="${CSS.escape(documentEntry.id)}"], [data-gui-node-id^="${CSS.escape(documentEntry.id + '.')}"]`
+      );
+    } catch {
+      return false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentEntry, treeView]);
   const [explainState, setExplainState] = React.useState<ExplainPanelState>({
     status: 'idle',
     sourcePath: null,
@@ -1621,19 +1644,29 @@ export function RuntimeInspector({
     fontSize: 11,
     fontFamily: 'inherit',
   };
-  const treeEntryLabel = (entry: TreeEntry) => (entry.enabled ? entry.label : `${entry.label} · off`);
+  // Two different reasons a declared part isn't on the page, kept apart:
+  //  off         -- the app didn't configure it (a bar it wasn't given)
+  //  not mounted -- configured, but nothing is rendering it right now
+  //                 (a page whose route isn't the active one)
+  const treeEntryState = (entry: TreeEntry): 'off' | 'not mounted' | null =>
+    !entry.enabled ? 'off' : entry.source === 'declared' && !entry.rendered ? 'not mounted' : null;
+  const treeEntryLabel = (entry: TreeEntry) => {
+    const state = treeEntryState(entry);
+    return state ? `${entry.label} · ${state}` : entry.label;
+  };
   const treeEntryTitle = (entry: TreeEntry) =>
     [
       entry.id,
       entry.source === 'dom' ? 'detected in the DOM, not declared by the GUI' : null,
-      entry.enabled ? null : 'declared by the GUI, not rendered right now',
+      treeEntryState(entry) === 'off' ? 'declared by the GUI; the app did not configure it' : null,
+      treeEntryState(entry) === 'not mounted' ? 'declared by the GUI and configured; not mounted right now' : null,
     ]
       .filter(Boolean)
       .join(' — ');
   const treeEntryStyle = (entry: TreeEntry): React.CSSProperties => ({
     ...treeButtonStyle,
-    // Off: the GUI has the part, the page doesn't render it.
-    opacity: entry.enabled ? 1 : 0.55,
+    // Declared by the GUI but not on the page (off or not mounted).
+    opacity: treeEntryState(entry) ? 0.55 : 1,
     // Detected only (not declared): dashed, the page's own, not the GUI's.
     borderStyle: entry.source === 'dom' ? 'dashed' : 'solid',
   });
@@ -1798,7 +1831,7 @@ export function RuntimeInspector({
                         {last ? (
                           <span
                             title={treeEntryTitle(entry)}
-                            style={{ fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: ui.fillActive, opacity: entry.enabled ? 1 : 0.6 }}
+                            style={{ fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: ui.fillActive, opacity: treeEntryState(entry) ? 0.6 : 1 }}
                           >
                             {treeEntryLabel(entry)}
                           </span>
@@ -1946,13 +1979,40 @@ export function RuntimeInspector({
                 {documentEntry && (
                   <>
                     <div style={{ marginBottom: 8 }}>
-                      <div style={{ opacity: 0.75 }}>declared in</div>
-                      <code>GUI.document.json › {documentEntry.id}</code>
+                      <div style={{ opacity: 0.75 }}>declared</div>
+                      <code>
+                        yes — GUI.document.json › {documentEntry.id}
+                        {documentEntry.component ? ` (${documentEntry.component})` : ''}
+                      </code>
                     </div>
                     <div style={{ marginBottom: 8 }}>
-                      <div style={{ opacity: 0.75 }}>resolved</div>
-                      <code>{selected?.enabled === false ? 'off (declared, not rendered)' : 'on'}</code>
+                      <div style={{ opacity: 0.75 }}>rendered</div>
+                      <code>
+                        {documentRendered
+                          ? 'yes — on the page now'
+                          : selected?.enabled === false
+                            ? 'no — the app did not configure it'
+                            : 'no — configured, not mounted right now'}
+                      </code>
                     </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ opacity: 0.75 }}>resolved (kernel)</div>
+                      <code>
+                        {!explainPath
+                          ? 'not bound — no kernel path, nothing to resolve'
+                          : !kernelAvailable
+                            ? `bound to ${explainPath} — no runtime attached, unresolved`
+                            : explainState.status === 'ready'
+                              ? `resolved via ${explainPath}`
+                              : `bound to ${explainPath} — not resolved yet (Explain)`}
+                      </code>
+                    </div>
+                    {documentEntry.route && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ opacity: 0.75 }}>route</div>
+                        <code>{documentEntry.route}</code>
+                      </div>
+                    )}
                     <div style={{ marginBottom: 8 }}>
                       <div style={{ opacity: 0.75 }}>declares</div>
                       <code>{documentEntry.childIds.length ? documentEntry.childIds.join(', ') : 'no parts below'}</code>

@@ -1,4 +1,5 @@
 import documentJson from './GUI.document.json';
+import { renderNode } from './renderer';
 
 /**
  * The GUI's own declaration of itself: a static, JSON-serializable tree
@@ -15,6 +16,14 @@ import documentJson from './GUI.document.json';
  */
 export type GuiDocumentNode = {
   note?: string;
+  /**
+   * Name of the component that implements this part -- content.landing
+   * (CleakerLanding). Resolved through the registry the app hands to
+   * renderGuiDocumentPage; the document never holds the component itself.
+   */
+  component?: string;
+  /** Where a page is served, e.g. "/" (index) or "/users". */
+  route?: string;
   children?: Record<string, GuiDocumentNode>;
 };
 
@@ -27,6 +36,8 @@ export type GuiDocumentEntry = {
   type: string;
   parentId?: string;
   note?: string;
+  component?: string;
+  route?: string;
   /** Ids of the parts the document declares directly under this one. */
   childIds: string[];
 };
@@ -43,6 +54,8 @@ export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocument
       type: key,
       parentId,
       note: node.note,
+      component: node.component,
+      route: node.route,
       childIds: childKeys.map((k) => `${id}.${k}`),
     });
     childKeys.forEach((k) => walk(k, node.children![k], id));
@@ -56,4 +69,41 @@ export function findGuiDocumentEntry(
   doc: GuiDocument = GUI_DOCUMENT
 ): GuiDocumentEntry | null {
   return flattenGuiDocument(doc).find((e) => e.id === id) ?? null;
+}
+
+/**
+ * Renders a page the document declares, through the SAME renderer mount(spec)
+ * uses (renderNode): the document entry becomes a spec node
+ * `{ type: <component>, props }`, `type` is resolved through `registry`, and
+ * the renderer hands the component its `data-gui-node-id` (the document
+ * path) and `data-gui-component`. No second mounting mechanism: what differs
+ * from a hand-written <Route element> is only where the "what renders here"
+ * decision comes from -- the document, not the JSX.
+ *
+ * Returns null (and warns) when the id isn't declared, has no `component`, or
+ * the registry doesn't know it, rather than rendering something else.
+ */
+export function renderGuiDocumentPage(
+  id: string,
+  options: {
+    React: any;
+    registry: Record<string, any>;
+    props?: Record<string, any>;
+    doc?: GuiDocument;
+  }
+): any {
+  const entry = findGuiDocumentEntry(id, options.doc);
+  if (!entry?.component || !options.registry[entry.component]) {
+    // eslint-disable-next-line no-console
+    console.warn(`[GUI document] cannot render "${id}": ${!entry ? 'not declared' : !entry.component ? 'no component declared' : `no "${entry.component}" in the registry`}.`);
+    return null;
+  }
+  return renderNode(
+    {
+      type: entry.component,
+      props: { ...(options.props ?? {}), 'data-gui-node-id': entry.id },
+      provenance: { source: 'document', documentPath: entry.id, note: entry.note },
+    },
+    { React: options.React, registry: options.registry }
+  );
 }

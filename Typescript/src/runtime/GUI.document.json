@@ -5,14 +5,33 @@
       "bars": {
         "note": "The edge bars around the content area. All five are part of the document; which ones are on is resolved at runtime from what the app configures.",
         "children": {
-          "top": { "note": "Top bar." },
-          "sticky": { "note": "Sticky options strip under the top bar." },
-          "left": { "note": "Left sidebar." },
-          "right": { "note": "Right sidebar." },
-          "footer": { "note": "Footer bar." }
+          "top": {
+            "note": "Top bar."
+          },
+          "sticky": {
+            "note": "Sticky options strip under the top bar."
+          },
+          "left": {
+            "note": "Left sidebar."
+          },
+          "right": {
+            "note": "Right sidebar."
+          },
+          "footer": {
+            "note": "Footer bar."
+          }
         }
       },
-      "content": { "note": "Where the current page renders." }
+      "content": {
+        "note": "Where the current page renders. Each child is a page: `component` names the React component that implements it (looked up in the registry the app passes to renderGuiDocumentPage), `route` is where it is served.",
+        "children": {
+          "landing": {
+            "component": "CleakerLanding",
+            "route": "/",
+            "note": "Landing: the .me QR and the sign-in / register / recover forms. Behavior (forms, session, Beatle) stays in the component; the document only says the page exists, where it lives and what implements it."
+          }
+        }
+      }
     }
   }
 }
