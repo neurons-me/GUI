@@ -9,7 +9,7 @@ import { alpha, getContrastRatio } from '@mui/material/styles';
 import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
-import { findGuiDocumentEntry } from './guiDocument';
+import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -36,7 +36,12 @@ type TreeEntry = {
    */
   rendered: boolean;
 };
-type TreeView = { path: TreeEntry[]; children: TreeEntry[] };
+type TreeView = {
+  path: TreeEntry[];
+  children: TreeEntry[];
+  /** The selected node's siblings (itself included), in tree order. */
+  siblings: TreeEntry[];
+};
 const TREE_CHILDREN_LIMIT = 60;
 const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
 
@@ -108,14 +113,74 @@ function readTreeView(selectedId: string | null): TreeView | null {
 
   // Declared nodes first (registry order), then detected ones (DOM order).
   const universe = [...Object.keys(records), ...elements.keys()].filter((id, i, all) => all.indexOf(id) === i);
-  const children = universe.filter((id) => id !== selectedId && parentOf(id) === selectedId).map(entryFor);
-  return { path, children };
+  // Parts the GUI document declares come first, in the document's own order
+  // (so the "tracks" read top, sticky, left, right, footer, not in whatever
+  // order components happened to register); everything else keeps its order.
+  const docOrder = flattenGuiDocument().map((e) => e.id);
+  const orderKey = (id: string) => {
+    const at = docOrder.indexOf(id);
+    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+  };
+  const childrenOf = (id: string) =>
+    universe
+      .filter((c) => c !== id && parentOf(c) === id)
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => orderKey(a.c) - orderKey(b.c) || a.i - b.i)
+      .map(({ c }) => entryFor(c));
+  const children = childrenOf(selectedId);
+  const parentId = path.length > 1 ? path[path.length - 2].id : null;
+  const siblings = parentId ? childrenOf(parentId) : [path[path.length - 1]];
+  return { path, children, siblings };
 }
 
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
-  return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}`;
+  return `${view.path.map(key).join('>')}|${view.children.map(key).join(',')}|${view.siblings.map((e) => e.id).join(',')}`;
+}
+
+// Transport controls for walking the tree, record-player style: skip to the
+// start (root), back (parent), previous/next track (sibling), play (child).
+function DeckButton({
+  label,
+  title,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 24,
+        padding: 0,
+        border: 'none',
+        borderRadius: 999,
+        background: 'transparent',
+        color: 'inherit',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.3 : 1,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
+        {children}
+      </svg>
+    </button>
+  );
 }
 
 type LayoutInfo = {
@@ -960,33 +1025,6 @@ export function RuntimeInspector({
     return host;
   }, [selectedNodeId]);
 
-  const selectParentNode = React.useCallback(() => {
-    const host = getSelectedHostElement();
-    if (!host) return;
-    let cursor: HTMLElement | null = host.parentElement;
-    while (cursor) {
-      if (cursor.hasAttribute('data-gui-node-id')) {
-        selectHostElement(cursor, cursor);
-        return;
-      }
-      cursor = cursor.parentElement;
-    }
-  }, [getSelectedHostElement, selectHostElement]);
-
-  const selectTopmostNode = React.useCallback(() => {
-    const host = getSelectedHostElement();
-    if (!host) return;
-    let cursor: HTMLElement | null = host;
-    let topMost: HTMLElement | null = host;
-    while (cursor) {
-      if (cursor.hasAttribute('data-gui-node-id')) {
-        topMost = cursor;
-      }
-      cursor = cursor.parentElement;
-    }
-    if (topMost) selectHostElement(topMost, topMost);
-  }, [getSelectedHostElement, selectHostElement]);
-
   const findNearestChildNode = React.useCallback((root: HTMLElement) => {
     const queue: HTMLElement[] = Array.from(root.children) as HTMLElement[];
     while (queue.length) {
@@ -997,14 +1035,6 @@ export function RuntimeInspector({
     }
     return null;
   }, []);
-
-  const selectChildNode = React.useCallback(() => {
-    const host = getSelectedHostElement();
-    if (!host) return;
-    const child = findNearestChildNode(host);
-    if (!child) return;
-    selectHostElement(child, child);
-  }, [findNearestChildNode, getSelectedHostElement, selectHostElement]);
 
   const open = inspectorEnabled && !!selectedNodeId;
 
@@ -1272,6 +1302,12 @@ export function RuntimeInspector({
       [${TREE_HOVER_ATTR}] {
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
         outline-offset: -2px !important;
+      }
+      .gui-inspector-deck button:not(:disabled):hover {
+        background: color-mix(in srgb, currentColor 14%, transparent);
+      }
+      .gui-inspector-deck button:not(:disabled):active {
+        background: color-mix(in srgb, currentColor 24%, transparent);
       }
       .gui-grid-overlay-active [data-gui-node-id] {
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
@@ -1608,32 +1644,6 @@ export function RuntimeInspector({
         ? 'JSON after runtime resolution'
         : 'Spec props vs resolved props';
 
-  const shortcutKeyStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontSize: 10,
-    letterSpacing: '0.04em',
-    textTransform: 'uppercase',
-    color: ui.fgMuted,
-  };
-  const keycapStyle: React.CSSProperties = {
-    border: `1px solid ${ui.lineStrong}`,
-    borderRadius: 6,
-    padding: '2px 6px',
-    fontSize: 10,
-    background: ui.fillSoft,
-    color: ui.fg,
-  };
-  const shortcutButtonStyle: React.CSSProperties = {
-    border: `1px solid ${ui.lineStrong}`,
-    background: 'transparent',
-    color: ui.fg,
-    borderRadius: 6,
-    padding: '4px 8px',
-    cursor: 'pointer',
-    fontSize: 11,
-  };
   const treeButtonStyle: React.CSSProperties = {
     border: `1px solid ${ui.lineStrong}`,
     background: 'transparent',
@@ -1644,6 +1654,20 @@ export function RuntimeInspector({
     fontSize: 11,
     fontFamily: 'inherit',
   };
+  const deck = React.useMemo(() => {
+    if (!treeView) return null;
+    const { path, children, siblings } = treeView;
+    const at = siblings.findIndex((e) => e.id === selectedNodeId);
+    return {
+      top: path.length > 1 ? path[0] : null,
+      parent: path.length > 1 ? path[path.length - 2] : null,
+      prev: at > 0 ? siblings[at - 1] : null,
+      next: at >= 0 && at < siblings.length - 1 ? siblings[at + 1] : null,
+      child: children[0] ?? null,
+      pos: at >= 0 && siblings.length > 1 ? `${at + 1}/${siblings.length}` : null,
+    };
+  }, [treeView, selectedNodeId]);
+
   // Two different reasons a declared part isn't on the page, kept apart:
   //  off         -- the app didn't configure it (a bar it wasn't given)
   //  not mounted -- configured, but nothing is rendering it right now
@@ -1821,7 +1845,46 @@ export function RuntimeInspector({
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
             {treeView && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>TREE</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                  <div style={{ opacity: 0.75, fontWeight: 700 }}>TREE</div>
+                  <div
+                    className="gui-inspector-deck"
+                    role="group"
+                    aria-label="Walk the tree"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      padding: '2px 4px',
+                      borderRadius: 999,
+                      border: `1px solid ${ui.lineStrong}`,
+                      background: ui.fillFaint,
+                      color: ui.fg,
+                    }}
+                  >
+                    <DeckButton label="Topmost" title="Topmost — jump to the root (Alt + click on the page)" disabled={!deck?.top} onClick={() => deck?.top && selectTreeNode(deck.top)}>
+                      <path d="M6 5v14" fill="none" />
+                      <path d="M19 6v12L9 12z" />
+                    </DeckButton>
+                    <DeckButton label="Parent" title="Parent — one level up (Shift + click on the page)" disabled={!deck?.parent} onClick={() => deck?.parent && selectTreeNode(deck.parent)}>
+                      <path d="M17 6v12L7 12z" />
+                    </DeckButton>
+                    <span style={{ width: 1, height: 14, background: ui.line, margin: '0 3px' }} />
+                    <DeckButton label="Previous sibling" title="Previous sibling" disabled={!deck?.prev} onClick={() => deck?.prev && selectTreeNode(deck.prev)}>
+                      <path d="M15 6l-6 6 6 6" fill="none" />
+                    </DeckButton>
+                    <span style={{ minWidth: 30, textAlign: 'center', fontSize: 10, fontVariantNumeric: 'tabular-nums', opacity: deck?.pos ? 0.85 : 0.35 }} title="Position among siblings">
+                      {deck?.pos ?? '—'}
+                    </span>
+                    <DeckButton label="Next sibling" title="Next sibling" disabled={!deck?.next} onClick={() => deck?.next && selectTreeNode(deck.next)}>
+                      <path d="M9 6l6 6-6 6" fill="none" />
+                    </DeckButton>
+                    <span style={{ width: 1, height: 14, background: ui.line, margin: '0 3px' }} />
+                    <DeckButton label="Child" title="Child — first part below (Ctrl/⌘ + click on the page)" disabled={!deck?.child} onClick={() => deck?.child && selectTreeNode(deck.child)}>
+                      <path d="M8 5v14l11-7z" />
+                    </DeckButton>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginBottom: 8 }}>
                   {treeView.path.map((entry, i) => {
                     const last = i === treeView.path.length - 1;
@@ -1878,6 +1941,9 @@ export function RuntimeInspector({
                     )}
                   </div>
                 )}
+                <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8 }}>
+                  On the page: ⇧ click parent · ⌘/Ctrl click child · ⌥ click topmost
+                </div>
               </div>
             )}
             <div style={{ marginBottom: 14 }}>
@@ -2279,47 +2345,6 @@ export function RuntimeInspector({
                 <code>{selectedMeta.resolvedPath.join(' > ')}</code>
               </div>
             )}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>SHORTCUTS</div>
-              <div style={{ display: 'grid', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>Select parent</div>
-                    <div style={shortcutKeyStyle}>
-                      <span style={keycapStyle}>Shift</span>
-                      <span>+ Click</span>
-                    </div>
-                  </div>
-                  <button type="button" onClick={selectParentNode} style={shortcutButtonStyle}>
-                    Select
-                  </button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>Select child</div>
-                    <div style={shortcutKeyStyle}>
-                      <span style={keycapStyle}>Ctrl/⌘</span>
-                      <span>+ Click</span>
-                    </div>
-                  </div>
-                  <button type="button" onClick={selectChildNode} style={shortcutButtonStyle}>
-                    Select
-                  </button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>Select topmost</div>
-                    <div style={shortcutKeyStyle}>
-                      <span style={keycapStyle}>Alt</span>
-                      <span>+ Click</span>
-                    </div>
-                  </div>
-                  <button type="button" onClick={selectTopmostNode} style={shortcutButtonStyle}>
-                    Select
-                  </button>
-                </div>
-              </div>
-            </div>
             <div style={{ marginBottom: 10 }}>
               <div
                 style={{
