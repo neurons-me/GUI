@@ -43,6 +43,7 @@ import RecoverAccount from './RecoverAccount';
 import MainServerView from '@/gui/All.This/netget/MainServer/MainServerView';
 import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
 import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
+import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 
 interface DirectoryUser {
   username: string;
@@ -2014,7 +2015,21 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   ];
 
   return (
-    <Layout LeftBar={{ elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements] }}>
+    <Layout
+      LeftBar={{
+        elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],
+        // Same footer slot netget's own NetGetShell (App.jsx) uses for this
+        // exact component -- ThemeLauncher is a real, already-built launcher
+        // (this.gui's own ThemeContext/ThemesCatalog), not something new
+        // built for this page. `useLauncherPopover` degrades to local state
+        // with no provider (see runtime/launcherPopover.tsx's own doc
+        // comment), so it works standalone here with no other launcher
+        // sharing this sidebar's popover slot.
+        footerElements: [
+          { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
+        ],
+      }}
+    >
       <Routes>
         <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
         <Route path="users" element={<CleakerUsersView {...props} />} />
