@@ -14,7 +14,6 @@ import {
   resolveQuery,
   type InspectorQuery,
   type QueryAxis,
-  type QueryPick,
 } from './inspectorQuery';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
@@ -60,9 +59,7 @@ type TreeView = {
   rows: TreeRow[];
 };
 type QueryView = {
-  /** Everything the relation yields, before picking. */
-  candidates: TreeEntry[];
-  /** What the query found: candidates after All / First / Last / Random. */
+  /** What the query found. */
   result: TreeEntry[];
 };
 const TREE_ROW_LIMIT = 80;
@@ -193,14 +190,13 @@ function readTreeView(
 
 function readQueryView(query: InspectorQuery | null, model = buildTreeModel()): QueryView | null {
   if (!query) return null;
-  const { candidates, result } = resolveQuery(model, query);
-  return { candidates: candidates.map(model.entryFor), result: result.map(model.entryFor) };
+  return { result: resolveQuery(model, query).map(model.entryFor) };
 }
 
 function queryViewSignature(view: QueryView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.rendered}`;
-  return `${view.candidates.length}|${view.result.map(key).join(',')}`;
+  return view.result.map(key).join(',');
 }
 
 function treeSignature(view: TreeView | null): string {
@@ -1177,7 +1173,7 @@ export function RuntimeInspector({
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
-  // QUERY (from where, over which relation, how to pick) is state of its own;
+  // QUERY (from where, over which relation) is state of its own;
   // RESULT is derived from it; FOCUS is the store's selectedNodeId. Choosing
   // a result to look at changes the focus and nothing else.
   const [query, setQuery] = React.useState<InspectorQuery | null>(null);
@@ -1323,24 +1319,15 @@ export function RuntimeInspector({
   const runAxis = React.useCallback(
     (axis: QueryAxis) => {
       if (!selectedNodeId) return;
-      applyQuery({ axis, originId: selectedNodeId, pick: 'all', seed: Math.random() });
+      applyQuery({ axis, originId: selectedNodeId });
     },
     [selectedNodeId, applyQuery]
-  );
-  const changePick = React.useCallback(
-    (pick: QueryPick) => {
-      if (!query) return;
-      // Random draws a fresh seed on every Random action (including choosing
-      // it again); it is fixed from then on, so re-renders never change it.
-      applyQuery({ ...query, pick, seed: pick === 'random' ? Math.random() : query.seed });
-    },
-    [query, applyQuery]
   );
   // Reducing the set to one is its own action: the query becomes "just this
   // node". Clicking a result to look at it never does this.
   const keepOnlyFocus = React.useCallback(() => {
     if (!selectedNodeId) return;
-    applyQuery({ axis: 'self', originId: selectedNodeId, pick: 'all', seed: 0 });
+    applyQuery({ axis: 'self', originId: selectedNodeId });
   }, [selectedNodeId, applyQuery]);
 
   // Arrow keys walk the diagram like any tree widget: up/down through the
@@ -2109,26 +2096,10 @@ export function RuntimeInspector({
                       { value: 'siblings', label: '↔ siblings', hint: 'The other nodes under the same parent (never the focus itself)' },
                     ]}
                   />
-                  <Seg
-                    label="Pick from what was found"
-                    value={query?.axis === 'self' ? null : query?.pick}
-                    onPick={changePick}
-                    disabled={!query || query.axis === 'self'}
-                    options={[
-                      { value: 'all', label: 'all', hint: 'Every node found' },
-                      { value: 'first', label: 'first', hint: 'The first one, in tree order' },
-                      { value: 'last', label: 'last', hint: 'The last one, in tree order' },
-                      { value: 'random', label: 'random', hint: 'One at random, drawn once per click' },
-                    ]}
-                  />
                   {query && queryView && (
                     <>
                       <span style={{ fontSize: 10.5, opacity: 0.7 }} title="Inspector query, not .me path syntax">
-                        {queryView.result.length === 0
-                          ? 'none'
-                          : query.pick === 'all' || query.axis === 'self'
-                            ? `${queryView.result.length} selected`
-                            : `1 of ${queryView.candidates.length}`}
+                        {queryView.result.length === 0 ? 'none' : `${queryView.result.length} selected`}
                       </span>
                       <StepButton
                         label="only"
