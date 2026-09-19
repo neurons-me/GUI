@@ -531,16 +531,20 @@ function BoxModel({
 type HtmlInfo = {
   tag: string;
   id: string | null;
-  /** Classes with a name a person chose. */
+  /** Classes a person of this app chose. */
   classes: string[];
-  /** Generated styling classes (css-1x2y3z, Emotion / styled-components ...). */
-  generatedClasses: number;
+  /**
+   * Classes the UI library itself writes (MuiBox-root, css-1x2y3z, ...). GUI
+   * wraps MUI in its API, but the markup MUI emits still carries them, so they
+   * are shown apart, collapsed, not as the element's own classes.
+   */
+  frameworkClasses: string[];
   attrs: { name: string; value: string }[];
 };
 // Identifying attributes only. `value` is deliberately NOT among them: on a
 // field it can be what someone is typing (a password).
 const HTML_ATTRS = ['name', 'type', 'role', 'aria-label', 'placeholder', 'title', 'for', 'href', 'target', 'alt', 'tabindex', 'disabled', 'checked', 'readonly'];
-const GENERATED_CLASS = /^(css|emotion|jss|sc)-[a-z0-9_-]{4,}$/i;
+const FRAMEWORK_CLASS = /^(Mui[A-Za-z0-9_-]*|css-[a-z0-9_-]+|emotion-[a-z0-9_-]+|jss[0-9-]+|sc-[a-z0-9_-]+)$/;
 
 function readHtml(selectedId: string | null): HtmlInfo | null {
   if (!selectedId) return null;
@@ -557,8 +561,8 @@ function readHtml(selectedId: string | null): HtmlInfo | null {
   return {
     tag: el.tagName.toLowerCase(),
     id: el.id || null,
-    classes: all.filter((c) => !GENERATED_CLASS.test(c)),
-    generatedClasses: all.filter((c) => GENERATED_CLASS.test(c)).length,
+    classes: all.filter((c) => !FRAMEWORK_CLASS.test(c)),
+    frameworkClasses: all.filter((c) => FRAMEWORK_CLASS.test(c)),
     attrs,
   };
 }
@@ -1363,6 +1367,7 @@ export function RuntimeInspector({
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
   const [htmlInfo, setHtmlInfo] = React.useState<HtmlInfo | null>(null);
+  const [showFrameworkClasses, setShowFrameworkClasses] = React.useState(false);
   // Which nodes of the tree diagram are open. The focus and its ancestors are
   // always opened when the focus moves (so its children show); anything else
   // opens and closes only when asked.
@@ -2499,10 +2504,22 @@ export function RuntimeInspector({
                       {htmlInfo.classes.map((c) => (
                         <span key={c} style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillSoft }} title="class">.{c}</span>
                       ))}
-                      {htmlInfo.generatedClasses > 0 && (
-                        <span style={{ opacity: 0.55 }} title="Generated styling classes (css-…), not named by a person">+{htmlInfo.generatedClasses} generated</span>
+                      {htmlInfo.frameworkClasses.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowFrameworkClasses((v) => !v)}
+                          title="Classes the UI library writes (MuiBox-root, css-…) -- an implementation detail, hidden by default. Click to show or hide."
+                          style={{ border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', opacity: 0.55, cursor: 'pointer', padding: '0 2px' }}
+                        >
+                          {showFrameworkClasses ? '− ' : '+'}{htmlInfo.frameworkClasses.length} framework
+                        </button>
                       )}
                     </div>
+                    {showFrameworkClasses && htmlInfo.frameworkClasses.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', marginTop: 4, opacity: 0.55, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 10.5 }}>
+                        {htmlInfo.frameworkClasses.map((c) => <span key={c}>.{c}</span>)}
+                      </div>
+                    )}
                     {htmlInfo.attrs.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 6, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11 }}>
                         {htmlInfo.attrs.map((a) => (
