@@ -1224,7 +1224,7 @@ export function RuntimeInspector({
               justifyContent: 'space-between',
             }}
           >
-            <strong style={{ fontSize: 13 }}>Semantic Inspector</strong>
+            <strong style={{ fontSize: 13 }}>Inspector</strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"

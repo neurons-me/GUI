@@ -211,7 +211,7 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Icon name="build" fontSize="1rem" />
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>Semantic Inspector</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>Inspector</Typography>
               </Box>
               <Typography
                 variant="caption"
