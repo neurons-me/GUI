@@ -281,6 +281,16 @@ type LayoutInfo = {
   position: string;
   // Only present for the layout mode that has something to say.
   tracks?: { label: string; value: string }[];
+  /** Numbers for the box diagram; sides are [top, right, bottom, left], px. */
+  box: {
+    margin: number[];
+    border: number[];
+    padding: number[];
+    /** Content box (what is left after border and padding). */
+    content: { w: number; h: number };
+    /** width/height edits mean the border box when this is true. */
+    borderBox: boolean;
+  };
 };
 
 function boxSides(cs: CSSStyleDeclaration, prop: 'padding' | 'margin'): string {
@@ -298,7 +308,21 @@ function readLayout(selectedId: string | null): LayoutInfo | null {
   if (!host) return null;
   const rect = host.getBoundingClientRect();
   const cs = getComputedStyle(host);
+  const sides = (prefix: 'margin' | 'padding', suffix = '') =>
+    ['Top', 'Right', 'Bottom', 'Left'].map((side) => Math.round(parseFloat((cs as any)[`${prefix}${side}${suffix}`]) || 0));
+  const border = ['Top', 'Right', 'Bottom', 'Left'].map((side) => Math.round(parseFloat((cs as any)[`border${side}Width`]) || 0));
+  const padding = sides('padding');
   const info: LayoutInfo = {
+    box: {
+      margin: sides('margin'),
+      border,
+      padding,
+      content: {
+        w: Math.max(0, Math.round(rect.width) - padding[1] - padding[3] - border[1] - border[3]),
+        h: Math.max(0, Math.round(rect.height) - padding[0] - padding[2] - border[0] - border[2]),
+      },
+      borderBox: cs.boxSizing === 'border-box',
+    },
     x: Math.round(rect.left),
     y: Math.round(rect.top),
     width: Math.round(rect.width),
@@ -328,8 +352,177 @@ function layoutSignature(info: LayoutInfo | null): string {
   return info ? JSON.stringify(info) : '';
 }
 
+// A number that can be typed over: click, type, Enter to apply, Esc to cancel;
+// arrows step it (Shift = 10) and apply as you go.
+function EditableNum({
+  value,
+  onCommit,
+  title,
+  min,
+}: {
+  value: number;
+  onCommit: (next: number) => void;
+  title: string;
+  min?: number;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const clamp = (n: number) => (min == null ? n : Math.max(min, n));
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="gui-num"
+        title={`${title} — click to edit`}
+        onClick={() => {
+          setDraft(String(value));
+          setEditing(true);
+        }}
+        style={{ border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', padding: '0 2px', borderRadius: 4, cursor: 'text' }}
+      >
+        {value}
+      </button>
+    );
+  }
+  const finish = (apply: boolean) => {
+    setEditing(false);
+    const n = Number(draft);
+    if (apply && draft.trim() !== '' && Number.isFinite(n) && n !== value) onCommit(clamp(Math.round(n)));
+  };
+  return (
+    <input
+      autoFocus
+      value={draft}
+      inputMode="numeric"
+      aria-label={title}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') finish(true);
+        else if (e.key === 'Escape') finish(false);
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const step = (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+          const next = clamp((Number(draft) || 0) + step);
+          setDraft(String(next));
+          onCommit(next);
+        }
+      }}
+      style={{ width: `${Math.max(3, draft.length + 1)}ch`, border: '1px solid currentColor', borderRadius: 4, background: 'transparent', color: 'inherit', font: 'inherit', padding: '0 2px', textAlign: 'center', outline: 'none' }}
+    />
+  );
+}
+
+// The few layout facts that are not in the diagram, and only when they are
+// not the default -- a plain block at 0,0 says nothing worth a line.
+function layoutMeta(info: LayoutInfo): string[] {
+  const out: string[] = [];
+  if (info.x || info.y) out.push(`at ${info.x}, ${info.y}`);
+  const t = Object.fromEntries((info.tracks ?? []).map((row) => [row.label, row.value]));
+  if (info.display.includes('flex')) {
+    out.push(`flex ${t.direction ?? 'row'}${t.wrap && t.wrap !== 'nowrap' ? ` ${t.wrap}` : ''}`);
+    if (t.gap && t.gap !== 'normal') out.push(`gap ${t.gap}`);
+  } else if (info.display.includes('grid')) {
+    out.push(`grid ${t.columns ?? ''}`.trim());
+    if (t.rows && t.rows !== 'none') out.push(`rows ${t.rows}`);
+    if (t.gap && t.gap !== 'normal') out.push(`gap ${t.gap}`);
+  } else if (info.display !== 'block') {
+    out.push(info.display);
+  }
+  if (info.position !== 'static') out.push(info.position);
+  return out;
+}
+
+// The box model as a picture: margin around border around padding around the
+// content, each side a number you can edit (a live preview on the element in
+// this tab -- nothing is saved).
+function BoxModel({
+  info,
+  ui,
+  onEdit,
+}: {
+  info: LayoutInfo;
+  ui: any;
+  onEdit: (prop: string, value: number) => void;
+}) {
+  const { margin, border, padding, content } = info.box;
+  const T = 20;
+  const sideNames = ['top', 'right', 'bottom', 'left'] as const;
+  const ring = (
+    kind: 'margin' | 'border' | 'padding',
+    values: number[],
+    tone: { border: string; bg: string; fg: string },
+    editable: boolean,
+    children: React.ReactNode,
+    dashed = false
+  ) => {
+    const cell = (i: number, style: React.CSSProperties) => (
+      <span style={{ position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', width: T, height: T, fontSize: 10, ...style }}>
+        {editable ? (
+          <EditableNum
+            value={values[i]}
+            title={`${kind}-${sideNames[i]}`}
+            min={kind === 'margin' ? undefined : 0}
+            onCommit={(n) => onEdit(`${kind}-${sideNames[i]}`, n)}
+          />
+        ) : (
+          values[i]
+        )}
+      </span>
+    );
+    return (
+      <div
+        style={{
+          position: 'relative',
+          padding: T,
+          borderRadius: 6,
+          border: `1px ${dashed ? 'dashed' : 'solid'} ${tone.border}`,
+          background: tone.bg,
+          color: tone.fg,
+        }}
+      >
+        <span style={{ position: 'absolute', top: 1, left: 4, fontSize: 8, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7 }}>{kind}</span>
+        {cell(0, { top: 0, left: '50%', transform: 'translateX(-50%)' })}
+        {cell(2, { bottom: 0, left: '50%', transform: 'translateX(-50%)' })}
+        {cell(3, { left: 0, top: '50%', transform: 'translateY(-50%)' })}
+        {cell(1, { right: 0, top: '50%', transform: 'translateY(-50%)' })}
+        {children}
+      </div>
+    );
+  };
+  const hasBorder = border.some((n) => n > 0);
+  const contentBox = (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        minHeight: 24,
+        padding: '2px 6px',
+        borderRadius: 4,
+        border: `1px solid ${ui.info.border}`,
+        background: ui.info.bg,
+        color: ui.info.fg,
+        fontSize: 11,
+        fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums',
+        whiteSpace: 'nowrap',
+      }}
+      title={`content box — the element is ${info.width} × ${info.height} with padding and border`}
+    >
+      <EditableNum value={content.w} title="width" min={0} onCommit={(n) => onEdit('width', n)} />
+      <span style={{ opacity: 0.6 }}>×</span>
+      <EditableNum value={content.h} title="height" min={0} onCommit={(n) => onEdit('height', n)} />
+    </div>
+  );
+  const inner = ring('padding', padding, ui.success, true, contentBox);
+  return ring('margin', margin, ui.warning, true, hasBorder ? ring('border', border, ui.neutral, false, inner) : inner, true);
+}
+
 const PANEL_WIDTH_KEY = 'this.gui:inspectorWidth';
-const PANEL_WIDTH_DEFAULT = 380;
+const PANEL_WIDTH_DEFAULT = 440;
 const PANEL_WIDTH_MIN = 280;
 const PANEL_OPEN_CLASS = 'gui-inspector-split';
 
@@ -1210,6 +1403,48 @@ export function RuntimeInspector({
     });
   }, []);
 
+  // Live edits from the box diagram. They write an inline style on the
+  // element in THIS tab, remembering what was there so Reset can put it back.
+  // Nothing is saved and the GUI document is not touched.
+  const originalStyles = React.useRef(new Map<HTMLElement, Map<string, string>>());
+  const [, setEditTick] = React.useState(0);
+  const editLayout = React.useCallback(
+    (prop: string, value: number) => {
+      const el = selectedNodeId ? findTaggedElement(selectedNodeId) : null;
+      if (!el || !Number.isFinite(value)) return;
+      let px = value;
+      const b = layoutInfo?.box;
+      if (b?.borderBox && (prop === 'width' || prop === 'height')) {
+        // The diagram shows the CONTENT box; a border-box element's width is
+        // the whole box, so add padding and border back.
+        px += prop === 'width' ? b.padding[1] + b.padding[3] + b.border[1] + b.border[3] : b.padding[0] + b.padding[2] + b.border[0] + b.border[2];
+      }
+      let saved = originalStyles.current.get(el);
+      if (!saved) {
+        saved = new Map();
+        originalStyles.current.set(el, saved);
+      }
+      if (!saved.has(prop)) saved.set(prop, el.style.getPropertyValue(prop));
+      el.style.setProperty(prop, `${px}px`);
+      setLayoutInfo(readLayout(selectedNodeId));
+      setEditTick((t) => t + 1);
+    },
+    [selectedNodeId, layoutInfo]
+  );
+  const resetLayout = React.useCallback(() => {
+    const el = selectedNodeId ? findTaggedElement(selectedNodeId) : null;
+    const saved = el ? originalStyles.current.get(el) : null;
+    if (!el || !saved) return;
+    saved.forEach((original, prop) => (original ? el.style.setProperty(prop, original) : el.style.removeProperty(prop)));
+    originalStyles.current.delete(el);
+    setLayoutInfo(readLayout(selectedNodeId));
+    setEditTick((t) => t + 1);
+  }, [selectedNodeId]);
+  const layoutEdited = (() => {
+    const el = selectedNodeId ? findTaggedElement(selectedNodeId) : null;
+    return !!el && originalStyles.current.has(el);
+  })();
+
   const treeBoxRef = React.useRef<HTMLDivElement>(null);
   // Keep the focused row in view as the focus moves.
   React.useEffect(() => {
@@ -1453,6 +1688,9 @@ export function RuntimeInspector({
       [${TREE_HOVER_ATTR}] {
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
         outline-offset: -2px !important;
+      }
+      .gui-num:hover {
+        background: color-mix(in srgb, currentColor 18%, transparent) !important;
       }
       [aria-label="Move from the focus"] button:not(:disabled):hover {
         background: color-mix(in srgb, currentColor 20%, transparent) !important;
@@ -1980,6 +2218,7 @@ export function RuntimeInspector({
                   <div style={{ fontSize: 11, opacity: 0.7 }}>level {treeView.path.length - 1}</div>
                 </div>
 
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, marginBottom: 8, alignItems: 'stretch' }}>
                 {/* Where you can go from here, one step at a time:
                           Parent: bars            Root
                     prev  [ focus  3/5 ]  next
@@ -1993,7 +2232,6 @@ export function RuntimeInspector({
                     alignItems: 'center',
                     justifyItems: 'center',
                     gap: '4px 6px',
-                    marginBottom: 8,
                     padding: '6px 8px',
                     borderRadius: 10,
                     border: `1px solid ${ui.line}`,
@@ -2046,6 +2284,66 @@ export function RuntimeInspector({
                   <NavCell dir="down" caption="Child:" entry={treeView.around.child} hint="Child — the first one below (the others are a step sideways)" onGo={selectTreeNode} onHover={hoverTreeNode} />
                   <span />
                 </div>
+
+                {/* The selected node's box, beside where you can go from it. */}
+                <div
+                  style={{
+                    border: `1px solid ${ui.line}`,
+                    borderRadius: 10,
+                    background: ui.fillFaint,
+                    padding: '6px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                    <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>LAYOUT</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {layoutEdited && (
+                        <button
+                          type="button"
+                          onClick={resetLayout}
+                          title="Put the element's own styles back (edits are a live preview in this tab; nothing is saved)"
+                          style={{ ...treeButtonStyle, padding: '1px 7px' }}
+                        >
+                          reset
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={gridEnabled}
+                        onClick={() => setGridEnabled(!gridEnabled)}
+                        title="Outline every tagged element on the page"
+                        style={{
+                          ...treeButtonStyle,
+                          padding: '1px 7px',
+                          background: gridEnabled ? ui.fillActive : 'transparent',
+                          fontWeight: gridEnabled ? 700 : 400,
+                        }}
+                      >
+                        grid {gridEnabled ? 'on' : 'off'}
+                      </button>
+                    </span>
+                  </div>
+                  {layoutInfo ? (
+                    <>
+                      <BoxModel info={layoutInfo} ui={ui} onEdit={editLayout} />
+                      {layoutMeta(layoutInfo).length > 0 && (
+                        <div style={{ fontSize: 10.5, opacity: 0.7, display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
+                          {layoutMeta(layoutInfo).map((line) => (
+                            <span key={line}>{line}</span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ opacity: 0.55, fontSize: 11 }}>Nothing rendered for this node.</div>
+                  )}
+                </div>
+              </div>
 
                 {/* The tree, as a diagram. Arrow keys walk it. */}
                 <div
@@ -2125,52 +2423,6 @@ export function RuntimeInspector({
                 </div>
               </div>
             )}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                <div style={{ opacity: 0.75, fontWeight: 700 }}>LAYOUT</div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={gridEnabled}
-                  onClick={() => setGridEnabled(!gridEnabled)}
-                  title="Outline every tagged element on the page"
-                  style={{
-                    ...treeButtonStyle,
-                    background: gridEnabled ? ui.fillActive : 'transparent',
-                    fontWeight: gridEnabled ? 700 : 400,
-                  }}
-                >
-                  Grid overlay: {gridEnabled ? 'On' : 'Off'}
-                </button>
-              </div>
-              {layoutInfo && (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'max-content 1fr',
-                    columnGap: 12,
-                    rowGap: 2,
-                  }}
-                >
-                  <span style={{ opacity: 0.75 }}>size</span>
-                  <code>{layoutInfo.width} × {layoutInfo.height}</code>
-                  <span style={{ opacity: 0.75 }}>at</span>
-                  <code>{layoutInfo.x}, {layoutInfo.y}</code>
-                  <span style={{ opacity: 0.75 }}>display</span>
-                  <code>{layoutInfo.display} · {layoutInfo.position}</code>
-                  <span style={{ opacity: 0.75 }}>padding</span>
-                  <code>{layoutInfo.padding}</code>
-                  <span style={{ opacity: 0.75 }}>margin</span>
-                  <code>{layoutInfo.margin}</code>
-                  {layoutInfo.tracks?.map((t) => (
-                    <React.Fragment key={t.label}>
-                      <span style={{ opacity: 0.75 }}>{t.label}</span>
-                      <code>{t.value}</code>
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
-            </div>
             <div style={{ marginBottom: 10 }}>
               <div style={{ opacity: 0.75 }}>nodeId</div>
               <code>{selectedNodeId}</code>
