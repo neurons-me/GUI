@@ -45,6 +45,7 @@ import MainServerView from '@/gui/All.This/netget/MainServer/MainServerView';
 import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
 import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
+import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 
 interface DirectoryUser {
   username: string;
@@ -2038,15 +2039,21 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     <Layout
       LeftBar={{
         elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],
-        // Same footer slot netget's own NetGetShell (App.jsx) uses for this
-        // exact component -- ThemeLauncher is a real, already-built launcher
-        // (this.gui's own ThemeContext/ThemesCatalog), not something new
-        // built for this page. `useLauncherPopover` degrades to local state
-        // with no provider (see runtime/launcherPopover.tsx's own doc
-        // comment), so it works standalone here with no other launcher
-        // sharing this sidebar's popover slot.
+        // Same footer slot netget's own NetGetShell (App.jsx) uses for both
+        // of these exact components -- ThemeLauncher and DevToolsLauncher
+        // are real, already-built launchers (this.gui's own ThemeContext/
+        // ThemesCatalog, and the Semantic Inspector's on/off toggle),
+        // nothing new built for this page. `useLauncherPopover` degrades to
+        // local state with no provider (see runtime/launcherPopover.tsx's
+        // own doc comment), so both work standalone here, coordinating with
+        // each other the same way they already do in NetGetShell.
+        // DevToolsLauncher itself renders nothing (useOptionalSelection()
+        // returns null) unless the app's own mount() call actually
+        // requested the inspector infrastructure -- see main.jsx's own
+        // devtools option.
         footerElements: [
           { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
+          { type: 'action', props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
         ],
       }}
     >
