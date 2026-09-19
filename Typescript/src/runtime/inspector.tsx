@@ -11,6 +11,7 @@ import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
 import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
 import {
+  neighbours,
   resolveQuery,
   type InspectorQuery,
   type QueryAxis,
@@ -55,6 +56,8 @@ type TreeRow =
 type TreeView = {
   /** Root -> focus. */
   path: TreeEntry[];
+  /** Sideways from the focus: the sibling before / after, and its position. */
+  side: { prev: TreeEntry | null; next: TreeEntry | null; at: number; total: number };
   /** The tree as a diagram: the root, and whatever is expanded below it. */
   rows: TreeRow[];
 };
@@ -185,7 +188,17 @@ function readTreeView(
     }
   };
   walk(path[0].id, 0, [], true);
-  return { path, rows };
+  const nb = neighbours(model, selectedId);
+  return {
+    path,
+    rows,
+    side: {
+      prev: nb.prev ? model.entryFor(nb.prev) : null,
+      next: nb.next ? model.entryFor(nb.next) : null,
+      at: nb.at,
+      total: nb.total,
+    },
+  };
 }
 
 function readQueryView(query: InspectorQuery | null, model = buildTreeModel()): QueryView | null {
@@ -203,7 +216,7 @@ function treeSignature(view: TreeView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
   const rowKey = (r: TreeRow) => (r.kind === 'node' ? `${key(r.entry)}|${r.prefix}|${r.hasChildren}|${r.open}` : `${r.id}|${r.count}`);
-  return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}`;
+  return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}#${view.side.prev?.id}|${view.side.next?.id}|${view.side.at}/${view.side.total}`;
 }
 
 // One labelled move through the tree. The word is the point: direction is
@@ -272,7 +285,7 @@ function Seg<T extends string>({
 }: {
   label: string;
   value: T | null | undefined;
-  options: { value: T; label: string; hint: string }[];
+  options: { value: T; label: string; hint: string; disabled?: boolean }[];
   onPick: (value: T) => void;
   disabled?: boolean;
 }) {
@@ -293,7 +306,7 @@ function Seg<T extends string>({
           key={opt.value}
           type="button"
           title={opt.hint}
-          disabled={disabled}
+          disabled={disabled || opt.disabled}
           aria-pressed={value === opt.value}
           onClick={() => onPick(opt.value)}
           style={{
@@ -306,7 +319,8 @@ function Seg<T extends string>({
             fontSize: 10.5,
             lineHeight: '17px',
             fontFamily: 'inherit',
-            cursor: disabled ? 'default' : 'pointer',
+            cursor: disabled || opt.disabled ? 'default' : 'pointer',
+            opacity: opt.disabled ? 0.35 : 1,
           }}
         >
           {opt.label}
@@ -2093,9 +2107,24 @@ export function RuntimeInspector({
                     options={[
                       { value: 'parent', label: '↑ parent', hint: 'The node directly above the focus' },
                       { value: 'children', label: '↓ children', hint: 'Every node directly below the focus' },
-                      { value: 'siblings', label: '↔ siblings', hint: 'The other nodes under the same parent (never the focus itself)' },
                     ]}
                   />
+                  {/* Sideways is a move of the focus, one sibling at a time. */}
+                  <Seg
+                    label="Move sideways"
+                    value={null}
+                    onPick={(dir: 'prev' | 'next') => {
+                      const target = treeView.side[dir];
+                      if (target) selectTreeNode(target);
+                    }}
+                    options={[
+                      { value: 'prev', label: '←', hint: 'Previous sibling — same level, before this one', disabled: !treeView.side.prev },
+                      { value: 'next', label: '→', hint: 'Next sibling — same level, after this one', disabled: !treeView.side.next },
+                    ]}
+                  />
+                  <span style={{ fontSize: 10.5, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }} title="Position among its siblings">
+                    {treeView.side.total > 1 ? `${treeView.side.at + 1}/${treeView.side.total}` : '1/1'}
+                  </span>
                   {query && queryView && (
                     <>
                       <span style={{ fontSize: 10.5, opacity: 0.7 }} title="Inspector query, not .me path syntax">

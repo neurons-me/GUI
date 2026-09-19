@@ -1,8 +1,8 @@
 /**
  * The Inspector's selection model. Three things, kept apart:
  *
- *  - QUERY  -- from which node, over which relation (parent / children /
- *              siblings). The selection is everything that relation yields.
+ *  - QUERY  -- from which node, over which relation (parent / children). The
+ *              selection is everything that relation yields.
  *  - RESULT -- the set of nodes found.
  *  - FOCUS  -- the one node whose detail is on screen, inside that set
  *              (it lives in the selection store as `selectedNodeId`, not here).
@@ -17,7 +17,7 @@
  * relation found. Removed: with the tree diagram on screen, choosing a node
  * is a click, and the extra control only added noise.)
  */
-export type QueryAxis = 'parent' | 'children' | 'siblings' | 'self';
+export type QueryAxis = 'parent' | 'children' | 'self';
 
 export type InspectorQuery = {
   axis: QueryAxis;
@@ -43,13 +43,22 @@ export function relatedIds(model: RelationModel, originId: string, axis: QueryAx
     }
     case 'children':
       return model.childrenOf(originId).filter((id) => id !== originId);
-    case 'siblings': {
-      const parent = model.parentOf(originId);
-      // A node without a parent has no siblings. Siblings never include the
-      // node itself.
-      return parent ? model.childrenOf(parent).filter((id) => id !== originId) : [];
-    }
   }
+}
+
+/**
+ * Moving sideways is a move of the FOCUS, not a query: the sibling before and
+ * the one after, in the model's order, and where this node sits among them.
+ * A node without a parent has no siblings (total 1, nowhere to go).
+ */
+export function neighbours(
+  model: RelationModel,
+  id: string
+): { prev: string | null; next: string | null; at: number; total: number } {
+  const parent = model.parentOf(id);
+  const all = parent ? model.childrenOf(parent) : [id];
+  const at = Math.max(0, all.indexOf(id));
+  return { prev: at > 0 ? all[at - 1] : null, next: at < all.length - 1 ? all[at + 1] : null, at, total: all.length };
 }
 
 export function resolveQuery(model: RelationModel, query: InspectorQuery): string[] {
