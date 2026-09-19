@@ -478,7 +478,7 @@ const StickyOptionsTop = ({
   return (
     <>
       {reserveSpace && <div style={spacerStyle} />}
-      <div style={wrapperStyle}>
+      <div style={wrapperStyle} data-gui-node-id="StickyOptions" data-gui-component="StickyOptions">
         <div style={innerWrapStyle}>
           <div style={groupStyle} ref={groupElRef}>
             {items.map((item, i) => renderItem(item, i))}

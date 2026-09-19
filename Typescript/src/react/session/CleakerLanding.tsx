@@ -309,7 +309,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 };
 
 const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
-  useRegisterGuiNode('CleakerLanding', 'CleakerLanding', GUI_ROOT_ID);
+  useRegisterGuiNode('CleakerLanding', 'CleakerLanding', 'Content');
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
   // Separate from `username` above (that one's the sign-in FORM's own
@@ -1038,7 +1038,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
 const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  useRegisterGuiNode('CleakerUsersView', 'CleakerUsersView', GUI_ROOT_ID);
+  useRegisterGuiNode('CleakerUsersView', 'CleakerUsersView', 'Content');
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1069,7 +1069,7 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
 const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  useRegisterGuiNode('CleakerBlockchainView', 'CleakerBlockchainView', GUI_ROOT_ID);
+  useRegisterGuiNode('CleakerBlockchainView', 'CleakerBlockchainView', 'Content');
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
