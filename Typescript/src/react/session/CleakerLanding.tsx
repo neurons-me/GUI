@@ -148,9 +148,26 @@ function deriveNamespaceRootLabel(endpoint: string): string {
 // page is already loaded from, trust window.location's own scheme over a
 // guessed https -- probing a scheme this page didn't actually load over
 // is indistinguishable from the destination being down.
+//
+// Also matches a SUB-identity of the current host (namespace ends with
+// ".<hostname>"), not just an exact match -- this is what beatleExpression
+// resolves to once authenticated (the signed-in identity's OWN
+// semanticNamespace, e.g. "jabellae.local.cleaker"), and that identity's
+// data lives on the exact same origin the page is already on (one monad
+// holds every users.<handle>.* branch under its own root -- see CLAUDE.md's
+// namespaceToKernelPrefix). The old exact-match-only check sent this case
+// down the `https://${namespace}` guess instead, assuming every namespace
+// gets its own separately-resolvable DNS subdomain (true for a real
+// wildcard-DNS SaaS deployment, false here) -- confirmed live:
+// ERR_NAME_NOT_RESOLVED against "jabellae.local.cleaker" the moment Beatle
+// auto-connected to the just-signed-in identity, since no such host was
+// ever registered, only the bare root.
 function cleakerEndpointForNamespace(namespace: string): string {
-  if (typeof window !== 'undefined' && window.location.hostname === namespace) {
-    return window.location.origin;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === namespace || namespace.endsWith(`.${host}`)) {
+      return window.location.origin;
+    }
   }
   return `https://${namespace}`;
 }
