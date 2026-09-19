@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { RightSidebarContext } from '@/gui-internals/Contexts/RightSidebarContext';
 import { useSelection } from './selection';
 import { useRuntimeEnvironment } from './runtimeContext';
@@ -15,6 +16,42 @@ const ADMIN_VIEW_SCOPE_KEY = 'gui.runtime.admin.view.scope.v1';
 const ADMIN_VIEW_SCOPE_SET_EVENT = 'this.gui:adminView:scope:set';
 const ADMIN_VIEW_SCOPE_CHANGED_EVENT = 'this.gui:adminView:scope:changed';
 type AdminScopeMode = 'global' | 'scoped';
+
+const PANEL_WIDTH_KEY = 'this.gui:inspectorWidth';
+const PANEL_WIDTH_DEFAULT = 380;
+const PANEL_WIDTH_MIN = 280;
+const PANEL_OPEN_CLASS = 'gui-inspector-split';
+
+function clampPanelWidth(width: number): number {
+  const max = Math.max(PANEL_WIDTH_MIN, Math.floor(window.innerWidth * 0.7));
+  return Math.min(max, Math.max(PANEL_WIDTH_MIN, Math.round(width)));
+}
+
+function readPanelWidth(): number {
+  try {
+    const raw = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+    if (Number.isFinite(raw) && raw > 0) return clampPanelWidth(raw);
+  } catch {}
+  return PANEL_WIDTH_DEFAULT;
+}
+
+// Split layout, not an overlay: while the panel is open the app is squeezed
+// into the left part of the window so the GUI stays fully visible next to
+// the Inspector instead of being covered by it. The app can't be resized
+// through its own layout (position: fixed sidebars, 100vh shells), so <body>
+// is narrowed and given a transform, which makes it the containing block of
+// every fixed descendant -- they all follow the new width. The panel itself
+// is portaled onto <html>, outside <body>, so it is NOT inside that
+// containing block and keeps docking to the real viewport edge.
+const PANEL_SPLIT_CSS = `
+html.${PANEL_OPEN_CLASS} { overflow: hidden; }
+html.${PANEL_OPEN_CLASS} > body {
+  width: calc(100vw - var(--gui-inspector-width, ${PANEL_WIDTH_DEFAULT}px));
+  height: 100vh;
+  overflow: auto;
+  transform: translateZ(0);
+}
+`;
 
 function readAdminScopeMode(): AdminScopeMode {
   try {
@@ -1067,6 +1104,60 @@ export function RuntimeInspector({
   }, [inspectorEnabled, findNearestChildNode, selectHostElement]);
 
   const open = inspectorEnabled && !!selectedNodeId;
+
+  const [panelWidth, setPanelWidth] = React.useState<number>(() => readPanelWidth());
+  const [resizing, setResizing] = React.useState(false);
+  const [panelFont, setPanelFont] = React.useState<string>('');
+
+  React.useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    setPanelFont(getComputedStyle(document.body).fontFamily);
+    const style = document.createElement('style');
+    style.setAttribute('data-gui-inspector-split', 'true');
+    style.textContent = PANEL_SPLIT_CSS;
+    document.head.appendChild(style);
+    root.classList.add(PANEL_OPEN_CLASS);
+    return () => {
+      root.classList.remove(PANEL_OPEN_CLASS);
+      root.style.removeProperty('--gui-inspector-width');
+      style.remove();
+    };
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    document.documentElement.style.setProperty('--gui-inspector-width', `${panelWidth}px`);
+  }, [open, panelWidth]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onResize = () => setPanelWidth((w) => clampPanelWidth(w));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [open]);
+
+  const startPanelResize = React.useCallback((ev: React.PointerEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    const handle = ev.currentTarget;
+    handle.setPointerCapture(ev.pointerId);
+    setResizing(true);
+    const onMove = (e: PointerEvent) => setPanelWidth(clampPanelWidth(window.innerWidth - e.clientX));
+    const onUp = (e: PointerEvent) => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      try { handle.releasePointerCapture(e.pointerId); } catch {}
+      setResizing(false);
+      setPanelWidth((w) => {
+        try { localStorage.setItem(PANEL_WIDTH_KEY, String(w)); } catch {}
+        return w;
+      });
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  }, []);
   const diffPayload = React.useMemo(
     () => buildPropsDiff(selected?.spec, selected?.resolvedProps),
     [selected?.spec, selected?.resolvedProps]
@@ -1282,24 +1373,49 @@ export function RuntimeInspector({
         </button>
       )}
 
-      {open && (
+      {open && createPortal(
         <aside
           data-gui-inspector-control="true"
           style={{
             position: 'fixed',
             top: 0,
             right: 0,
-            width: 380,
-            maxWidth: '90vw',
+            width: panelWidth,
             height: '100vh',
             zIndex: 1999,
             background: ui.bg,
             color: ui.fg,
+            fontFamily: panelFont || undefined,
             borderLeft: `1px solid ${ui.line}`,
             display: 'flex',
             flexDirection: 'column',
+            userSelect: resizing ? 'none' : undefined,
           }}
         >
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize inspector"
+            title="Drag to resize"
+            data-gui-inspector-control="true"
+            onPointerDown={startPanelResize}
+            onDoubleClick={() => {
+              setPanelWidth(PANEL_WIDTH_DEFAULT);
+              try { localStorage.removeItem(PANEL_WIDTH_KEY); } catch {}
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: -3,
+              width: 7,
+              height: '100%',
+              cursor: 'col-resize',
+              zIndex: 1,
+              background: resizing ? ui.accent : 'transparent',
+              opacity: resizing ? 0.5 : 1,
+              touchAction: 'none',
+            }}
+          />
           <header
             style={{
               padding: '12px 14px',
@@ -1780,7 +1896,8 @@ export function RuntimeInspector({
               </div>
             )}
           </div>
-        </aside>
+        </aside>,
+        document.documentElement
       )}
     </>
   );
