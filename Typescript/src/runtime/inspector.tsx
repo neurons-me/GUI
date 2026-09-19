@@ -1221,6 +1221,13 @@ export function RuntimeInspector({
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
         outline-offset: -1px;
       }
+      /* Controls draw their own border in (about) the accent color at the
+         very same edge, so an inset outline disappears into it. Push the
+         outline out past the border and dash it so the two read apart. */
+      .gui-grid-overlay-active :is(button, a, input, textarea, select, [role="button"], .MuiFormControl-root)[data-gui-node-id] {
+        outline: 1px dashed color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 70%, transparent);
+        outline-offset: 3px;
+      }
     `;
     document.head.appendChild(style);
     return () => {

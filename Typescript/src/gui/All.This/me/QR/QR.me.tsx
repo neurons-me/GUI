@@ -460,6 +460,32 @@ export default function QRme({
       : `radial-gradient(circle at 28% 24%, ${theme.palette.primary.main}18, ${theme.palette.section.default} 58%, ${theme.palette.background.paper})`;
   const showAvatarLabelOverlay = !isTopbar && showAvatarLabel && !avatarSrc;
 
+  // The dot and the namespace text are SVG shapes, and browsers don't paint
+  // `outline` on SVG children -- so the grid overlay / Inspector (which work
+  // by tagging real DOM boxes) never saw them. Measure the text's own box and
+  // mirror it (plus the dot's) as transparent, pointer-events:none HTML boxes
+  // carrying the node ids. Purely a hit/outline target: no visual of its own.
+  const perimeterTextRef = React.useRef<SVGTextElement>(null);
+  const [perimeterTextBox, setPerimeterTextBox] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  React.useLayoutEffect(() => {
+    if (!showPerimeterLabel) {
+      setPerimeterTextBox(null);
+      return;
+    }
+    const el = perimeterTextRef.current;
+    if (!el || typeof el.getBBox !== 'function') return;
+    try {
+      const b = el.getBBox();
+      setPerimeterTextBox((prev) =>
+        prev && prev.x === b.x && prev.y === b.y && prev.width === b.width && prev.height === b.height
+          ? prev
+          : { x: b.x, y: b.y, width: b.width, height: b.height }
+      );
+    } catch {
+      // getBBox throws on a non-rendered element -- nothing to mirror yet.
+    }
+  }, [showPerimeterLabel, perimeterLabel, perimeterRootLabel, perimeterFontSize, outerSize]);
+
   const handlePointerEnter = () => {
     if (hoverFlip) setHovered(true);
   };
@@ -510,7 +536,7 @@ export default function QRme({
             />
           </defs>
           <circle cx={statusDotCx} cy={statusDotCy} r={statusDotRadius} fill={statusDotColor} />
-          <text fontFamily="monospace" fontSize={perimeterFontSize}>
+          <text ref={perimeterTextRef} fontFamily="monospace" fontSize={perimeterFontSize}>
             <textPath href={`#${pathId}`} startOffset={perimeterTextStartOffset}>
               {perimeterPrefixText && (
                 perimeterHandleHref ? (
@@ -544,6 +570,40 @@ export default function QRme({
             </textPath>
           </text>
         </svg>
+      )}
+      {showPerimeterLabel && (
+        <>
+          <Box
+            aria-hidden="true"
+            data-gui-node-id={`${rootNodeId}.status`}
+            data-gui-component="QR.me.status"
+            sx={{
+              position: 'absolute',
+              // 2px of air around the dot itself: a 7px box's 1px outline
+              // is otherwise indistinguishable from the dot.
+              left: statusDotCx - statusDotRadius - 2,
+              top: statusDotCy - statusDotRadius - 2,
+              width: statusDotRadius * 2 + 4,
+              height: statusDotRadius * 2 + 4,
+              pointerEvents: 'none',
+            }}
+          />
+          {perimeterTextBox && (
+            <Box
+              aria-hidden="true"
+              data-gui-node-id={`${rootNodeId}.namespace`}
+              data-gui-component="QR.me.namespace"
+              sx={{
+                position: 'absolute',
+                left: perimeterTextBox.x,
+                top: perimeterTextBox.y,
+                width: perimeterTextBox.width,
+                height: perimeterTextBox.height,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </>
       )}
       <Box
         data-gui-node-id={rootNodeId}
