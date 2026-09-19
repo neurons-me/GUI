@@ -51,7 +51,15 @@ interface DirectoryUser {
 
 export interface CleakerLandingProps {
   sx?: any;
-  /** Same meaning as MeLauncher's — e.g. "http://local.cleaker". */
+  /**
+   * The real namespace root this component binds to, e.g.
+   * "http://local.cleaker". Optional in the type for flexibility, but
+   * effectively required: omitting it throws CLEAKER_ENDPOINT_REQUIRED at
+   * render time rather than guessing from window.location (see
+   * requireCleakerEndpoint's own doc comment) — this component has no
+   * reliable way to know it's being self-hosted by the origin it should
+   * bind to versus embedded somewhere else entirely.
+   */
   cleakerEndpoint?: string;
   /**
    * Overrides getNetgetMonadOrigin()'s default `${window.location.origin}/
@@ -71,12 +79,31 @@ export interface CleakerLandingProps {
 // No hardcoded root here on purpose — cleaker.me/local.cleaker were never
 // structurally special, just two values `cleakerEndpoint` happened to hold
 // in this session's dev environment (see SetChemistry.findings.md's
-// "generalizes past 2" note). window.location is the one legitimate
-// fallback: a physical fact about where this page is actually running,
-// never a semantic guess about which root "should" be default. Any host
-// this component is served from becomes its own default root, unmodified.
-function defaultCleakerEndpoint(): string {
-  return typeof window !== 'undefined' ? window.location.origin : '';
+// "generalizes past 2" note). Every REAL caller today already passes
+// `cleakerEndpoint` explicitly (netget's App.jsx, every Storybook story,
+// every demo pilot) — window.location was never actually load-bearing, it
+// was a silent guess sitting behind an `||` that happened to agree with
+// reality only because this component has so far only ever been mounted
+// as the whole page, self-hosted by the exact origin it names. That
+// coincidence breaks the moment this same component is mounted somewhere
+// that ISN'T the namespace it should bind to — an embedded script on an
+// unrelated third-party page (e.g. inserted into a Wikipedia article) is
+// the clearest case: window.location would name that OTHER site, and this
+// used to silently bind there instead, with no error, no warning, just a
+// wrong namespace resolved with total confidence. Same principle as
+// cleaker's own `confirmedNamespace` fix (binder.ts): never let a guess
+// this consequential stand in for a value the caller can simply be
+// required to supply. `cleakerEndpoint` stays optional in the TS type
+// (existing callers, external consumers) — this is the runtime guard.
+function requireCleakerEndpoint(cleakerEndpoint: string | undefined): string {
+  const explicit = String(cleakerEndpoint || '').trim();
+  if (explicit) return explicit;
+  throw new Error(
+    'CLEAKER_ENDPOINT_REQUIRED: this component needs an explicit `cleakerEndpoint` prop -- ' +
+    'it never guesses one from window.location. Pass the real namespace root it should bind ' +
+    'to (e.g. "http://local.cleaker"), even when this page happens to be self-hosted from ' +
+    'that same origin.'
+  );
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -263,7 +290,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
   // RecoverAccount gets to run its own post-recovery "set a new local
   // password" step.
   const [recoveryComplete, setRecoveryComplete] = useState(false);
-  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   // A person's own explicit override, entered via the QR's edit affordance
   // below -- takes over from deriveNamespaceRootLabel(resolvedEndpoint)'s
   // window.location-guessed default the moment it's set. Exists because
@@ -955,7 +982,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
 const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
@@ -985,7 +1012,7 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
 const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
@@ -1023,7 +1050,7 @@ const URL_VIEW_STATE_COLOR: Record<string, string> = {
 // 'resolving' forever today. That's shown, not hidden: the point is
 // expressing real NRP intent through the real protocol, not faking a result.
 const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) => {
-  const resolvedEndpoint = cleakerEndpoint || defaultCleakerEndpoint();
+  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
     [resolvedEndpoint],
@@ -1931,9 +1958,11 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
   // Same derivation CleakerLandingHome/CleakerUsersView already use for
-  // "which namespace is this page" -- window.location-based, never the
-  // session's own namespace, so signing in or out can't move it.
-  const resolvedEndpoint = props.cleakerEndpoint || defaultCleakerEndpoint();
+  // "which namespace is this page" -- the explicit `cleakerEndpoint` prop,
+  // never the session's own namespace, so signing in or out can't move it,
+  // and never window.location either (see requireCleakerEndpoint's own
+  // doc comment for why that guess was removed).
+  const resolvedEndpoint = requireCleakerEndpoint(props.cleakerEndpoint);
   const namespaceRootLabel = deriveNamespaceRootLabel(resolvedEndpoint);
 
   // A real, verified transport for the sidebar's public read -- seeded
