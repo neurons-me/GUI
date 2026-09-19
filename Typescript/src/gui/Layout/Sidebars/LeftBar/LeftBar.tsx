@@ -32,7 +32,7 @@ const LEFT_SIDEBAR_TOGGLE_PROVENANCE = {
 
 function getSidebarRootPath(nodeId: string): string {
   const normalized = String(nodeId || '').trim();
-  if (!normalized) return 'LeftSidebar';
+  if (!normalized) return 'GUI.bars.left';
   const parts = normalized.split(':');
   if (parts.length > 1) return parts.slice(1).join(':');
   return normalized.replace(/[^\w.-]+/g, '.');
@@ -44,17 +44,18 @@ function buildLeftSidebarElementMeta(
   section: 'elements' | 'footerElements',
   idx: number
 ) {
+  // Same word for the node's type and its path segment: me.GUI.bars.left.link.0
   const componentByType = {
-    link: 'LeftSidebarLink',
-    menu: 'LeftSidebarMenu',
-    action: 'LeftSidebarAction',
+    link: 'link',
+    menu: 'menu',
+    action: 'action',
   } as const;
   const explicitNodeId = el?.props?.['data-gui-node-id'];
   const explicitComponent = el?.props?.['data-gui-component'];
   const rootPath = getSidebarRootPath(rootNodeId);
   const componentName = explicitComponent || componentByType[el.type];
-  const path = `${rootPath}.${section}.${idx}`;
-  const nodeId = explicitNodeId || `${componentName}:${path}`;
+  const path = `${rootPath}.${section === 'footerElements' ? 'footer.' : ''}${el.type}.${idx}`;
+  const nodeId = explicitNodeId || path;
   return { nodeId, path, componentName };
 }
 
@@ -105,7 +106,7 @@ const LeftSidebar = ({
     'data-gui-node-id': adminNodeId,
     'data-gui-component': dataGuiComponent || 'bars.left',
   };
-  const toggleButtonNodeId = `${adminNodeId}.toggleButton`;
+  const toggleButtonNodeId = `${adminNodeId}.toggle`;
   const headerNodeId = `${adminNodeId}.header`;
   const rawHeaderNode = (() => {
     if (!header) return null;
@@ -198,10 +199,10 @@ const LeftSidebar = ({
       : [
           {
             id: adminNodeId,
-            type: dataGuiComponent || 'LeftSidebar',
+            type: dataGuiComponent || 'bars.left',
             path: rootPath,
             spec: {
-              type: dataGuiComponent || 'LeftSidebar',
+              type: dataGuiComponent || 'bars.left',
               props: EMPTY_SYNTHETIC_PROPS,
             },
           },
@@ -209,18 +210,18 @@ const LeftSidebar = ({
     syntheticRecords.push(
       {
         id: headerNodeId,
-        type: 'LeftSidebarHeader',
+        type: 'header',
         path: `${rootPath}.header`,
         parentId: adminNodeId,
-        spec: { type: 'LeftSidebarHeader', props: EMPTY_SYNTHETIC_PROPS },
+        spec: { type: 'header', props: EMPTY_SYNTHETIC_PROPS },
       },
       {
         id: toggleButtonNodeId,
-        type: 'LeftSidebarToggleButton',
-        path: `${rootPath}.header.toggleButton`,
+        type: 'toggle',
+        path: `${rootPath}.header.toggle`,
         parentId: headerNodeId,
         spec: {
-          type: 'LeftSidebarToggleButton',
+          type: 'toggle',
           props: EMPTY_SYNTHETIC_PROPS,
           provenance: LEFT_SIDEBAR_TOGGLE_PROVENANCE,
         },
@@ -312,7 +313,7 @@ const LeftSidebar = ({
         <Box
           component="header"
           data-gui-node-id={headerNodeId}
-          data-gui-component="LeftSidebarHeader"
+          data-gui-component="header"
           sx={{
             flexShrink: 0,
             borderBottom: '1px solid',
@@ -335,7 +336,7 @@ const LeftSidebar = ({
             expanded={view === ('expanded' as any)}
             onToggle={() => setView(view === 'rail' ? 'expanded' : 'rail')}
             data-gui-node-id={toggleButtonNodeId}
-            data-gui-component="LeftSidebarToggleButton"
+            data-gui-component="toggle"
           />
         </Box>
         <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
@@ -376,7 +377,7 @@ const LeftSidebar = ({
         >
           <IconButton
             aria-label="Abrir navegación"
-            data-gui-node-id={`${adminNodeId}.mobileToggle`}
+            data-gui-node-id={`${adminNodeId}.toggle.mobile`}
             onClick={() => setMobileOpen(true)}
             sx={{
               borderRadius: '0 16px 16px 0',
@@ -420,7 +421,7 @@ const LeftSidebar = ({
           <Box
             component="header"
             data-gui-node-id={headerNodeId}
-            data-gui-component="LeftSidebarHeader"
+            data-gui-component="header"
             sx={{
               flexShrink: 0,
               borderBottom: '1px solid',
@@ -442,7 +443,7 @@ const LeftSidebar = ({
               expanded
               onToggle={() => setMobileOpen(false)}
               data-gui-node-id={toggleButtonNodeId}
-              data-gui-component="LeftSidebarToggleButton"
+              data-gui-component="toggle"
             />
           </Box>
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
@@ -495,7 +496,7 @@ const LeftSidebar = ({
       <Box
         component="header"
         data-gui-node-id={headerNodeId}
-        data-gui-component="LeftSidebarHeader"
+        data-gui-component="header"
         sx={{
           flexShrink: 0,
           borderBottom: '1px solid',
@@ -518,7 +519,7 @@ const LeftSidebar = ({
           expanded={view === ('expanded' as any)}
           onToggle={() => setView(view === 'expanded' ? 'rail' : 'expanded')}
           data-gui-node-id={toggleButtonNodeId}
-          data-gui-component="LeftSidebarToggleButton"
+          data-gui-component="toggle"
         />
       </Box>
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
