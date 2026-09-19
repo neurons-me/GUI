@@ -1692,6 +1692,10 @@ export function RuntimeInspector({
         outline: 2px dashed var(--gui-inspector-accent, #3b82f6) !important;
         outline-offset: -2px !important;
       }
+      .gui-crumb:hover {
+        background: color-mix(in srgb, currentColor 16%, transparent) !important;
+        opacity: 1 !important;
+      }
       .gui-num:hover {
         background: color-mix(in srgb, currentColor 18%, transparent) !important;
       }
@@ -2235,14 +2239,59 @@ export function RuntimeInspector({
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
             {treeView && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ opacity: 0.75, fontWeight: 700 }} title="On the page: ⇧ click = parent · ⌘/Ctrl click = child · ⌥ click = topmost">TREE</span>
-                    <span style={{ fontSize: 11, opacity: 0.7 }}>level {treeView.path.length - 1}</span>
+                {/* WHICH NODE this is, as the section's title: TREE › path to the
+                    node (each ancestor a link), then its type. It follows the
+                    focus wherever it goes. */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 4px', minWidth: 0, lineHeight: 1.5 }}>
+                    <span
+                      style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', opacity: 0.6 }}
+                      title="On the page: ⇧ click = parent · ⌘/Ctrl click = child · ⌥ click = topmost"
+                    >
+                      TREE
+                    </span>
+                    {treeView.path.map((entry, i) => {
+                      const last = i === treeView.path.length - 1;
+                      return (
+                        <React.Fragment key={entry.id}>
+                          <span aria-hidden="true" style={{ opacity: 0.4 }}>›</span>
+                          {last ? (
+                            <span
+                              title={entry.id}
+                              style={{ fontSize: 14, fontWeight: 700, padding: '0 8px', borderRadius: 6, background: ui.fillActive, opacity: treeEntryState(entry) ? 0.65 : 1 }}
+                            >
+                              {treeEntryLabel(entry)}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="gui-crumb"
+                              title={`${entry.id} — go to it`}
+                              onClick={() => selectTreeNode(entry)}
+                              onMouseEnter={() => hoverTreeNode(entry)}
+                              onMouseLeave={() => hoverTreeNode(null)}
+                              style={{ border: 'none', background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '0 3px', borderRadius: 4, cursor: 'pointer', opacity: treeEntryState(entry) ? 0.6 : 0.9 }}
+                            >
+                              {entry.label}
+                            </button>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px', marginBottom: 8, fontSize: 11 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, padding: '1px 8px', borderRadius: 999, background: ui.fillSoft }}>
+                    <span style={{ opacity: 0.6 }}>type</span>
+                    <code style={{ fontWeight: 700 }}>{selected?.type ?? (selectedNodeId ? findTaggedElement(selectedNodeId)?.getAttribute('data-gui-component') : null) ?? selectedMeta?.domComponentAttr ?? treeView.path[treeView.path.length - 1].label}</code>
+                  </span>
+                  <span style={{ opacity: 0.6 }}>level {treeView.path.length - 1}</span>
+                  {selectedNodeId !== treeView.path.map((e) => e.label).join('.') && (
+                    <code style={{ opacity: 0.6, minWidth: 0, overflowWrap: 'anywhere' }} title="The node's full id">{selectedNodeId}</code>
+                  )}
                   {/* Two shortcuts the tree itself doesn't give you: the top, and
                       sideways along the current level. */}
-                  <div role="group" aria-label="Move from the focus" style={{ display: 'flex', alignItems: 'center', gap: 4, color: ui.fg }}>
+                  <div role="group" aria-label="Move from the focus" style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 4, marginLeft: 'auto', color: ui.fg }}>
                     <NavCell
                       dir="root"
                       label="Root"
@@ -2377,24 +2426,10 @@ export function RuntimeInspector({
                 </div>
               </div>
             )}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ opacity: 0.75 }}>nodeId</div>
-              <code>{selectedNodeId}</code>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ opacity: 0.75 }}>type</div>
-              <code>{selected?.type ?? selectedMeta?.domComponentAttr ?? 'unknown'}</code>
-            </div>
             {selected?.part && (
               <div style={{ marginBottom: 10 }}>
                 <div style={{ opacity: 0.75 }}>part</div>
                 <code>{selected.part}</code>
-              </div>
-            )}
-            {selected?.parentId && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ opacity: 0.75 }}>parent</div>
-                <code>{selected.parentId}</code>
               </div>
             )}
             {provenance && (
