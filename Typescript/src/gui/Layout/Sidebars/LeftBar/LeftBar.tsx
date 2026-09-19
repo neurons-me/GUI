@@ -100,10 +100,10 @@ const LeftSidebar = ({
   const hasFooterElements =
     Array.isArray(resolvedFooterElements) && resolvedFooterElements.length > 0;
   const initialViewApplied = useRef(false);
-  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.left';
+  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.bars.left';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
-    'data-gui-component': dataGuiComponent || 'left',
+    'data-gui-component': dataGuiComponent || 'bars.left',
   };
   const toggleButtonNodeId = `${adminNodeId}.toggleButton`;
   const headerNodeId = `${adminNodeId}.header`;
