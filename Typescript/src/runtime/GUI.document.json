@@ -29,6 +29,16 @@
             "component": "CleakerLanding",
             "route": "/",
             "note": "Landing: the .me QR and the sign-in / register / recover forms. Behavior (forms, session, Beatle) stays in the component; the document only says the page exists, where it lives and what implements it."
+          },
+          "users": {
+            "component": "CleakerUsersView",
+            "route": "/users",
+            "note": "Public claims directory: who has claimed this namespace."
+          },
+          "blockchain": {
+            "component": "CleakerBlockchainView",
+            "route": "/blockchain",
+            "note": "Everything written to this namespace, as one stream."
           }
         }
       }

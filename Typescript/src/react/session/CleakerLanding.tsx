@@ -28,7 +28,7 @@ import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode } from '@/runtime/selection';
-import { findGuiDocumentEntry, renderGuiDocumentPage } from '@/runtime/guiDocument';
+import { flattenGuiDocument, renderGuiDocumentPage } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -210,13 +210,16 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
 // sharedRootStatus: the shared context's OWN in-flight/settled status, so
 // the QR can wait for that re-verification instead of reporting success
 // the instant Beatle's own (weaker) mesh resolution does.
-type CleakerLandingHomeProps = CleakerLandingProps & {
-  onBeatleNamespaceResolved?: (namespace: string) => void;
-  sharedRootStatus?: CleakerRootStatus;
-  // Handed in by the renderer (renderGuiDocumentPage): the document path
-  // this page was declared at. Defaults keep the component usable on its own.
+// Handed in by the renderer (renderGuiDocumentPage): the document path a page
+// was declared at. Defaults keep each page usable on its own.
+type DocumentPageProps = CleakerLandingProps & {
   'data-gui-node-id'?: string;
   'data-gui-component'?: string;
+};
+
+type CleakerLandingHomeProps = DocumentPageProps & {
+  onBeatleNamespaceResolved?: (namespace: string) => void;
+  sharedRootStatus?: CleakerRootStatus;
 };
 
 // The ONE root of this page's Inspector tree. `GUI` is the same branch name
@@ -1045,8 +1048,8 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 // deliberately separate from endpoint (the API to fetch FROM, netget's own
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
-const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  useRegisterGuiNode('CleakerUsersView', 'CleakerUsersView', 'GUI.content');
+const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.users', 'data-gui-component': nodeComponent = 'CleakerUsersView' }) => {
+  // Declared by the GUI document (GUI.content.users), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1055,15 +1058,15 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 
   return (
     <Box
-      data-gui-node-id="CleakerUsersView"
-      data-gui-component="CleakerUsersView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <UsersTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
         namespaceRootUrl={resolvedEndpoint}
         namespaceLabel={namespaceRootLabel}
-        data-gui-node-id="CleakerUsersView.table"
+        data-gui-node-id={`${nodeId}.table`}
       />
     </Box>
   );
@@ -1076,8 +1079,8 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
 // as one stream today, see Namespace-Is-Context.md §4 for the split this
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
-const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin }) => {
-  useRegisterGuiNode('CleakerBlockchainView', 'CleakerBlockchainView', 'GUI.content');
+const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.blockchain', 'data-gui-component': nodeComponent = 'CleakerBlockchainView' }) => {
+  // Declared by the GUI document (GUI.content.blockchain), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1086,15 +1089,15 @@ const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpo
 
   return (
     <Box
-      data-gui-node-id="CleakerBlockchainView"
-      data-gui-component="CleakerBlockchainView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <BlocksTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
         namespaceRootUrl={resolvedEndpoint}
         namespaceLabel={namespaceRootLabel}
-        data-gui-node-id="CleakerBlockchainView.table"
+        data-gui-node-id={`${nodeId}.table`}
       />
     </Box>
   );
@@ -2105,12 +2108,25 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget', icon: 'router' } },
   ];
 
-  const landingRoute = documentRoute(findGuiDocumentEntry(LANDING_ID)?.route);
-  const landingElement = renderGuiDocumentPage(LANDING_ID, {
-    React,
-    registry: DOCUMENT_PAGES,
-    props: { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status },
-  });
+  // Every page the document declares under GUI.content: what renders and
+  // where it is served both come from the document; the JSX below only keeps
+  // the routes that are not declared there yet (url, keychain, netget).
+  const documentPageRoutes = flattenGuiDocument()
+    .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
+    .map((entry) => {
+      const route = documentRoute(entry.route);
+      const element = renderGuiDocumentPage(entry.id, {
+        React,
+        registry: DOCUMENT_PAGES,
+        props:
+          entry.id === LANDING_ID
+            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status }
+            : props,
+      });
+      return route.index
+        ? <Route key={entry.id} index element={element} />
+        : <Route key={entry.id} path={route.path} element={element} />;
+    });
 
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
@@ -2137,12 +2153,9 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
       >
         <ThemeKernelMirror session={session} />
         <Routes>
-          {/* Declared by the GUI document (GUI.content.landing), rendered
-              through the same renderer mount(spec) uses -- the document
-              decides what renders here and where it is served. */}
-          {landingRoute.index ? <Route index element={landingElement} /> : landingRoute.path ? <Route path={landingRoute.path} element={landingElement} /> : null}
-          <Route path="users" element={<CleakerUsersView {...props} />} />
-          <Route path="blockchain" element={<CleakerBlockchainView {...props} />} />
+          {/* Landing, users, blockchain: declared by the GUI document, rendered
+              through the same renderer mount(spec) uses. */}
+          {documentPageRoutes}
           <Route path="url" element={<CleakerUrlView {...props} />} />
           <Route path="keychain" element={<CleakerKeychainView {...props} />} />
           <Route path="netget" element={<CleakerNetgetView netget={{
@@ -2159,6 +2172,8 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
 // Components the GUI document may name (`component`), by that name.
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   CleakerLanding: CleakerLandingHome,
+  CleakerUsersView,
+  CleakerBlockchainView,
 };
 
 // A document `route` ("/" or "/users") as react-router wants it: the index
