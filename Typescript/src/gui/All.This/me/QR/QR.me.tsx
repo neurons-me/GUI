@@ -1,4 +1,5 @@
 import React from 'react';
+import { getContrastRatio } from '@mui/material/styles';
 import { Avatar, Box, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import { useGuiTheme } from '@/gui-internals/Hooks';
@@ -314,6 +315,12 @@ export default function QRme({
   const qrBg = bg ?? theme.palette.background.paper;
   const qrFg = fg ?? statusColor ?? theme.palette.primary.main;
   const ringAccent = statusColor ?? theme.palette.primary.main;
+  // The wordmark used to be drawn in qrFg -- the very color of the QR's own
+  // modules right under it -- so its strokes merged with the pattern and the
+  // only separation was a faint halo. It takes the theme's text-on-paper
+  // color instead (qrBg is the paper the halo already uses), so the letters
+  // are the one thing in the QR that doesn't share the modules' color.
+  const wordmarkFg = theme.palette.getContrastText(qrBg);
   // A plain online/offline dot at the very start of the perimeter label,
   // replacing the scarab glyph a caller used to prepend to the text
   // itself -- flagged live as no longer needed once Beatle's own visible
@@ -324,13 +331,36 @@ export default function QRme({
   // reflected it. Distinct four-color read (idle/checking/confirmed/
   // error), not just statusColor's two-value fallback -- 'confirmed'
   // needs its own green, not the ring's neutral primary.
-  const statusDotColor = status === 'checking'
-    ? theme.palette.warning.main
-    : status === 'error'
-      ? theme.palette.error.main
-      : status === 'confirmed'
-        ? theme.palette.success.main
-        : theme.palette.text.disabled;
+  //
+  // Everything drawn OUTSIDE the QR frame sits on the page background, so
+  // it has to read against THAT. Several themes' primary is a dark brand
+  // color (Seafoam's #244C4E is ~1.9:1 against its own dark page), and the
+  // root text + idle dot were drawn straight in it -- present in the DOM but
+  // effectively invisible ("falta el icono del status ... y el texto").
+  // `readable` keeps the intended color when it has >= 3:1 against the page
+  // and otherwise steps through lighter fallbacks, ending at the theme's
+  // own text color, so the label always shows.
+  const pageBg = theme.palette.background.default ?? theme.palette.background.paper;
+  const readable = (color: string, ...fallbacks: string[]): string => {
+    for (const candidate of [color, ...fallbacks]) {
+      try {
+        if (getContrastRatio(candidate, pageBg) >= 3) return candidate;
+      } catch {
+        return candidate;
+      }
+    }
+    return theme.palette.text.primary;
+  };
+  const statusDotColor = readable(
+    status === 'checking'
+      ? theme.palette.warning.main
+      : status === 'error'
+        ? theme.palette.error.main
+        : status === 'confirmed'
+          ? theme.palette.success.main
+          : theme.palette.text.disabled,
+    theme.palette.text.secondary,
+  );
   // The handle portion (everything before the root) is its own kind of
   // thing -- an identity, not a connection-status signal -- so it gets
   // its own color rather than either the root's status-driven ringAccent
@@ -341,7 +371,7 @@ export default function QRme({
   // `info` is the theme's own conventional link-blue instead. Same color
   // whether or not `perimeterHandleHref` makes it clickable -- see that
   // prop's own doc comment.
-  const perimeterHandleColor = theme.palette.info.main;
+  const perimeterHandleColor = readable(theme.palette.info.main, theme.palette.info.light);
   // The root namespace (e.g. "local.cleaker") is what actually answers
   // "which namespace is this" -- flagged live to always read bold and to
   // carry the same connection-status color as the ring around it
@@ -507,7 +537,7 @@ export default function QRme({
                 )
               )}
               {perimeterRootText && (
-                <tspan fill={ringAccent} fontWeight={700}>
+                <tspan fill={readable(ringAccent, theme.palette.primary.light)} fontWeight={700}>
                   {perimeterRootText}
                 </tspan>
               )}
@@ -639,7 +669,7 @@ export default function QRme({
               // Widens the glyphs without redrawing the bitmap — cells are
               // wider than tall instead of square. Pushed further (1.5 -> 1.8).
               pixelAspect={1.8}
-              fg={qrFg}
+              fg={wordmarkFg}
               // No backing patch: an opaque patch was a clean geometric cut
               // against the QR's noise — asked for it to just blend instead.
               // Drawing the wordmark directly onto the QR (letting whatever
@@ -662,8 +692,8 @@ export default function QRme({
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 filter: Array.from(
-                  { length: 4 },
-                  (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.5}px ${qrBg})`,
+                  { length: 5 },
+                  (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.7}px ${qrBg})`,
                 ).join(' '),
               }}
               data-gui-node-id="QR.me.wordmark"
