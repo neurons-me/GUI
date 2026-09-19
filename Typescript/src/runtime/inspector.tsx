@@ -4,6 +4,7 @@ import { RightSidebarContext } from '@/gui-internals/Contexts/RightSidebarContex
 import { useSelection } from './selection';
 import { useRuntimeEnvironment } from './runtimeContext';
 import CodeBlock from '@/gui/Molecules/CodeBlock/CodeBlock';
+import { alpha, getContrastRatio } from '@mui/material/styles';
 import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
@@ -604,6 +605,60 @@ export function RuntimeInspector({
   } = useSelection();
   const rightSidebar = React.useContext(RightSidebarContext);
   const theme = useGuiTheme();
+  // Every color in this panel comes from the active theme's palette, so it
+  // follows theme + light/dark switches like the rest of the app. Fallbacks
+  // are the old hard-coded dark-navy values, used only if no palette exists
+  // (a bare mount outside <Theme>).
+  const ui = React.useMemo(() => {
+    const p: any = theme?.palette;
+    const dark = (p?.mode ?? 'dark') === 'dark';
+    const text = p?.text?.primary ?? '#e5e7eb';
+    const tone = (key: string, fallback: string) => {
+      const main = p?.[key]?.main ?? fallback;
+      return {
+        border: alpha(main, 0.45),
+        bg: alpha(main, dark ? 0.16 : 0.1),
+        fg: (dark ? p?.[key]?.light : p?.[key]?.dark) ?? main,
+      };
+    };
+    // Highlight/grid accent: the first theme color that actually reads
+    // against the PAGE background (primary is often a dark brand color that
+    // vanishes on a dark theme -- Seafoam's does). Falls back to whichever
+    // candidate has the best contrast.
+    const pageBg = p?.background?.default ?? p?.background?.paper ?? '#0b1220';
+    const candidates = [p?.primary?.main, p?.primary?.light, p?.secondary?.main, p?.secondary?.light, p?.info?.main].filter(Boolean) as string[];
+    let accent = candidates[0] ?? '#3b82f6';
+    let bestRatio = 0;
+    for (const c of candidates) {
+      let ratio = 0;
+      try { ratio = getContrastRatio(c, pageBg); } catch { continue; }
+      if (ratio >= 3) { accent = c; break; }
+      if (ratio > bestRatio) { bestRatio = ratio; accent = c; }
+    }
+    return {
+      accent,
+      bg: p?.background?.paper ?? '#0b1220',
+      fg: text,
+      fgMuted: p?.text?.secondary ?? 'rgba(229,231,235,0.75)',
+      line: p?.divider ?? alpha(text, 0.12),
+      lineStrong: alpha(text, 0.28),
+      fillFaint: alpha(text, 0.04),
+      fillSoft: alpha(text, 0.07),
+      fillHover: alpha(text, 0.1),
+      fillActive: alpha(text, 0.16),
+      primary: p?.primary?.main ?? '#3b82f6',
+      primaryContrast: p?.primary?.contrastText ?? '#fff',
+      error: tone('error', '#f87171'),
+      warning: tone('warning', '#fbbf24'),
+      info: tone('info', '#60a5fa'),
+      success: tone('success', '#4ade80'),
+      neutral: {
+        border: alpha(text, 0.28),
+        bg: alpha(text, 0.07),
+        fg: p?.text?.secondary ?? '#cbd5e1',
+      },
+    };
+  }, [theme]);
   const codeVariant = theme?.palette?.mode === 'light' ? 'light' : 'dark';
   const [tab, setTab] = React.useState<InspectorTab>('spec');
   const [adminScopeMode, setAdminScopeMode] = React.useState<AdminScopeMode>(() => readAdminScopeMode());
@@ -840,16 +895,17 @@ export function RuntimeInspector({
 
   React.useEffect(() => {
     const styleId = 'gui-inspector-highlight-style';
-    if (document.getElementById(styleId)) return;
+    document.getElementById(styleId)?.remove();
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+      :root { --gui-inspector-accent: ${ui.accent}; }
       .${highlightClass} {
-        outline: 2px solid rgba(59, 130, 246, 0.85);
+        outline: 2px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 85%, transparent);
         outline-offset: 2px;
         box-shadow:
-          0 0 0 2px rgba(59, 130, 246, 0.25),
-          inset 0 0 0 2px rgba(59, 130, 246, 0.4);
+          0 0 0 2px color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 25%, transparent),
+          inset 0 0 0 2px color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 40%, transparent);
         border-radius: 6px;
       }
       .gui-inspector-preview {
@@ -858,10 +914,10 @@ export function RuntimeInspector({
         align-items: center;
         gap: 6px;
         padding: 4px 6px;
-        border: 1px solid rgba(255,255,255,0.18);
+        border: 1px solid var(--palette-divider, ${ui.line});
         border-radius: 8px;
-        background: rgba(255,255,255,0.06);
-        color: #e5e7eb;
+        background: color-mix(in srgb, var(--palette-text-primary, ${ui.fg}) 6%, transparent);
+        color: var(--palette-text-primary, ${ui.fg});
         font-size: 11px;
         cursor: default;
       }
@@ -869,8 +925,8 @@ export function RuntimeInspector({
         position: absolute;
         left: 0;
         top: calc(100% + 6px);
-        background: #0b1220;
-        border: 1px solid rgba(255,255,255,0.2);
+        background: var(--palette-background-paper, ${ui.bg});
+        border: 1px solid var(--palette-divider, ${ui.lineStrong});
         border-radius: 8px;
         padding: 6px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.35);
@@ -894,7 +950,7 @@ export function RuntimeInspector({
         border-radius: 6px;
       }
       .gui-grid-overlay-active [data-gui-node-id] {
-        outline: 1px solid rgba(59, 130, 246, 0.35);
+        outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
         outline-offset: -1px;
       }
     `;
@@ -902,7 +958,7 @@ export function RuntimeInspector({
     return () => {
       if (style.parentNode) style.parentNode.removeChild(style);
     };
-  }, [highlightClass]);
+  }, [highlightClass, ui.accent]);
 
   React.useEffect(() => {
     const clearHighlight = () => {
@@ -1127,9 +1183,9 @@ export function RuntimeInspector({
   }, [explainPath, kernelAvailable, me, provenance]);
 
   const tabButtonStyle = (active: boolean): React.CSSProperties => ({
-    border: '1px solid rgba(255,255,255,0.2)',
-    background: active ? 'rgba(255,255,255,0.14)' : 'transparent',
-    color: '#e5e7eb',
+    border: `1px solid ${ui.lineStrong}`,
+    background: active ? ui.fillActive : 'transparent',
+    color: ui.fg,
     borderRadius: 8,
     padding: '4px 8px',
     cursor: 'pointer',
@@ -1150,20 +1206,20 @@ export function RuntimeInspector({
     fontSize: 10,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
-    color: 'rgba(229, 231, 235, 0.75)',
+    color: ui.fgMuted,
   };
   const keycapStyle: React.CSSProperties = {
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: `1px solid ${ui.lineStrong}`,
     borderRadius: 6,
     padding: '2px 6px',
     fontSize: 10,
-    background: 'rgba(255,255,255,0.06)',
-    color: '#e5e7eb',
+    background: ui.fillSoft,
+    color: ui.fg,
   };
   const shortcutButtonStyle: React.CSSProperties = {
-    border: '1px solid rgba(255,255,255,0.2)',
+    border: `1px solid ${ui.lineStrong}`,
     background: 'transparent',
-    color: '#e5e7eb',
+    color: ui.fg,
     borderRadius: 6,
     padding: '4px 8px',
     cursor: 'pointer',
@@ -1173,29 +1229,29 @@ export function RuntimeInspector({
     if (!explainSummary) return null;
     if (explainSummary.tone === 'redacted') {
       return {
-        border: '1px solid rgba(248, 113, 113, 0.45)',
-        background: 'rgba(127, 29, 29, 0.35)',
-        color: '#fecaca',
+        border: `1px solid ${ui.error.border}`,
+        background: ui.error.bg,
+        color: ui.error.fg,
       };
     }
     if (explainSummary.tone === 'warning') {
       return {
-        border: '1px solid rgba(251, 191, 36, 0.35)',
-        background: 'rgba(120, 53, 15, 0.35)',
-        color: '#fde68a',
+        border: `1px solid ${ui.warning.border}`,
+        background: ui.warning.bg,
+        color: ui.warning.fg,
       };
     }
     if (explainSummary.tone === 'unknown') {
       return {
-        border: '1px solid rgba(148, 163, 184, 0.35)',
-        background: 'rgba(51, 65, 85, 0.35)',
-        color: '#cbd5e1',
+        border: `1px solid ${ui.neutral.border}`,
+        background: ui.neutral.bg,
+        color: ui.neutral.fg,
       };
     }
     return {
-      border: '1px solid rgba(74, 222, 128, 0.3)',
-      background: 'rgba(20, 83, 45, 0.3)',
-      color: '#bbf7d0',
+      border: `1px solid ${ui.success.border}`,
+      background: ui.success.bg,
+      color: ui.success.fg,
     };
   }, [explainSummary]);
 
@@ -1212,9 +1268,9 @@ export function RuntimeInspector({
             right: 16,
             zIndex: 2000,
             borderRadius: 999,
-            border: '1px solid rgba(255,255,255,0.2)',
-            background: inspectorEnabled ? '#0f172a' : '#111827',
-            color: '#fff',
+            border: `1px solid ${ui.lineStrong}`,
+            background: inspectorEnabled ? ui.primary : ui.bg,
+            color: inspectorEnabled ? ui.primaryContrast : ui.fg,
             fontSize: 12,
             padding: '8px 12px',
             cursor: 'pointer',
@@ -1235,9 +1291,9 @@ export function RuntimeInspector({
             maxWidth: '90vw',
             height: '100vh',
             zIndex: 1999,
-            background: '#0b1220',
-            color: '#e5e7eb',
-            borderLeft: '1px solid rgba(255,255,255,0.12)',
+            background: ui.bg,
+            color: ui.fg,
+            borderLeft: `1px solid ${ui.line}`,
             display: 'flex',
             flexDirection: 'column',
           }}
@@ -1245,7 +1301,7 @@ export function RuntimeInspector({
           <header
             style={{
               padding: '12px 14px',
-              borderBottom: '1px solid rgba(255,255,255,0.12)',
+              borderBottom: `1px solid ${ui.line}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -1257,9 +1313,9 @@ export function RuntimeInspector({
                 type="button"
                 onClick={clearSelection}
                 style={{
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: `1px solid ${ui.lineStrong}`,
                   background: 'transparent',
-                  color: '#e5e7eb',
+                  color: ui.fg,
                   borderRadius: 6,
                   padding: '4px 8px',
                   cursor: 'pointer',
@@ -1277,9 +1333,9 @@ export function RuntimeInspector({
                 aria-label="Close inspector"
                 title="Close inspector"
                 style={{
-                  border: '1px solid rgba(255,255,255,0.2)',
+                  border: `1px solid ${ui.lineStrong}`,
                   background: 'transparent',
-                  color: '#e5e7eb',
+                  color: ui.fg,
                   borderRadius: 999,
                   padding: '2px 8px',
                   cursor: 'pointer',
@@ -1333,10 +1389,10 @@ export function RuntimeInspector({
               </div>
               <div
                 style={{
-                  border: '1px solid rgba(255,255,255,0.12)',
+                  border: `1px solid ${ui.line}`,
                   borderRadius: 12,
                   padding: 10,
-                  background: 'rgba(255,255,255,0.03)',
+                  background: ui.fillFaint,
                 }}
               >
                 <div style={{ marginBottom: 8 }}>
@@ -1374,9 +1430,9 @@ export function RuntimeInspector({
                     disabled={explainState.status === 'loading' || !explainPath}
                     title={!explainPath ? describeExplainGap(provenance) : undefined}
                     style={{
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      background: explainState.status === 'loading' ? 'rgba(255,255,255,0.08)' : 'transparent',
-                      color: '#e5e7eb',
+                      border: `1px solid ${ui.lineStrong}`,
+                      background: explainState.status === 'loading' ? ui.fillHover : 'transparent',
+                      color: ui.fg,
                       borderRadius: 8,
                       padding: '6px 10px',
                       cursor: explainState.status === 'loading' ? 'wait' : !explainPath ? 'not-allowed' : 'pointer',
@@ -1396,9 +1452,9 @@ export function RuntimeInspector({
                 {!explainPath && (
                   <div
                     style={{
-                      border: '1px solid rgba(251, 191, 36, 0.25)',
-                      background: 'rgba(120, 53, 15, 0.2)',
-                      color: '#fde68a',
+                      border: `1px solid ${ui.warning.border}`,
+                      background: ui.warning.bg,
+                      color: ui.warning.fg,
                       borderRadius: 10,
                       padding: '8px 10px',
                       fontSize: 11,
@@ -1417,9 +1473,9 @@ export function RuntimeInspector({
                   explainState.error && (
                     <div
                       style={{
-                        border: '1px solid rgba(248, 113, 113, 0.35)',
-                        background: 'rgba(127, 29, 29, 0.25)',
-                        color: '#fecaca',
+                        border: `1px solid ${ui.error.border}`,
+                        background: ui.error.bg,
+                        color: ui.error.fg,
                         borderRadius: 10,
                         padding: '8px 10px',
                         fontSize: 11,
@@ -1445,9 +1501,9 @@ export function RuntimeInspector({
                 {shieldMessage && (
                   <div
                     style={{
-                      border: '1px solid rgba(96, 165, 250, 0.35)',
-                      background: 'rgba(30, 64, 175, 0.2)',
-                      color: '#bfdbfe',
+                      border: `1px solid ${ui.info.border}`,
+                      background: ui.info.bg,
+                      color: ui.info.fg,
                       borderRadius: 10,
                       padding: '8px 10px',
                       fontSize: 11,
@@ -1471,8 +1527,8 @@ export function RuntimeInspector({
                       <div
                         key={metric.label}
                         style={{
-                          border: '1px solid rgba(255,255,255,0.12)',
-                          background: 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${ui.line}`,
+                          background: ui.fillFaint,
                           borderRadius: 10,
                           padding: '8px 10px',
                         }}
@@ -1491,11 +1547,11 @@ export function RuntimeInspector({
                         <div
                           key={`${dependency.path}:${dependency.label}`}
                           style={{
-                            border: '1px solid rgba(255,255,255,0.12)',
+                            border: `1px solid ${ui.line}`,
                             background:
                               dependency.masked
-                                ? 'rgba(127, 29, 29, 0.2)'
-                                : 'rgba(255,255,255,0.03)',
+                                ? ui.error.bg
+                                : ui.fillFaint,
                             borderRadius: 10,
                             padding: '8px 10px',
                           }}
@@ -1525,16 +1581,16 @@ export function RuntimeInspector({
                           style={{
                             border:
                               entry.tone === 'warning'
-                                ? '1px solid rgba(251, 191, 36, 0.35)'
+                                ? `1px solid ${ui.warning.border}`
                                 : entry.tone === 'redacted'
-                                  ? '1px solid rgba(248, 113, 113, 0.35)'
-                                  : '1px solid rgba(255,255,255,0.12)',
+                                  ? `1px solid ${ui.error.border}`
+                                  : `1px solid ${ui.line}`,
                             background:
                               entry.tone === 'warning'
-                                ? 'rgba(120, 53, 15, 0.2)'
+                                ? ui.warning.bg
                                 : entry.tone === 'redacted'
-                                  ? 'rgba(127, 29, 29, 0.2)'
-                                  : 'rgba(255,255,255,0.03)',
+                                  ? ui.error.bg
+                                  : ui.fillFaint,
                             borderRadius: 10,
                             padding: '8px 10px',
                           }}
