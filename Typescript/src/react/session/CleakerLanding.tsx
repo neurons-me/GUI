@@ -215,24 +215,16 @@ type CleakerLandingHomeProps = CleakerLandingProps & {
 };
 
 // The ONE root of this page's Inspector tree. `GUI` is the same branch name
-// writeKernelWindowLocation/writeKernelThemeFacts already use in `.me`
+// writeKernelWindowLocation/writeKernelThemeFacts already write into `.me`
 // (GUI.window.location, GUI.theme.*) -- the tree the Inspector shows and
-// the branch the kernel holds share one name, so "everything hangs under
-// GUI" is literally true of both. Only the ROOT declares a semanticPath:
-// GUI itself is a real branch (its leaves exist). Children stay
-// provenance-less on purpose -- CleakerLanding/CleakerUsersView/... are
-// render containers, not values, and pointing a semanticPath at a path
-// nothing ever wrote would make Explain fail rather than say "not
-// declared." Data-driven nodes (BlocksTable rows etc.) get their own real
-// namespace paths when someone declares them; they hang from GUI in the
-// render tree but their data lives in the namespace, not under GUI.
-// Module-level (stable reference): useRegisterGuiNode has provenance in
-// its effect deps.
+// the kernel branch share one name, so "everything hangs under GUI" is
+// literally true of both. Only the ROOT carries provenance: children are
+// render containers, not values. The provenance itself is real -- the
+// monad's own answer (its /__surface identity + signed claim, via
+// useVerifiedCleakerRoot), not text we wrote about it. Data-driven nodes
+// (BlocksTable rows etc.) hang from GUI in the render tree but their data
+// lives in the namespace, not under GUI.
 const GUI_ROOT_ID = 'GUI';
-const GUI_ROOT_PROVENANCE = {
-  semanticPath: 'GUI',
-  note: 'Root of the GUI engine tree. Mirrors the GUI.* branch of the local .me kernel (window.location, theme).',
-};
 
 const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
 type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
@@ -2017,7 +2009,6 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
 const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
-  useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, GUI_ROOT_PROVENANCE);
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
@@ -2053,6 +2044,30 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
+  // Real provenance for the tree's root: which monad actually answered for
+  // this namespace, straight from its own /__surface payload. `selfSignature`
+  // is only "the claim is internally consistent" (see checkMonadSurfaceClaim)
+  // -- never authority over the namespace. Fields only appear once a probe
+  // confirmed something; before that the root honestly declares only its
+  // own GUI branch.
+  const guiRootProvenance = useMemo(() => {
+    const confirmed = verifiedRoot.status === 'confirmed' && verifiedRoot.monad;
+    return {
+      semanticPath: 'GUI',
+      note: 'Root of the GUI engine tree. GUI.* is the local .me kernel mirror (window.location, theme); the monad below is what this page is actually reading from.',
+      ...(confirmed
+        ? {
+            source: verifiedRoot.transportOrigin,
+            binding: verifiedRoot.monad!.id,
+            monad: verifiedRoot.monad,
+            namespace: namespaceRootLabel,
+            selfSignature: verifiedRoot.signature,
+            gatewayId: verifiedRoot.netget.available ? verifiedRoot.netget.gatewayId : null,
+          }
+        : { verification: verifiedRoot.status }),
+    };
+  }, [verifiedRoot.status, verifiedRoot.monad, verifiedRoot.transportOrigin, verifiedRoot.signature, verifiedRoot.netget.available, verifiedRoot.netget.gatewayId, namespaceRootLabel]);
+  useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, guiRootProvenance);
   const { resolved } = useCleakerRootSidebar(rootSeed.label, verifiedRoot.transportOrigin, session);
 
   // A genuine Beatle "connected" resolution re-verifies that SAME

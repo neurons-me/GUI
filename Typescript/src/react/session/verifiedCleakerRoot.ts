@@ -35,12 +35,17 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
  */
 export type SignatureCheck = 'absent' | 'valid' | 'invalid';
 
+/** Who answered: the monad's own id/name straight out of its /__surface
+ * payload -- never inferred client-side. */
+export type ProbedMonad = { id: string; name: string | null };
+
 export type CleakerRootCheck = {
   /** Required fields (a real monad id, a non-empty capability/resource
    * list) are present -- a real bar past "any JSON object," but nothing
    * more. */
   compatible: boolean;
   signature: SignatureCheck;
+  monad?: ProbedMonad;
 };
 
 /**
@@ -78,15 +83,17 @@ export async function checkMonadSurfaceClaim(rawPayload: unknown): Promise<Cleak
   ];
   const compatible = Boolean(monadId) && capabilities.length > 0;
   if (!compatible) return { compatible: false, signature: 'absent' };
+  const monadName = String(payload.monad?.name || surfaceEntry?.monad?.name || '').trim() || null;
+  const monad: ProbedMonad = { id: monadId, name: monadName };
 
   const claim = payload.cleaker;
   const signature = claim?.signature;
   const publicKeyPem = claim?.publicKey?.key;
   if (!signature?.value || !signature?.message || !publicKeyPem) {
-    return { compatible: true, signature: 'absent' };
+    return { compatible: true, signature: 'absent', monad };
   }
   if (signature.algorithm && signature.algorithm !== 'ed25519') {
-    return { compatible: true, signature: 'invalid' };
+    return { compatible: true, signature: 'invalid', monad };
   }
   try {
     const key = await crypto.subtle.importKey(
@@ -102,13 +109,13 @@ export async function checkMonadSurfaceClaim(rawPayload: unknown): Promise<Cleak
       base64UrlToArrayBuffer(signature.value),
       new TextEncoder().encode(String(signature.message)),
     );
-    return { compatible: true, signature: valid ? 'valid' : 'invalid' };
+    return { compatible: true, signature: valid ? 'valid' : 'invalid', monad };
   } catch {
-    return { compatible: true, signature: 'invalid' };
+    return { compatible: true, signature: 'invalid', monad };
   }
 }
 
-export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | null; signature: SignatureCheck };
+export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | null; signature: SignatureCheck; monad: ProbedMonad | null };
 
 /**
  * Tries the direct-to-Monad contract first (bare `${cleakerEndpoint}/__surface`
@@ -126,7 +133,7 @@ export async function probeCleakerRoot(cleakerEndpoint: string): Promise<Cleaker
   if (direct.monad) {
     const check = await checkMonadSurfaceClaim(direct.endpoint.surface?.raw);
     if (check.compatible && check.signature !== 'invalid') {
-      return { ok: true, via: 'direct', signature: check.signature };
+      return { ok: true, via: 'direct', signature: check.signature, monad: check.monad ?? null };
     }
   }
 
@@ -138,11 +145,11 @@ export async function probeCleakerRoot(cleakerEndpoint: string): Promise<Cleaker
   if (viaNetget.monad) {
     const check = await checkMonadSurfaceClaim(viaNetget.endpoint.surface?.raw);
     if (check.compatible && check.signature !== 'invalid') {
-      return { ok: true, via: 'netget', signature: check.signature };
+      return { ok: true, via: 'netget', signature: check.signature, monad: check.monad ?? null };
     }
   }
 
-  return { ok: false, via: null, signature: 'absent' };
+  return { ok: false, via: null, signature: 'absent', monad: null };
 }
 
 export type NetgetGatewayCheck = { available: boolean; gatewayId: string | null };
@@ -223,6 +230,9 @@ export type VerifiedCleakerRoot = {
    * origin's root, not under the Monad's app-proxy path. */
   cleakerEndpoint: string;
   signature: SignatureCheck;
+  /** The monad that actually answered this root's /__surface, from its own
+   * payload -- null until a probe has confirmed one. */
+  monad: ProbedMonad | null;
   /**
    * Netget's own, independently-checked availability for this SAME
    * confirmed namespace -- never inferred from Monad compatibility above.
@@ -265,6 +275,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
   const [transportOrigin, setTransportOrigin] = React.useState(`${initial.cleakerEndpoint}/apps/netget`);
   const [cleakerEndpoint, setCleakerEndpoint] = React.useState(initial.cleakerEndpoint);
   const [signature, setSignature] = React.useState<SignatureCheck>('absent');
+  const [monad, setMonad] = React.useState<ProbedMonad | null>(null);
   const [netget, setNetget] = React.useState<NetgetGatewayCheck>({ available: false, gatewayId: null });
   const guardRef = React.useRef<GenerationGuard>({ current: 0 });
   const everConfirmedRef = React.useRef(false);
@@ -279,6 +290,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
         setTransportOrigin(result.via === 'direct' ? seed.cleakerEndpoint : `${seed.cleakerEndpoint}/apps/netget`);
         setCleakerEndpoint(seed.cleakerEndpoint);
         setSignature(result.signature);
+        setMonad(result.monad);
         setNetget(netgetCheck);
       } else if (everConfirmedRef.current) {
         // A later promote() that fails must not undo an earlier real
@@ -299,5 +311,5 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { status, transportOrigin, cleakerEndpoint, signature, netget, promote: verify };
+  return { status, transportOrigin, cleakerEndpoint, signature, monad, netget, promote: verify };
 }
