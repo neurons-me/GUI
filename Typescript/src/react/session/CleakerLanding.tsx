@@ -1031,7 +1031,7 @@ const CleakerUsersView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint, 
     <Box
       data-gui-node-id="CleakerUsersView"
       data-gui-component="CleakerUsersView"
-      sx={{ p: 3, width: '100%', maxWidth: 720, boxSizing: 'border-box', ...sx }}
+      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <UsersTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
@@ -1061,7 +1061,7 @@ const CleakerBlockchainView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpo
     <Box
       data-gui-node-id="CleakerBlockchainView"
       data-gui-component="CleakerBlockchainView"
-      sx={{ p: 3, width: '100%', maxWidth: 720, boxSizing: 'border-box', ...sx }}
+      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <BlocksTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
