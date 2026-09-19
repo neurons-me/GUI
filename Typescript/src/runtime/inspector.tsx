@@ -2286,9 +2286,6 @@ export function RuntimeInspector({
                     <code style={{ fontWeight: 700 }}>{selected?.type ?? (selectedNodeId ? findTaggedElement(selectedNodeId)?.getAttribute('data-gui-component') : null) ?? selectedMeta?.domComponentAttr ?? treeView.path[treeView.path.length - 1].label}</code>
                   </span>
                   <span style={{ opacity: 0.6 }}>level {treeView.path.length - 1}</span>
-                  {selectedNodeId !== treeView.path.map((e) => e.label).join('.') && (
-                    <code style={{ opacity: 0.6, minWidth: 0, overflowWrap: 'anywhere' }} title="The node's full id">{selectedNodeId}</code>
-                  )}
                   {/* Two shortcuts the tree itself doesn't give you: the top, and
                       sideways along the current level. */}
                   <div role="group" aria-label="Move from the focus" style={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 4, marginLeft: 'auto', color: ui.fg }}>
@@ -2397,7 +2394,13 @@ export function RuntimeInspector({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>DIMENSIONS</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 8px', minWidth: 0 }}>
+                      <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>DIMENSIONS</span>
+                      {/* Which node these dimensions are of: its full id. */}
+                      <code style={{ fontSize: 11, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }} title="The node these dimensions belong to">
+                        {selectedNodeId}
+                      </code>
+                    </div>
                     {layoutEdited && (
                       <button
                         type="button"
