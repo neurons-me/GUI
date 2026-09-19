@@ -25,7 +25,8 @@ import BlocksTable from '@/gui/All.This/Cleaker/Namespace/Blocks/BlocksTable';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
-import type { SeedSession } from '@/core/session/createSeedSession';
+import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
+import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -255,6 +256,25 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
       {fields.phone && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fields.phone}</Typography>}
     </Box>
   );
+};
+
+// Local mirror only -- same "GUI.*" branch, same reasoning as
+// writeKernelWindowLocation (createSeedSession.ts): a plain instance fact,
+// not a synced/signed write. localStorage (this.gui's own Theme.tsx) stays
+// the real, always-available store, including with no session at all --
+// this only ever ADDS a reflection into the active `me`, on top of that,
+// whenever both a session and a theme choice exist. Renders nothing; pure
+// effect. Not the write-and-subscribe shape LiveOwnProfile uses (that's
+// for a namespace-scoped, signed, cross-device fact -- this is neither).
+const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session }) => {
+  const { themeId, mode } = useThemeContext();
+
+  useEffect(() => {
+    if (!session?.me || !themeId) return;
+    writeKernelThemeFacts(session.me, themeId, mode);
+  }, [session, themeId, mode]);
+
+  return null;
 };
 
 const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking' }) => {
@@ -2030,6 +2050,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
         ],
       }}
     >
+      <ThemeKernelMirror session={session} />
       <Routes>
         <Route index element={<CleakerLandingHome {...props} onBeatleNamespaceResolved={handleBeatleNamespaceResolved} sharedRootStatus={verifiedRoot.status} />} />
         <Route path="users" element={<CleakerUsersView {...props} />} />

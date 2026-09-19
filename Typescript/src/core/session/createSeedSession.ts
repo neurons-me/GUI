@@ -31,6 +31,14 @@ const THIS_ME_SEED_STORAGE_KEY = 'this.me.seed:v1';
  * own returnTo/setupToken handling) that has no business landing in a value
  * this kernel might later disclose.
  *
+ * Lives under GUI.* (not bare `window`) -- same branch this.gui's own
+ * theme facts live under (see writeKernelThemeFacts) -- because this is
+ * specifically "what the GUI engine observes about its own runtime," a
+ * subsystem-scoped branch the same way `profile.*`/`apps.*` already are,
+ * not an unstructured pile of top-level facts each layer invents its own
+ * root branch for. `me` itself still never learns what "GUI" means either
+ * -- same generic path-string mechanism, just a chosen convention.
+ *
  * Called from every site that actually constructs a fresh `me` -- both
  * session factories below, AND SeedSessionProvider.tsx's own loginWithSeed
  * (its createRuntime branch constructs `me` itself, before either factory
@@ -40,7 +48,26 @@ const THIS_ME_SEED_STORAGE_KEY = 'this.me.seed:v1';
  */
 export function writeKernelWindowLocation(me: MeLike): void {
   if (typeof window === 'undefined') return;
-  (me as any).window.location(window.location.origin);
+  (me as any).GUI.window.location(window.location.origin);
+}
+
+/**
+ * Same GUI.* branch as writeKernelWindowLocation, for the OTHER GUI-engine
+ * fact this session's own doctrine now covers: the active theme. Two
+ * scalar leaves (GUI.theme.id / GUI.theme.mode), matching the existing
+ * profile.name/profile.email/profile.phone shape, not one compound object.
+ *
+ * Unlike writeKernelWindowLocation (written once, at kernel construction),
+ * this is called every time the theme actually changes -- there IS no
+ * single "construction" moment for a theme choice, it can change any time
+ * during a session. localStorage (this.gui's own Theme.tsx/persistence.ts)
+ * stays the real, fast, always-available store; this is a local mirror
+ * only -- see CleakerLanding.tsx's own ThemeKernelMirror for the one place
+ * that actually calls this, gated on a session existing at all.
+ */
+export function writeKernelThemeFacts(me: MeLike, themeId: string, mode: 'light' | 'dark'): void {
+  (me as any).GUI.theme.id(themeId);
+  (me as any).GUI.theme.mode(mode);
 }
 
 export type SeedSessionErrorCode =
