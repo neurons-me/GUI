@@ -98,7 +98,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
     return (
       <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
         <Box sx={{ textAlign: 'center', mb: -1 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+          <Typography variant="h4" data-gui-node-id="RecoverAccount.newSecretHeading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
             Set a New Secret
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -109,6 +109,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
 
         <TextField
           label="New Secret"
+          data-gui-node-id="RecoverAccount.newSecret"
           type="password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
@@ -118,6 +119,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
         />
         <TextField
           label="Confirm New Secret"
+          data-gui-node-id="RecoverAccount.confirmNewSecret"
           type="password"
           value={confirmNewPassword}
           onChange={(e) => setConfirmNewPassword(e.target.value)}
@@ -175,7 +177,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
   return (
     <Box sx={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
       <Box sx={{ textAlign: 'center', mb: -1 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+        <Typography variant="h4" data-gui-node-id="RecoverAccount.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
           Recover Account
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -189,6 +191,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
 
       <TextField
         label="Username"
+        data-gui-node-id="RecoverAccount.username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         disabled={pending}

@@ -152,8 +152,10 @@ function StatusDot({ on }: { on: boolean }) {
 }
 
 function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows: string[] }) {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return (
     <Box
+      data-gui-node-id={`MainServerView.${slug}`}
       sx={{
         flex: '1 1 240px',
         minWidth: 200,
@@ -164,7 +166,7 @@ function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows:
         bgcolor: 'background.paper',
       }}
     >
-      <Typography variant="subtitle2">{title}</Typography>
+      <Typography variant="subtitle2" data-gui-node-id={`MainServerView.${slug}.title`}>{title}</Typography>
       <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 1 }}>
         {hint}
       </Typography>
@@ -231,6 +233,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
 
   return (
     <Box
+      data-gui-node-id="MainServerView"
       data-gui-component="MainServerView"
       sx={{
         maxWidth: 720,
@@ -243,7 +246,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
-        <Typography variant="h5">{state.gatewayHost || 'This main server'}</Typography>
+        <Typography variant="h5" data-gui-node-id="MainServerView.host">{state.gatewayHost || 'This main server'}</Typography>
         <Typography variant="caption" sx={{ color: connected ? 'success.main' : 'text.secondary' }}>
           {connected ? 'online' : 'connecting…'}
         </Typography>
@@ -284,6 +287,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           {state.servingNamespace ? (
             <Typography
               component="a"
+              data-gui-node-id="MainServerView.namespaceLink"
               href={buildCleakerNamespaceUrl(state.servingNamespace) || `//${state.servingNamespace}`}
               variant="body2"
               sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
@@ -350,6 +354,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
                       return url ? (
                         <Typography
                           component="a"
+                          data-gui-node-id="MainServerView.ownerLink"
                           href={url}
                           variant="body2"
                           sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
@@ -374,6 +379,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
                 <Typography
                   component="button"
                   type="button"
+                  data-gui-node-id="MainServerView.ownerHash"
                   onClick={() => setOwnerExpanded((v) => !v)}
                   variant="caption"
                   sx={{
@@ -433,7 +439,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle2">OpenResty</Typography>
+          <Typography variant="subtitle2" data-gui-node-id="MainServerView.openresty.title">OpenResty</Typography>
           {state.openrestyMode && (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               {state.openrestyMode}

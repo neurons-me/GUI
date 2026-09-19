@@ -376,6 +376,7 @@ const LeftSidebar = ({
         >
           <IconButton
             aria-label="Abrir navegación"
+            data-gui-node-id="LeftSidebar.mobileToggle"
             onClick={() => setMobileOpen(true)}
             sx={{
               borderRadius: '0 16px 16px 0',

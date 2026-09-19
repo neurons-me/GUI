@@ -218,11 +218,12 @@ function TerminalSnippet({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PrimaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+function PrimaryButton({ children, onClick, disabled, nodeId }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; nodeId?: string }) {
   return (
     <Box
       component="button"
       type="button"
+      data-gui-node-id={nodeId}
       onClick={onClick}
       disabled={disabled}
       sx={{
@@ -245,8 +246,8 @@ function PrimaryButton({ children, onClick, disabled }: { children: React.ReactN
 }
 
 function TextField({
-  label, value, onChange, type = 'text', autoFocus,
-}: { label: string; value: string; onChange: (v: string) => void; type?: string; autoFocus?: boolean }) {
+  label, value, onChange, type = 'text', autoFocus, nodeId,
+}: { label: string; value: string; onChange: (v: string) => void; type?: string; autoFocus?: boolean; nodeId?: string }) {
   // A caption sitting next to an <input> with no programmatic link is not
   // a label — a screen reader (and getByLabelText, which checks the same
   // real association, not just visual proximity) can't connect the two
@@ -258,6 +259,7 @@ function TextField({
       <Box
         component="input"
         id={inputId}
+        data-gui-node-id={nodeId}
         type={type}
         value={value}
         autoFocus={autoFocus}
@@ -381,9 +383,9 @@ function OpenRestyInstallControl({
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Enter your setup code to let this screen install OpenResty for you.
         </Typography>
-        <TextField label="Setup code" value={codeInput} onChange={setCodeInput} />
+        <TextField label="Setup code" value={codeInput} onChange={setCodeInput} nodeId="GatewaySetup.setupCode" />
         {codeError && <Typography variant="caption" sx={{ color: 'error.main' }}>{codeError}</Typography>}
-        <PrimaryButton onClick={handleVerifyCode} disabled={verifying || !codeInput.trim()}>
+        <PrimaryButton nodeId="GatewaySetup.unlockInstall" onClick={handleVerifyCode} disabled={verifying || !codeInput.trim()}>
           {verifying ? 'Checking…' : 'Unlock automatic install'}
         </PrimaryButton>
       </Box>
@@ -410,7 +412,7 @@ function OpenRestyInstallControl({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="caption" sx={{ color: 'error.main' }}>{job.message || 'The install failed.'}</Typography>
         <TerminalSnippet>{job.log.slice(-6).join('\n')}</TerminalSnippet>
-        <PrimaryButton onClick={handleInstall}>Try again</PrimaryButton>
+        <PrimaryButton nodeId="GatewaySetup.retryInstall" onClick={handleInstall}>Try again</PrimaryButton>
       </Box>
     );
   }
@@ -431,7 +433,7 @@ function OpenRestyInstallControl({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {actionError && <Typography variant="caption" sx={{ color: 'error.main' }}>{actionError}</Typography>}
-      <PrimaryButton onClick={handleInstall}>Install OpenResty</PrimaryButton>
+      <PrimaryButton nodeId="GatewaySetup.install" onClick={handleInstall}>Install OpenResty</PrimaryButton>
     </Box>
   );
 }
@@ -593,6 +595,7 @@ export default function GatewaySetup({
 
   return (
     <Box
+      data-gui-node-id="GatewaySetup"
       data-gui-component="GatewaySetup"
       sx={{
         maxWidth: 440,
@@ -734,9 +737,9 @@ function UnclaimedPanel({
         <code> netget init</code> (or <code>netget claim</code>) ran on this machine — that's
         what makes claiming from a browser as trustworthy as claiming from the terminal itself.
       </Typography>
-      <TextField label="Setup code" value={code} onChange={setCode} autoFocus />
+      <TextField label="Setup code" value={code} onChange={setCode} autoFocus nodeId="GatewaySetup.claimCode" />
       {error && <Typography variant="caption" sx={{ color: 'error.main' }}>{error}</Typography>}
-      <PrimaryButton onClick={submit} disabled={busy || !code.trim()}>
+      <PrimaryButton nodeId="GatewaySetup.submitCode" onClick={submit} disabled={busy || !code.trim()}>
         {busy ? 'Checking…' : 'Continue'}
       </PrimaryButton>
       <Typography variant="caption" sx={{ color: 'text.disabled', textAlign: 'center' }}>
@@ -769,6 +772,7 @@ function ClaimedPanel({ ownerUsername }: { ownerUsername: string | null }) {
           away rather than automatic. */}
       <Typography
         component="a"
+        data-gui-node-id="GatewaySetup.reviewLink"
         href="/home"
         variant="body2"
         sx={{ textAlign: 'center', color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}

@@ -724,6 +724,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
         <Box
           role="button"
           tabIndex={0}
+          data-gui-node-id="CleakerLanding.qrToggle"
           aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
           onClick={() => setExpanded((value) => !value)}
           onKeyDown={(event) => {
@@ -868,7 +869,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
                 the answer to this sentence, not a repeat of it. The page
                 reads as one continuous line: "Hello, I am…" [namespace]
                 [username] [secret] ".me". */}
-            <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+            <Typography variant="h4" data-gui-node-id="CleakerLanding.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
               Hello, I am…
             </Typography>
             {/* The connection badge that used to live here (a separate
@@ -929,6 +930,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             <>
               <TextField
                 label="Username"
+                data-gui-node-id="CleakerLanding.username"
                 value={credentialsForm.username}
                 onChange={(e) => credentialsForm.setUsername(e.target.value)}
                 disabled={pending || !secureContextOk}
@@ -937,6 +939,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               />
               <TextField
                 label="Secret"
+                data-gui-node-id="CleakerLanding.secret"
                 type="password"
                 value={credentialsForm.password}
                 onChange={(e) => credentialsForm.setPassword(e.target.value)}
@@ -1127,7 +1130,7 @@ const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) 
       data-gui-component="CleakerUrlView"
       sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box', ...sx }}
     >
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+      <Typography variant="h5" data-gui-node-id="CleakerUrlView.heading" sx={{ fontWeight: 700, mb: 2 }}>
         URL
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
@@ -1549,7 +1552,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
       <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>Sign in first to claim this gateway.</Typography>
-          <Typography component="a" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
+          <Typography component="a" data-gui-node-id="CleakerNetgetClaimView.signIn" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
             Sign in →
           </Typography>
         </Box>
@@ -1567,7 +1570,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
       sx={shellSx}
     >
       <Box sx={{ width: '100%', maxWidth: 480 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>Claim gateway</Typography>
+        <Typography variant="h6" data-gui-node-id="CleakerNetgetClaimView.heading" sx={{ mb: 1 }}>Claim gateway</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
           Signing as <strong>{semanticNamespace}</strong> for gateway <strong>{gatewayId}</strong>, returning to{' '}
           <strong>{returnToOrigin}</strong>.
@@ -1609,6 +1612,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
 
         {selectedKey && selectedKey.localAvailability !== 'available-unlocked' && (
           <TextField
+            data-gui-node-id="CleakerNetgetClaimView.passphrase"
             type="password"
             label="Passphrase"
             size="small"
@@ -1848,7 +1852,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
       <Box data-gui-node-id="CleakerNetgetAdminSignView" sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>Sign in first to continue as an admin.</Typography>
-          <Typography component="a" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
+          <Typography component="a" data-gui-node-id="CleakerNetgetAdminSignView.signIn" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
             Sign in →
           </Typography>
         </Box>
@@ -1863,7 +1867,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
       sx={shellSx}
     >
       <Box sx={{ width: '100%', maxWidth: 480 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>Confirm admin session</Typography>
+        <Typography variant="h6" data-gui-node-id="CleakerNetgetAdminSignView.heading" sx={{ mb: 1 }}>Confirm admin session</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
           Signing as <strong>{semanticNamespace}</strong>.
         </Typography>
@@ -1904,6 +1908,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 
         {selectedKey && selectedKey.localAvailability !== 'available-unlocked' && (
           <TextField
+            data-gui-node-id="CleakerNetgetAdminSignView.passphrase"
             type="password"
             label="Passphrase"
             size="small"
@@ -1967,7 +1972,7 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
   if (!netget.available) {
     return (
       <Box data-gui-node-id="CleakerNetgetView" sx={{ p: 3, maxWidth: 560 }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
+        <Typography variant="h5" data-gui-node-id="CleakerNetgetView.heading" sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           No hay un gateway Netget disponible en este contexto todavía.
         </Typography>

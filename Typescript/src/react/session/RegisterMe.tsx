@@ -156,7 +156,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
     return (
       <Box sx={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
         <Box sx={{ textAlign: 'center', mb: -1 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+          <Typography variant="h4" data-gui-node-id="RegisterMe.backupHeading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
             Back Up Your Identity
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -216,6 +216,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       <Box
         role="button"
         tabIndex={0}
+        data-gui-node-id="RegisterMe.qrToggle"
         aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
         onClick={() => setExpanded((value) => !value)}
         onKeyDown={(event) => {
@@ -238,7 +239,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       </Box>
 
       <Box sx={{ textAlign: 'center', mb: -1 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+        <Typography variant="h4" data-gui-node-id="RegisterMe.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
           Register
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -252,6 +253,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
 
       <TextField
         label="Username"
+        data-gui-node-id="RegisterMe.username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         disabled={pending}
@@ -260,6 +262,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       />
       <TextField
         label="Secret"
+        data-gui-node-id="RegisterMe.secret"
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -268,6 +271,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       />
       <TextField
         label="Confirm Secret"
+        data-gui-node-id="RegisterMe.confirmSecret"
         type="password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
