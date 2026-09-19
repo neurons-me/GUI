@@ -315,12 +315,6 @@ export default function QRme({
   const qrBg = bg ?? theme.palette.background.paper;
   const qrFg = fg ?? statusColor ?? theme.palette.primary.main;
   const ringAccent = statusColor ?? theme.palette.primary.main;
-  // The wordmark used to be drawn in qrFg -- the very color of the QR's own
-  // modules right under it -- so its strokes merged with the pattern and the
-  // only separation was a faint halo. It takes the theme's text-on-paper
-  // color instead (qrBg is the paper the halo already uses), so the letters
-  // are the one thing in the QR that doesn't share the modules' color.
-  const wordmarkFg = theme.palette.getContrastText(qrBg);
   // A plain online/offline dot at the very start of the perimeter label,
   // replacing the scarab glyph a caller used to prepend to the text
   // itself -- flagged live as no longer needed once Beatle's own visible
@@ -729,7 +723,7 @@ export default function QRme({
               // Widens the glyphs without redrawing the bitmap — cells are
               // wider than tall instead of square. Pushed further (1.5 -> 1.8).
               pixelAspect={1.8}
-              fg={wordmarkFg}
+              fg={qrFg}
               // No backing patch: an opaque patch was a clean geometric cut
               // against the QR's noise — asked for it to just blend instead.
               // Drawing the wordmark directly onto the QR (letting whatever
@@ -752,8 +746,8 @@ export default function QRme({
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
                 filter: Array.from(
-                  { length: 5 },
-                  (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.7}px ${qrBg})`,
+                  { length: 4 },
+                  (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.5}px ${qrBg})`,
                 ).join(' '),
               }}
               data-gui-node-id="QR.me.wordmark"
