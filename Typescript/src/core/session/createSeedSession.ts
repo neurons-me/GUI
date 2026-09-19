@@ -236,6 +236,17 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
   const me = (options.me || (new ME(seed) as unknown as MeLike));
   scrubSeedStorage();
 
+  // Same "this tab started here" instance fact createCleakerSession.ts
+  // writes for its own backend -- see that file's own doc comment for the
+  // full reasoning (origin only, never href; written once, not re-derived
+  // per navigation). Only when THIS call actually constructed `me` --
+  // `options.me` means a caller supplied an existing instance, whose own
+  // construction (wherever that happened) already had its chance to write
+  // this, or deliberately didn't.
+  if (!options.me && typeof window !== 'undefined') {
+    (me as any).window.location(window.location.origin);
+  }
+
   const runtime = options.runtime || createMeRuntime(me);
   const monad = createMonadClient(options);
   const identityHash = resolveIdentityHash(me);
