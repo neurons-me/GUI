@@ -5,6 +5,7 @@ import type { RuntimeAdapter } from '@/runtime/adapter';
 import type { MeLike } from '@/react/types';
 import {
   createSeedSession,
+  writeKernelWindowLocation,
   type SeedSession,
   type SeedSessionOptions,
   type SeedSessionWriteOptions,
@@ -475,6 +476,12 @@ export function SeedSessionProvider({
       });
       if (createRuntime) {
         const me = (new ME(options.seed) as unknown) as MeLike;
+        // This branch constructs `me` itself, before createSeedSession()
+        // ever sees it (options.me below is how that factory learns to
+        // skip its own construction) -- so this IS the one place that
+        // needs to write the same "this tab started here" instance fact.
+        // See writeKernelWindowLocation's own doc comment.
+        writeKernelWindowLocation(me);
         options.me = me;
         options.runtime = createRuntime(me, {
           semanticNamespace: options.semanticNamespace ?? null,

@@ -51,6 +51,7 @@ import {
   slugifySurfaceName,
   writeMeshRuntimeValue,
 } from './meshPairing';
+import { writeKernelWindowLocation } from '@/core/session/createSeedSession';
 
 
 export type CleakerProps = {
@@ -1091,6 +1092,7 @@ export default function Cleaker(props: CleakerProps) {
 
   if (!localKernelRef.current) {
     localKernelRef.current = new ME() as unknown as MeLike;
+    writeKernelWindowLocation(localKernelRef.current);
   }
 
   const inheritedMe = (

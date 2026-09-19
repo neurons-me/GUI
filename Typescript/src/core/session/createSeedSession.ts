@@ -20,6 +20,29 @@ import {
 
 const THIS_ME_SEED_STORAGE_KEY = 'this.me.seed:v1';
 
+/**
+ * "This tab started here" -- a plain instance fact, written once at
+ * construction, the same way any other value would be (me.whatever(what) --
+ * the kernel never learns what "window" is, it just holds a string at this
+ * path). GUI is already the layer that legitimately reads window.location
+ * everywhere; this hands that same read to the kernel instance too, instead
+ * of only living in a local variable. Origin only, never the full href: a
+ * query string can carry a one-time setup/claim token (CleakerLanding.tsx's
+ * own returnTo/setupToken handling) that has no business landing in a value
+ * this kernel might later disclose.
+ *
+ * Called from every site that actually constructs a fresh `me` -- both
+ * session factories below, AND SeedSessionProvider.tsx's own loginWithSeed
+ * (its createRuntime branch constructs `me` itself, before either factory
+ * ever sees it, so that construction needs the exact same call). Never
+ * called when a caller supplies an already-built `me` -- its own
+ * construction site already had this chance, or deliberately skipped it.
+ */
+export function writeKernelWindowLocation(me: MeLike): void {
+  if (typeof window === 'undefined') return;
+  (me as any).window.location(window.location.origin);
+}
+
 export type SeedSessionErrorCode =
   | 'SEED_REQUIRED'
   | 'IDENTITY_HASH_UNAVAILABLE'
@@ -236,16 +259,10 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
   const me = (options.me || (new ME(seed) as unknown as MeLike));
   scrubSeedStorage();
 
-  // Same "this tab started here" instance fact createCleakerSession.ts
-  // writes for its own backend -- see that file's own doc comment for the
-  // full reasoning (origin only, never href; written once, not re-derived
-  // per navigation). Only when THIS call actually constructed `me` --
-  // `options.me` means a caller supplied an existing instance, whose own
-  // construction (wherever that happened) already had its chance to write
-  // this, or deliberately didn't.
-  if (!options.me && typeof window !== 'undefined') {
-    (me as any).window.location(window.location.origin);
-  }
+  // Only when THIS call actually constructed `me` -- see
+  // writeKernelWindowLocation's own doc comment for why an options.me
+  // caller is skipped.
+  if (!options.me) writeKernelWindowLocation(me);
 
   const runtime = options.runtime || createMeRuntime(me);
   const monad = createMonadClient(options);

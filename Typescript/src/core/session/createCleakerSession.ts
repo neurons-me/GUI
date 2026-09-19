@@ -38,6 +38,7 @@ import {
 import {
   SeedSessionError,
   writeLocalSessionState,
+  writeKernelWindowLocation,
   type SeedSession,
   type SeedSessionWriteOptions,
   type CreateSessionRuntime,
@@ -229,21 +230,10 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     me = new (ME as any)(username, password, { namespace: rootNamespace });
   }
 
-  // "This tab started here" -- a plain instance fact, written once at
-  // construction, the same way any other value would be (me.whatever(what)
-  // -- `me` itself never learns what "window" is, it just holds a string at
-  // this path). GUI is already the layer that legitimately reads
-  // window.location everywhere else in this file's own callers; this is
-  // that same read, just also handed to the kernel instead of only living
-  // in a local variable. Origin only, never the full href: a query string
-  // can carry a one-time setup/claim token (see CleakerLanding.tsx's own
-  // returnTo/setupToken handling) that has no business landing in a value
-  // this kernel might later disclose. Not re-derived on navigation within
-  // this same tab -- a fresh session (a new createCleakerSession call) is
-  // what re-writes it, same lifetime as the kernel instance itself.
-  if (typeof window !== 'undefined') {
-    me.window.location(window.location.origin);
-  }
+  // See writeKernelWindowLocation's own doc comment (createSeedSession.ts)
+  // for the full reasoning -- this backend always freshly constructs `me`
+  // above, so unlike that file's own call site, no options.me guard needed.
+  writeKernelWindowLocation(me);
 
   // Lazy + memoized: deriveWireSecretFromRootBytes is WebCrypto-async, and
   // this function itself stays synchronous (its existing contract — see

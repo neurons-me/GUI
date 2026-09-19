@@ -6,6 +6,7 @@ import { useMeValue } from '@/react/useMeValue';
 import type { MeLike } from '@/react/types';
 import { useRuntimeEnvironment } from '@/runtime/runtimeContext';
 import { writeMeValue } from '@/runtime/run-me';
+import { writeKernelWindowLocation } from '@/core/session/createSeedSession';
 import Box from '@/gui/Atoms/Box/Box';
 import Button from '@/gui/Atoms/Button/Button';
 import Card from '@/gui/Atoms/Card/Card';
@@ -448,6 +449,7 @@ export default function Me({
 
   if (!localKernelRef.current) {
     const kernel = new ME() as unknown as MeLike;
+    writeKernelWindowLocation(kernel);
     if (typeof initialValue !== 'undefined') {
       try {
         writeMeValue(kernel, normalizedPath, initialValue);

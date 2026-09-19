@@ -3,6 +3,7 @@ import cleaker from "cleaker";
 import render from "@/runtime/run-me";
 import { normalizeEndpoint, readSessionUsername } from "./cleakerBridge";
 import { SESSION_SECRET_STORAGE_KEY } from "./runtimeUsername";
+import { writeKernelWindowLocation } from "@/core/session/createSeedSession";
 
 export type CleakerKernelContext = {
   me: any;
@@ -74,6 +75,7 @@ export async function createCleakerKernelContext({
     sessionUsername && safeRootNamespace ? `${sessionUsername}.${safeRootNamespace}` : "";
 
   const me = new ME() as any;
+  writeKernelWindowLocation(me);
   const fetcher = createBrowserSemanticFetcher();
 
   const node = cleaker(me, {
