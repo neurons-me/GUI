@@ -988,6 +988,34 @@ export function RuntimeInspector({
         max-height: 180px;
         border-radius: 6px;
       }
+      /* Long unbreakable values (monad ids, hashes, signatures) must wrap
+         inside the panel instead of running past its edge. */
+      aside[data-gui-inspector-control] code {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      /* Highlighted code (CodeBlock uses wrapLongLines + line numbers, which
+         react-syntax-highlighter renders as a flex row per line with every
+         token a flex item: a long value can't wrap as text, it just squeezes
+         or overflows its item). Lay the line out as normal inline text with
+         a hanging line-number gutter instead, so long values wrap in place. */
+      aside[data-gui-inspector-control] pre code > span {
+        display: block !important;
+        padding-left: 3.25em;
+        text-indent: -3.25em;
+        overflow-wrap: break-word;
+      }
+      aside[data-gui-inspector-control] pre code > span > span {
+        display: inline !important;
+        text-indent: 0;
+      }
+      aside[data-gui-inspector-control] pre code > span > .linenumber {
+        display: inline-block !important;
+        box-sizing: content-box;
+        min-width: 2.25em;
+        padding-right: 1em;
+        text-align: right;
+      }
       .gui-grid-overlay-active [data-gui-node-id] {
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
         outline-offset: -1px;
