@@ -6,6 +6,7 @@ import { useRuntimeEnvironment } from './runtimeContext';
 import CodeBlock from '@/gui/Molecules/CodeBlock/CodeBlock';
 import { alpha, getContrastRatio } from '@mui/material/styles';
 import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
+import { useDocumentPalette } from './useDocumentPalette';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -605,12 +606,13 @@ export function RuntimeInspector({
   } = useSelection();
   const rightSidebar = React.useContext(RightSidebarContext);
   const theme = useGuiTheme();
+  const docPalette = useDocumentPalette();
   // Every color in this panel comes from the active theme's palette, so it
   // follows theme + light/dark switches like the rest of the app. Fallbacks
   // are the old hard-coded dark-navy values, used only if no palette exists
   // (a bare mount outside <Theme>).
   const ui = React.useMemo(() => {
-    const p: any = theme?.palette;
+    const p: any = docPalette ?? theme?.palette;
     const dark = (p?.mode ?? 'dark') === 'dark';
     const text = p?.text?.primary ?? '#e5e7eb';
     const tone = (key: string, fallback: string) => {
@@ -658,8 +660,8 @@ export function RuntimeInspector({
         fg: p?.text?.secondary ?? '#cbd5e1',
       },
     };
-  }, [theme]);
-  const codeVariant = theme?.palette?.mode === 'light' ? 'light' : 'dark';
+  }, [theme, docPalette]);
+  const codeVariant = (docPalette?.mode ?? theme?.palette?.mode) === 'light' ? 'light' : 'dark';
   const [tab, setTab] = React.useState<InspectorTab>('spec');
   const [adminScopeMode, setAdminScopeMode] = React.useState<AdminScopeMode>(() => readAdminScopeMode());
   const lastHighlighted = React.useRef<HTMLElement | null>(null);
