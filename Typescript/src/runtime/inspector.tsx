@@ -42,14 +42,30 @@ type TreeEntry = {
    */
   rendered: boolean;
 };
-type TreeView = { path: TreeEntry[] };
+/** One line of the tree diagram. */
+type TreeRow =
+  | {
+      kind: 'node';
+      entry: TreeEntry;
+      /** Connector guides drawn before the node: '│  ├─ ' etc. */
+      prefix: string;
+      hasChildren: boolean;
+      open: boolean;
+    }
+  | { kind: 'more'; id: string; prefix: string; count: number };
+type TreeView = {
+  /** Root -> focus. */
+  path: TreeEntry[];
+  /** The tree as a diagram: the root, and whatever is expanded below it. */
+  rows: TreeRow[];
+};
 type QueryView = {
   /** Everything the relation yields, before picking. */
   candidates: TreeEntry[];
   /** What the query found: candidates after All / First / Last / Random. */
   result: TreeEntry[];
 };
-const TREE_CHILDREN_LIMIT = 60;
+const TREE_ROW_LIMIT = 80;
 const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
 const QUERY_MARK_ATTR = 'data-gui-inspector-picked';
 
@@ -119,14 +135,12 @@ function buildTreeModel() {
   // page (DOM order); then registration order for anything with neither.
   // Registration order alone is not stable -- re-registering a node moves it
   // to the end -- so it is only ever the last tiebreak.
-  const docOrder = flattenGuiDocument().map((e) => e.id);
-  const domOrder = [...elements.keys()];
-  const universe = [...Object.keys(records), ...elements.keys()].filter((id, i, all) => all.indexOf(id) === i);
-  const rank = (id: string) => {
-    const d = docOrder.indexOf(id);
-    const p = domOrder.indexOf(id);
-    return [d === -1 ? Infinity : d, p === -1 ? Infinity : p, universe.indexOf(id)];
-  };
+  const indexOf = (ids: string[]) => new Map(ids.map((id, i) => [id, i] as const));
+  const docIndex = indexOf(flattenGuiDocument().map((e) => e.id));
+  const domIndex = indexOf([...elements.keys()]);
+  const universe = [...new Set([...Object.keys(records), ...elements.keys()])];
+  const regIndex = indexOf(universe);
+  const rank = (id: string) => [docIndex.get(id) ?? Infinity, domIndex.get(id) ?? Infinity, regIndex.get(id) ?? Infinity];
   const childrenOf = (id: string): string[] =>
     universe
       .filter((c) => c !== id && parentOf(c) === id)
@@ -139,7 +153,11 @@ function buildTreeModel() {
   return { parentOf, childrenOf, entryFor };
 }
 
-function readTreeView(selectedId: string | null, model = buildTreeModel()): TreeView | null {
+function readTreeView(
+  selectedId: string | null,
+  expanded: Set<string>,
+  model = buildTreeModel()
+): TreeView | null {
   if (!selectedId) return null;
   const path: TreeEntry[] = [];
   const seen = new Set<string>();
@@ -147,7 +165,30 @@ function readTreeView(selectedId: string | null, model = buildTreeModel()): Tree
     seen.add(cursor);
     path.unshift(model.entryFor(cursor));
   }
-  return { path };
+
+  // The diagram, drawn like a file tree: connectors in front of each node,
+  // only what is expanded is listed.
+  const rows: TreeRow[] = [];
+  const walk = (id: string, depth: number, guides: boolean[], isLast: boolean) => {
+    const kids = model.childrenOf(id);
+    const open = expanded.has(id) && kids.length > 0;
+    const prefix = depth === 0 ? '' : guides.map((last) => (last ? '   ' : '│  ')).join('') + (isLast ? '└─ ' : '├─ ');
+    rows.push({ kind: 'node', entry: model.entryFor(id), prefix, hasChildren: kids.length > 0, open });
+    if (!open) return;
+    const shown = kids.slice(0, TREE_ROW_LIMIT);
+    const childGuides = depth === 0 ? [] : [...guides, isLast];
+    shown.forEach((kid, i) => walk(kid, depth + 1, childGuides, i === shown.length - 1 && kids.length <= TREE_ROW_LIMIT));
+    if (kids.length > TREE_ROW_LIMIT) {
+      rows.push({
+        kind: 'more',
+        id: `${id}#more`,
+        prefix: childGuides.map((last) => (last ? '   ' : '│  ')).join('') + '└─ ',
+        count: kids.length - TREE_ROW_LIMIT,
+      });
+    }
+  };
+  walk(path[0].id, 0, [], true);
+  return { path, rows };
 }
 
 function readQueryView(query: InspectorQuery | null, model = buildTreeModel()): QueryView | null {
@@ -165,7 +206,8 @@ function queryViewSignature(view: QueryView | null): string {
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
   const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
-  return view.path.map(key).join('>');
+  const rowKey = (r: TreeRow) => (r.kind === 'node' ? `${key(r.entry)}|${r.prefix}|${r.hasChildren}|${r.open}` : `${r.id}|${r.count}`);
+  return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}`;
 }
 
 // One labelled move through the tree. The word is the point: direction is
@@ -221,6 +263,60 @@ function StepButton({
       {label}
       {iconAfter && svg}
     </button>
+  );
+}
+
+// A joined row of small options (segmented control). Compact on purpose.
+function Seg<T extends string>({
+  label,
+  value,
+  options,
+  onPick,
+  disabled,
+}: {
+  label: string;
+  value: T | null | undefined;
+  options: { value: T; label: string; hint: string }[];
+  onPick: (value: T) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      style={{
+        display: 'inline-flex',
+        border: '1px solid currentColor',
+        borderRadius: 999,
+        overflow: 'hidden',
+        opacity: disabled ? 0.35 : 0.95,
+      }}
+    >
+      {options.map((opt, i) => (
+        <button
+          key={opt.value}
+          type="button"
+          title={opt.hint}
+          disabled={disabled}
+          aria-pressed={value === opt.value}
+          onClick={() => onPick(opt.value)}
+          style={{
+            padding: '1px 8px',
+            border: 'none',
+            borderLeft: i === 0 ? 'none' : '1px solid color-mix(in srgb, currentColor 35%, transparent)',
+            background: value === opt.value ? 'color-mix(in srgb, currentColor 22%, transparent)' : 'transparent',
+            fontWeight: value === opt.value ? 700 : 400,
+            color: 'inherit',
+            fontSize: 10.5,
+            lineHeight: '17px',
+            fontFamily: 'inherit',
+            cursor: disabled ? 'default' : 'pointer',
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1086,6 +1182,10 @@ export function RuntimeInspector({
   // a result to look at changes the focus and nothing else.
   const [query, setQuery] = React.useState<InspectorQuery | null>(null);
   const [queryView, setQueryView] = React.useState<QueryView | null>(null);
+  // Which nodes of the tree diagram are open. The focus and its ancestors are
+  // always opened when the focus moves (so its children show); anything else
+  // opens and closes only when asked.
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   React.useEffect(() => {
     if (!open) {
       setTreeView(null);
@@ -1100,7 +1200,7 @@ export function RuntimeInspector({
     let lastLayoutSig = '\0';
     const refresh = () => {
       const model = buildTreeModel();
-      const next = readTreeView(selectedNodeId, model);
+      const next = readTreeView(selectedNodeId, expanded, model);
       const sig = treeSignature(next);
       if (sig !== lastSig) {
         lastSig = sig;
@@ -1154,7 +1254,31 @@ export function RuntimeInspector({
       resizeObserver?.disconnect();
       window.removeEventListener('resize', scheduleRefresh);
     };
-  }, [open, selectedNodeId, query]);
+  }, [open, selectedNodeId, query, expanded]);
+
+  const focusPathKey = treeView ? treeView.path.map((e) => e.id).join('>') : '';
+  React.useEffect(() => {
+    if (!treeView) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      treeView.path.forEach((e) => next.add(e.id));
+      return next.size === prev.size ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPathKey]);
+  const toggleExpanded = React.useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
+  const treeBoxRef = React.useRef<HTMLDivElement>(null);
+  // Keep the focused row in view as the focus moves.
+  React.useEffect(() => {
+    treeBoxRef.current?.querySelector('[data-tree-focus="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedNodeId, treeView]);
 
   const hoveredTreeEl = React.useRef<HTMLElement | null>(null);
   const hoverTreeNode = React.useCallback((entry: TreeEntry | null) => {
@@ -1218,6 +1342,41 @@ export function RuntimeInspector({
     if (!selectedNodeId) return;
     applyQuery({ axis: 'self', originId: selectedNodeId, pick: 'all', seed: 0 });
   }, [selectedNodeId, applyQuery]);
+
+  // Arrow keys walk the diagram like any tree widget: up/down through the
+  // visible rows, right to open (then step into the first child), left to
+  // close (then step out to the parent).
+  const onTreeKeyDown = React.useCallback(
+    (ev: React.KeyboardEvent) => {
+      if (!treeView) return;
+      const nodes = treeView.rows.filter((r): r is Extract<TreeRow, { kind: 'node' }> => r.kind === 'node');
+      const at = nodes.findIndex((r) => r.entry.id === selectedNodeId);
+      if (at < 0) return;
+      const row = nodes[at];
+      let target: TreeEntry | null = null;
+      switch (ev.key) {
+        case 'ArrowDown': target = nodes[at + 1]?.entry ?? null; break;
+        case 'ArrowUp': target = nodes[at - 1]?.entry ?? null; break;
+        case 'Home': target = nodes[0].entry; break;
+        case 'End': target = nodes[nodes.length - 1].entry; break;
+        case 'ArrowRight':
+          if (row.hasChildren && !row.open) toggleExpanded(row.entry.id);
+          else if (row.open) target = nodes[at + 1]?.entry ?? null;
+          break;
+        case 'ArrowLeft':
+          if (row.open) toggleExpanded(row.entry.id);
+          else target = treeView.path.length > 1 && treeView.path[treeView.path.length - 1].id === row.entry.id
+            ? treeView.path[treeView.path.length - 2]
+            : nodes.slice(0, at).reverse().find((r) => r.prefix.length < row.prefix.length)?.entry ?? null;
+          break;
+        default:
+          return;
+      }
+      ev.preventDefault();
+      if (target) selectTreeNode(target);
+    },
+    [treeView, selectedNodeId, toggleExpanded, selectTreeNode]
+  );
 
   // The page shows the whole result set, not just the focused node.
   React.useEffect(() => {
@@ -1781,13 +1940,6 @@ export function RuntimeInspector({
     ]
       .filter(Boolean)
       .join(' — ');
-  const treeEntryStyle = (entry: TreeEntry): React.CSSProperties => ({
-    ...treeButtonStyle,
-    // Declared by the GUI but not on the page (off or not mounted).
-    opacity: treeEntryState(entry) ? 0.55 : 1,
-    // Detected only (not declared): dashed, the page's own, not the GUI's.
-    borderStyle: entry.source === 'dom' ? 'dashed' : 'solid',
-  });
   const explainToneStyle = React.useMemo<React.CSSProperties | null>(() => {
     if (!explainSummary) return null;
     if (explainSummary.tone === 'redacted') {
@@ -1938,139 +2090,137 @@ export function RuntimeInspector({
 
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
             {treeView && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                  <div style={{ opacity: 0.75, fontWeight: 700 }}>TREE</div>
-                  {/* Where you are, in words: how deep. Which sibling sits between Prev and Next. */}
-                  <div style={{ fontSize: 11, opacity: 0.7 }}>
-                    level {treeView.path.length - 1}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginBottom: 8 }}>
-                  {treeView.path.map((entry, i) => {
-                    const last = i === treeView.path.length - 1;
-                    return (
-                      <React.Fragment key={entry.id}>
-                        {i > 0 && <span style={{ opacity: 0.5 }}>›</span>}
-                        {last ? (
-                          <span
-                            title={treeEntryTitle(entry)}
-                            style={{ fontWeight: 700, padding: '2px 6px', borderRadius: 6, background: ui.fillActive, opacity: treeEntryState(entry) ? 0.6 : 1 }}
-                          >
-                            {treeEntryLabel(entry)}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            title={treeEntryTitle(entry)}
-                            onClick={() => selectTreeNode(entry)}
-                            onMouseEnter={() => hoverTreeNode(entry)}
-                            onMouseLeave={() => hoverTreeNode(null)}
-                            style={treeEntryStyle(entry)}
-                          >
-                            {treeEntryLabel(entry)}
-                          </button>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-                {/* QUERY: from the focus, over one relation. */}
-                <div className="gui-inspector-steps" role="group" aria-label="Find related nodes" style={{ marginBottom: 8, color: ui.fg }}>
-                  <div style={{ opacity: 0.7, fontSize: 11, marginBottom: 4 }}>
-                    Find, from <code>{selectedNodeId}</code>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    <StepButton label="Parent" hint="The node directly above the focus" active={query?.axis === 'parent'} onClick={() => runAxis('parent')} icon={<path d="M6 15l6-6 6 6" />} />
-                    <StepButton label="Children" hint="Every node directly below the focus" active={query?.axis === 'children'} onClick={() => runAxis('children')} icon={<path d="M6 9l6 6 6-6" />} />
-                    <StepButton label="Siblings" hint="The other nodes under the same parent (never the focus itself)" active={query?.axis === 'siblings'} onClick={() => runAxis('siblings')} icon={<path d="M9 6l-6 6 6 6M15 6l6 6-6 6" />} />
-                  </div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                  <div style={{ opacity: 0.75, fontWeight: 700 }} title="On the page: ⇧ click = parent · ⌘/Ctrl click = child · ⌥ click = topmost">TREE</div>
+                  <div style={{ fontSize: 11, opacity: 0.7 }}>level {treeView.path.length - 1}</div>
                 </div>
 
-                {query && queryView && (
-                  <div style={{ border: `1px solid ${ui.line}`, borderRadius: 10, padding: 8, marginBottom: 8 }}>
-                    {/* The query, in words. Not .me path syntax. */}
-                    <div style={{ marginBottom: 6 }}>
-                      <b>{{ parent: 'Parent', children: 'Children', siblings: 'Siblings', self: 'Just' }[query.axis]}</b>
-                      {query.axis === 'self' ? ' ' : ' of '}
-                      <code>{query.originId}</code>
-                      <span style={{ opacity: 0.7 }}>
-                        {' — '}
+                {/* Selection controls, one line: what to find from the focus,
+                    and which of it to keep. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 6, color: ui.fg }}>
+                  <Seg
+                    label="Find from the focus"
+                    value={query?.axis === 'self' ? null : query?.axis}
+                    onPick={runAxis}
+                    options={[
+                      { value: 'parent', label: '↑ parent', hint: 'The node directly above the focus' },
+                      { value: 'children', label: '↓ children', hint: 'Every node directly below the focus' },
+                      { value: 'siblings', label: '↔ siblings', hint: 'The other nodes under the same parent (never the focus itself)' },
+                    ]}
+                  />
+                  <Seg
+                    label="Pick from what was found"
+                    value={query?.axis === 'self' ? null : query?.pick}
+                    onPick={changePick}
+                    disabled={!query || query.axis === 'self'}
+                    options={[
+                      { value: 'all', label: 'all', hint: 'Every node found' },
+                      { value: 'first', label: 'first', hint: 'The first one, in tree order' },
+                      { value: 'last', label: 'last', hint: 'The last one, in tree order' },
+                      { value: 'random', label: 'random', hint: 'One at random, drawn once per click' },
+                    ]}
+                  />
+                  {query && queryView && (
+                    <>
+                      <span style={{ fontSize: 10.5, opacity: 0.7 }} title="Inspector query, not .me path syntax">
                         {queryView.result.length === 0
                           ? 'none'
-                          : query.pick === 'all'
-                            ? `${queryView.result.length} found`
-                            : `${queryView.result.length} of ${queryView.candidates.length}`}
+                          : query.pick === 'all' || query.axis === 'self'
+                            ? `${queryView.result.length} selected`
+                            : `1 of ${queryView.candidates.length}`}
                       </span>
-                    </div>
-                    <div role="group" aria-label="Pick from the found nodes" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, color: ui.fg }}>
-                      {(['all', 'first', 'last', 'random'] as const).map((pick) => (
-                        <StepButton
-                          key={pick}
-                          label={{ all: 'All', first: 'First', last: 'Last', random: 'Random' }[pick]}
-                          hint={{
-                            all: 'Every node found',
-                            first: 'The first one, in the tree order',
-                            last: 'The last one, in the tree order',
-                            random: 'One at random, drawn once per click (click again to draw again)',
-                          }[pick]}
-                          active={query.pick === pick}
-                          disabled={query.axis === 'self'}
-                          onClick={() => changePick(pick)}
-                          icon={<path d="M5 12h14" />}
-                        />
-                      ))}
-                    </div>
-                    {queryView.result.length === 0 ? (
-                      <div style={{ opacity: 0.6 }}>
-                        Nothing found: that relation is empty here. The focus stays where it was.
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {queryView.result.slice(0, TREE_CHILDREN_LIMIT).map((entry) => {
-                          const focused = entry.id === selectedNodeId;
-                          return (
-                            <button
-                              key={entry.id}
-                              type="button"
-                              title={treeEntryTitle(entry)}
-                              aria-pressed={focused}
-                              onClick={() => selectTreeNode(entry)}
-                              onMouseEnter={() => hoverTreeNode(entry)}
-                              onMouseLeave={() => hoverTreeNode(null)}
-                              style={{
-                                ...treeEntryStyle(entry),
-                                ...(focused ? { background: ui.fillActive, fontWeight: 700, borderColor: ui.fg } : null),
-                              }}
-                            >
-                              {treeEntryLabel(entry)}
-                            </button>
-                          );
-                        })}
-                        {queryView.result.length > TREE_CHILDREN_LIMIT && (
-                          <span style={{ opacity: 0.6, padding: '2px 4px' }}>
-                            +{queryView.result.length - TREE_CHILDREN_LIMIT} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8, color: ui.fg }}>
                       <StepButton
-                        label="Keep only the focus"
-                        hint="Reduce the found set to just the node in focus"
+                        label="only"
+                        hint="Keep only the focused node in the selection"
                         disabled={queryView.result.length < 2 || !queryView.result.some((e) => e.id === selectedNodeId)}
                         onClick={keepOnlyFocus}
                         icon={<path d="M5 12l5 5 9-10" />}
                       />
-                      <StepButton label="Clear" hint="Drop the query (the focus stays)" onClick={() => setQuery(null)} icon={<path d="M6 6l12 12M18 6L6 18" />} />
-                    </div>
-                    <div style={{ fontSize: 10, opacity: 0.5, marginTop: 6 }}>
-                      An Inspector query — not .me path syntax. Clicking a result changes the focus, not the set.
-                    </div>
-                  </div>
-                )}
-                <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8 }}>
-                  On the page: ⇧ click parent · ⌘/Ctrl click child · ⌥ click topmost
+                      <StepButton label="clear" hint="Drop the selection (the focus stays)" onClick={() => setQuery(null)} icon={<path d="M6 6l12 12M18 6L6 18" />} />
+                    </>
+                  )}
+                </div>
+
+                {/* The tree, as a diagram. Arrow keys walk it. */}
+                <div
+                  role="tree"
+                  aria-label="GUI tree"
+                  tabIndex={0}
+                  ref={treeBoxRef}
+                  onKeyDown={onTreeKeyDown}
+                  style={{
+                    border: `1px solid ${ui.line}`,
+                    borderRadius: 8,
+                    padding: '4px 6px',
+                    maxHeight: 190,
+                    overflowY: 'auto',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    fontSize: 11,
+                    lineHeight: '18px',
+                    outline: 'none',
+                  }}
+                  className="gui-inspector-tree"
+                >
+                  {treeView.rows.map((row) => {
+                    if (row.kind === 'more') {
+                      return (
+                        <div key={row.id} style={{ whiteSpace: 'pre', opacity: 0.55 }}>
+                          <span style={{ color: ui.fgMuted }}>{row.prefix}</span>… {row.count} more
+                        </div>
+                      );
+                    }
+                    const { entry } = row;
+                    const focused = entry.id === selectedNodeId;
+                    const inSet = !!queryView?.result.some((r) => r.id === entry.id);
+                    const state = treeEntryState(entry);
+                    return (
+                      <div
+                        key={entry.id}
+                        role="treeitem"
+                        aria-selected={focused}
+                        aria-expanded={row.hasChildren ? row.open : undefined}
+                        data-tree-focus={focused ? 'true' : undefined}
+                        title={treeEntryTitle(entry)}
+                        onClick={() => {
+                          selectTreeNode(entry);
+                          treeBoxRef.current?.focus();
+                        }}
+                        onMouseEnter={() => hoverTreeNode(entry)}
+                        onMouseLeave={() => hoverTreeNode(null)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          whiteSpace: 'pre',
+                          cursor: 'pointer',
+                          borderRadius: 4,
+                          background: focused ? ui.fillActive : 'transparent',
+                          fontWeight: focused ? 700 : 400,
+                          opacity: state ? 0.55 : 1,
+                        }}
+                      >
+                        <span style={{ color: ui.fgMuted, userSelect: 'none' }}>{row.prefix}</span>
+                        <span
+                          onClick={(ev) => {
+                            if (!row.hasChildren) return;
+                            ev.stopPropagation();
+                            toggleExpanded(entry.id);
+                          }}
+                          style={{ width: 14, textAlign: 'center', color: ui.fgMuted, userSelect: 'none', cursor: row.hasChildren ? 'pointer' : 'default' }}
+                        >
+                          {row.hasChildren ? (row.open ? '▾' : '▸') : '·'}
+                        </span>
+                        <span style={{ width: 12, color: ui.accent, userSelect: 'none' }} title={inSet ? 'In the selection' : undefined}>
+                          {inSet ? '●' : ''}
+                        </span>
+                        <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal' }}>{entry.label}</span>
+                        {state && <span style={{ color: ui.fgMuted, fontWeight: 400 }}>{` · ${state}`}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4 }}>
+                  ↑↓ walk · ←→ close/open · ● selected · italic = only in the DOM
                 </div>
               </div>
             )}
