@@ -524,6 +524,45 @@ function BoxModel({
   return ring('margin', margin, ui.warning, true, hasBorder ? ring('border', border, ui.neutral, false, inner) : inner, true);
 }
 
+// The HTML behind a node -- only for a node that IS an element. A GUI node
+// that is just a group / declared part has nodes below it and no HTML yet, so
+// it has none of this. This is the page's own markup, read as-is: detected in
+// the DOM, not declared by the GUI.
+type HtmlInfo = {
+  tag: string;
+  id: string | null;
+  /** Classes with a name a person chose. */
+  classes: string[];
+  /** Generated styling classes (css-1x2y3z, Emotion / styled-components ...). */
+  generatedClasses: number;
+  attrs: { name: string; value: string }[];
+};
+// Identifying attributes only. `value` is deliberately NOT among them: on a
+// field it can be what someone is typing (a password).
+const HTML_ATTRS = ['name', 'type', 'role', 'aria-label', 'placeholder', 'title', 'for', 'href', 'target', 'alt', 'tabindex', 'disabled', 'checked', 'readonly'];
+const GENERATED_CLASS = /^(css|emotion|jss|sc)-[a-z0-9_-]{4,}$/i;
+
+function readHtml(selectedId: string | null): HtmlInfo | null {
+  if (!selectedId) return null;
+  const el = findTaggedElement(selectedId);
+  if (!el) return null;
+  // Not the Inspector's own highlight class (gui-inspector-selected ...).
+  const all = Array.from(el.classList).filter((c) => !c.startsWith('gui-inspector-'));
+  const attrs: HtmlInfo['attrs'] = [];
+  for (const name of HTML_ATTRS) {
+    if (!el.hasAttribute(name)) continue;
+    const raw = el.getAttribute(name) ?? '';
+    attrs.push({ name, value: raw.length > 80 ? `${raw.slice(0, 80)}…` : raw });
+  }
+  return {
+    tag: el.tagName.toLowerCase(),
+    id: el.id || null,
+    classes: all.filter((c) => !GENERATED_CLASS.test(c)),
+    generatedClasses: all.filter((c) => GENERATED_CLASS.test(c)).length,
+    attrs,
+  };
+}
+
 const PANEL_WIDTH_KEY = 'this.gui:inspectorWidth';
 const PANEL_WIDTH_DEFAULT = 440;
 const PANEL_WIDTH_MIN = 280;
@@ -1323,6 +1362,7 @@ export function RuntimeInspector({
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
+  const [htmlInfo, setHtmlInfo] = React.useState<HtmlInfo | null>(null);
   // Which nodes of the tree diagram are open. The focus and its ancestors are
   // always opened when the focus moves (so its children show); anything else
   // opens and closes only when asked.
@@ -1331,11 +1371,13 @@ export function RuntimeInspector({
     if (!open) {
       setTreeView(null);
       setLayoutInfo(null);
+      setHtmlInfo(null);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastSig = '\0';
     let lastLayoutSig = '\0';
+    let lastHtmlSig = '\0';
     const refresh = () => {
       const model = buildTreeModel();
       const next = readTreeView(selectedNodeId, expanded, model);
@@ -1343,6 +1385,12 @@ export function RuntimeInspector({
       if (sig !== lastSig) {
         lastSig = sig;
         setTreeView(next);
+      }
+      const html = readHtml(selectedNodeId);
+      const htmlSig = html ? JSON.stringify(html) : '';
+      if (htmlSig !== lastHtmlSig) {
+        lastHtmlSig = htmlSig;
+        setHtmlInfo(html);
       }
       const layout = readLayout(selectedNodeId);
       const layoutSig = layoutSignature(layout);
@@ -2427,6 +2475,46 @@ export function RuntimeInspector({
                     <div style={{ opacity: 0.55, fontSize: 11, textAlign: 'center', padding: '10px 0' }}>Nothing rendered for this node.</div>
                   )}
                 </div>
+
+                {/* HTML: only when this node IS an element. A GUI node that is
+                    just a part with nodes below it has no HTML yet. */}
+                {htmlInfo && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '6px 10px 8px',
+                      borderRadius: 10,
+                      border: `1px solid ${ui.line}`,
+                      background: ui.fillFaint,
+                      color: ui.fg,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>HTML</span>
+                      <span style={{ fontSize: 10.5, opacity: 0.55 }} title="Read from the page as it is; the GUI document does not declare it">detected in the DOM</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11 }}>
+                      <span style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillActive, fontWeight: 700 }}>{`<${htmlInfo.tag}>`}</span>
+                      {htmlInfo.id && <span style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillSoft }} title="id">#{htmlInfo.id}</span>}
+                      {htmlInfo.classes.map((c) => (
+                        <span key={c} style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillSoft }} title="class">.{c}</span>
+                      ))}
+                      {htmlInfo.generatedClasses > 0 && (
+                        <span style={{ opacity: 0.55 }} title="Generated styling classes (css-…), not named by a person">+{htmlInfo.generatedClasses} generated</span>
+                      )}
+                    </div>
+                    {htmlInfo.attrs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 6, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11 }}>
+                        {htmlInfo.attrs.map((a) => (
+                          <span key={a.name} style={{ overflowWrap: 'anywhere' }}>
+                            <span style={{ opacity: 0.6 }}>{a.name}</span>
+                            {a.value !== '' && <>=<span>"{a.value}"</span></>}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {selected?.part && (
