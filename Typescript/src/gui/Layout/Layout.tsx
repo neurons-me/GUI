@@ -1,5 +1,5 @@
 // Layout/Layout/Layout.tsx
-import { useRegisterGuiNodes } from '@/runtime/selection';
+import { GuiParent, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument } from '@/runtime/guiDocument';
 import { LeftBarProvider } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { RightBarProvider } from '@/gui-internals/Contexts/RightSidebarContext';
@@ -178,7 +178,7 @@ function Layout({
                 {...(typeof resolvedLeftBar === 'object' ? (resolvedLeftBar as any) : {})}
               />
             ))}
-            {resolvedContent}
+            <GuiParent id="GUI.content">{resolvedContent}</GuiParent>
             {rightBarChild ?? (hasRightBar && (
               <RightBarComponent
                 elements={[]}

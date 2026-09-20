@@ -10,7 +10,7 @@ import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
 import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
-import { around } from './inspectorNav';
+import { around, linkTree } from './inspectorNav';
 
 const DATA_URI_PREFIXES = ['data:', 'blob:'];
 const DATA_URI_PREVIEW_CHARS = 32;
@@ -157,7 +157,7 @@ function guessHint(el: HTMLElement | undefined, label: string): string | null {
 // The tree as the Inspector sees it right now: the GUI's declarations plus
 // whatever the DOM shows that nobody declared. Built once per refresh and
 // shared by the breadcrumb and the query.
-function buildTreeModel() {
+export function buildTreeModel() {
   const records = selectionStore.getState().records;
 
   // First rendered element per tagged id, in DOM order.
@@ -188,17 +188,16 @@ function buildTreeModel() {
     return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
   };
 
-  // Every parent, once.
-  const parents = new Map<string, string | null>();
+  // Every parent, once -- strictly: see linkTree (orphans hang from the root).
+  const { parents, orphans } = linkTree({
+    ids: universe,
+    declaredParent: (id) => records[id]?.parentId,
+    domParent: nearestTaggedAncestor,
+    root: 'GUI',
+  });
   const kids = new Map<string, string[]>();
-  const link = (child: string, parent: string | null) => {
-    parents.set(child, parent);
+  parents.forEach((parent, child) => {
     if (parent) kids.set(parent, [...(kids.get(parent) ?? []), child]);
-  };
-  universe.forEach((id) => {
-    // What the GUI declared says who the parent is; for anything else, the
-    // nearest tagged element above it in the page.
-    link(id, records[id]?.parentId || nearestTaggedAncestor(id));
   });
 
   const parentOf = (id: string): string | null => parents.get(id) ?? null;
@@ -227,7 +226,7 @@ function buildTreeModel() {
     };
   };
 
-  return { parentOf, childrenOf, entryFor };
+  return { parentOf, childrenOf, entryFor, ids: universe, orphans };
 }
 
 function readTreeView(
@@ -624,7 +623,7 @@ type HtmlInfo = {
 // Identifying attributes only. `value` is deliberately NOT among them: on a
 // field it can be what someone is typing (a password).
 const HTML_ATTRS = ['name', 'type', 'role', 'aria-label', 'placeholder', 'title', 'for', 'href', 'target', 'alt', 'tabindex', 'disabled', 'checked', 'readonly'];
-const FRAMEWORK_CLASS = /^(Mui[A-Za-z0-9_-]*|css-[a-z0-9_-]+|emotion-[a-z0-9_-]+|jss[0-9-]+|sc-[a-z0-9_-]+)$/;
+const FRAMEWORK_CLASS = /^(Mui[A-Za-z0-9_-]*|css-[A-Za-z0-9_-]+|emotion-[A-Za-z0-9_-]+|jss[0-9-]+|sc-[A-Za-z0-9_-]+)$/;
 
 function readHtml(selectedId: string | null): HtmlInfo | null {
   if (!selectedId) return null;
@@ -1264,7 +1263,7 @@ export function RuntimeInspector({
     gridEnabled,
     setGridEnabled,
     selectedNodeId,
-    selected,
+    selected: selectedRecord,
     selectNode,
     clearSelection,
     selectedMeta,
@@ -1273,6 +1272,31 @@ export function RuntimeInspector({
     getNodeByPath,
   } = useSelection();
   const rightSidebar = React.useContext(RightSidebarContext);
+  // A node nobody registered (its element is only tagged) still has a JSON to
+  // show: what the page says about it. Read from the element, never stored,
+  // and never a field's value.
+  const selected = React.useMemo(() => {
+    if (selectedRecord || !selectedNodeId) return selectedRecord;
+    const html = readHtml(selectedNodeId);
+    const el = findTaggedElement(selectedNodeId);
+    if (!html || !el) return selectedRecord;
+    const type = el.getAttribute('data-gui-component') || html.tag;
+    const props: Record<string, unknown> = { tag: html.tag };
+    if (html.id) props.id = html.id;
+    if (html.classes.length) props.class = html.classes.join(' ');
+    html.attrs.forEach((a) => (props[a.name] = a.value === '' ? true : a.value));
+    const label = el.getAttribute('data-gui-label');
+    if (label) props.label = label;
+    return {
+      id: selectedNodeId,
+      type,
+      path: selectedNodeId,
+      spec: { type, props },
+      resolvedProps: props,
+      provenance: { source: 'dom', note: 'Not registered by the GUI: what the page shows for this element.' },
+    } as any;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRecord, selectedNodeId]);
   const theme = useGuiTheme();
   const docPalette = useDocumentPalette();
   // Every color in this panel comes from the active theme's palette, so it

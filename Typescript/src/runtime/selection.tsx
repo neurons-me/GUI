@@ -53,6 +53,16 @@ export function useOptionalSelection(): SelectionState | undefined {
 // The caller still renders `data-gui-node-id={id}` / `data-gui-component`
 // on the element itself — this hook only adds it to the registry so
 // `getNode`/`selectNode`/the highlight effect can resolve it by id.
+// Who a node belongs to, by how the React tree is composed: a component that
+// renders other GUI parts wraps them in <GuiParent id="..."> and any part
+// registered underneath (useRegisterGuiNode) is its child unless it names
+// another parent. Parts that only exist while something is open (a popover's
+// items) still have a parent this way, without needing to be in the DOM.
+const GuiParentContext = React.createContext<string | undefined>(undefined);
+export function GuiParent({ id, children }: { id: string; children: React.ReactNode }) {
+  return <GuiParentContext.Provider value={id}>{children}</GuiParentContext.Provider>;
+}
+
 export function useRegisterGuiNode(
   id: string,
   type: string,
@@ -60,6 +70,8 @@ export function useRegisterGuiNode(
   provenance?: GuiNodeProvenance
 ) {
   const ctx = React.useContext(SelectionContext);
+  const inheritedParent = React.useContext(GuiParentContext);
+  parentId = parentId ?? inheritedParent;
   const registerNode = ctx?.registerNode;
   const unregisterNode = ctx?.unregisterNode;
   React.useEffect(() => {

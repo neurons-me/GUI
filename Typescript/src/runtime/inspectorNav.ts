@@ -45,3 +45,73 @@ export function around(model: NavModel, id: string): Around {
     total: siblings.length,
   };
 }
+
+/**
+ * Who is whose parent. Every node must be reachable from the root by going
+ * down, and reach the root by going up -- otherwise the tree has parts you
+ * cannot walk to. So the rules are strict:
+ *
+ *  - a node's parent is what the GUI declared, else the nearest tagged
+ *    element above it in the page, else the node its own id is a path under
+ *    (`a.b.c` and `a/b` are parts of `a.b` and `a`) -- so a part that is not
+ *    on the page right now (a table's empty-state) still hangs where it
+ *    belongs;
+ *  - a parent that does not exist, a node with no parent at all, and a cycle
+ *    all become ORPHANS: they are attached to the root so they can still be
+ *    reached, and reported, so a gap in what the GUI declares is visible
+ *    rather than silently hidden.
+ */
+export function linkTree(input: {
+  ids: string[];
+  declaredParent: (id: string) => string | null | undefined;
+  domParent: (id: string) => string | null | undefined;
+  /** The one node with no parent, if it exists (usually 'GUI'). */
+  root: string;
+}): { parents: Map<string, string | null>; orphans: string[] } {
+  const known = new Set(input.ids);
+  const parents = new Map<string, string | null>();
+  const orphans: string[] = [];
+  const hasRoot = known.has(input.root);
+  // The longest known node this id is a path under: 'x/empty-state' -> 'x',
+  // 'a.b.c' -> 'a.b' (or 'a' if 'a.b' isn't a node).
+  const idParent = (id: string): string | null => {
+    let cursor = id;
+    for (let guard = 0; guard < 40; guard++) {
+      const cut = Math.max(cursor.lastIndexOf('/'), cursor.lastIndexOf('.'));
+      if (cut <= 0) return null;
+      cursor = cursor.slice(0, cut);
+      if (known.has(cursor)) return cursor;
+    }
+    return null;
+  };
+  for (const id of input.ids) {
+    if (id === input.root) {
+      parents.set(id, null);
+      continue;
+    }
+    const wanted = input.declaredParent(id) || input.domParent(id) || idParent(id);
+    if (wanted && wanted !== id && known.has(wanted)) {
+      parents.set(id, wanted);
+    } else if (hasRoot) {
+      parents.set(id, input.root);
+      orphans.push(id);
+    } else {
+      parents.set(id, null);
+    }
+  }
+  // A cycle (a -> b -> a) never reaches the root: cut it at the node where it
+  // closes and hang that node from the root.
+  for (const id of input.ids) {
+    const seen = new Set<string>();
+    let cursor: string | null = id;
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      cursor = parents.get(cursor) ?? null;
+    }
+    if (cursor && hasRoot) {
+      parents.set(cursor, input.root);
+      if (!orphans.includes(cursor)) orphans.push(cursor);
+    }
+  }
+  return { parents, orphans };
+}

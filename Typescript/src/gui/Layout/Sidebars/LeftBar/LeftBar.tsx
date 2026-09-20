@@ -13,6 +13,7 @@ import { Box, Typography } from '@/gui/Atoms';
 import { Drawer } from '@/gui/Molecules';
 import type { LeftSidebarView } from '@/gui-internals/Contexts';
 import { selectionStore } from '@/runtime/selectionStore';
+import { GuiParent } from '@/runtime/selection';
 import type { ResolvedNodeRecord } from '@/runtime/renderer';
 import { mergeLeftSidebarCollections } from '@/gui/Layout/Sidebars/Collections/resolveCollections';
 
@@ -30,6 +31,17 @@ const EMPTY_SYNTHETIC_PROPS: Record<string, unknown> = {};
 // its links and actions with their labels, routes and icons. Functions and
 // React elements (a launcher, a custom header) can't be shown as data, so they
 // appear as placeholders.
+// The same object while its JSON is unchanged. The shell builds this bar's
+// element list anew on every render; registering fresh objects each time made
+// the registry think the records changed, which notified the selection, which
+// re-rendered the shell -- a loop whenever one of these nodes was selected.
+function useStableByJson<T>(value: T): T {
+  const ref = useRef<{ json: string; value: T } | null>(null);
+  const json = JSON.stringify(value);
+  if (!ref.current || ref.current.json !== json) ref.current = { json, value };
+  return ref.current.value;
+}
+
 function toPlainSpec(value: unknown, depth = 0): unknown {
   if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
   if (typeof value === 'function') return '[function]';
@@ -197,6 +209,27 @@ const LeftSidebar = ({
     }
   }, [mobileOpen, view]);
 
+  // The bar's configuration and each item's record, as plain data whose
+  // identity only changes when the data does.
+  const plainBar = useStableByJson({
+    header: toPlainSpec(header),
+    elements: toPlainSpec(resolvedElements) as any[],
+    footerElements: toPlainSpec(resolvedFooterElements) as any[],
+  });
+  const itemSpecs = useStableByJson(
+    (['elements', 'footerElements'] as const).flatMap((section) =>
+      (plainBar[section] as any[]).map((el, idx) => {
+        const meta = buildLeftSidebarElementMeta(el, adminNodeId, section, idx);
+        const props = (el?.props ?? {}) as Record<string, unknown>;
+        return {
+          meta,
+          props,
+          resolvedProps: { ...props, 'data-gui-node-id': meta.nodeId, 'data-gui-component': meta.componentName },
+        };
+      })
+    )
+  );
+
   useEffect(() => {
     const rootPath = getSidebarRootPath(adminNodeId);
     // When `data-gui-node-id` was supplied as a prop, LeftBar is being
@@ -210,11 +243,6 @@ const LeftSidebar = ({
     // the plain `id` prop or the 'LeftSidebar' default). The header/toggle
     // sub-records below are always safe — their ids are derived from
     // adminNodeId and the renderer never separately resolves them.
-    const barSpecProps = {
-      header: toPlainSpec(header),
-      elements: toPlainSpec(resolvedElements),
-      footerElements: toPlainSpec(resolvedFooterElements),
-    } as Record<string, unknown>;
     const syntheticRecords: ResolvedNodeRecord[] = dataGuiNodeId
       ? []
       : [
@@ -224,9 +252,9 @@ const LeftSidebar = ({
             path: rootPath,
             spec: {
               type: dataGuiComponent || 'left',
-              props: barSpecProps,
+              props: plainBar as unknown as Record<string, unknown>,
             },
-            resolvedProps: barSpecProps,
+            resolvedProps: plainBar as unknown as Record<string, unknown>,
           },
         ];
     syntheticRecords.push(
@@ -249,36 +277,21 @@ const LeftSidebar = ({
         },
       },
     );
-    const registerRecord = (
-      el: LeftSidebarElement,
-      section: 'elements' | 'footerElements',
-      idx: number
-    ) => {
-      const meta = buildLeftSidebarElementMeta(el, adminNodeId, section, idx);
+    itemSpecs.forEach((item) => {
       syntheticRecords.push({
-        id: meta.nodeId,
-        type: meta.componentName,
-        path: meta.path,
-        spec: {
-          type: meta.componentName,
-          props: el.props ?? EMPTY_SYNTHETIC_PROPS,
-        },
-        resolvedProps: {
-          ...(el.props ?? {}),
-          'data-gui-node-id': meta.nodeId,
-          'data-gui-component': meta.componentName,
-        },
+        id: item.meta.nodeId,
+        type: item.meta.componentName,
+        path: item.meta.path,
+        spec: { type: item.meta.componentName, props: item.props },
+        resolvedProps: item.resolvedProps,
       });
-    };
-
-    resolvedElements.forEach((el, idx) => registerRecord(el, 'elements', idx));
-    resolvedFooterElements.forEach((el, idx) => registerRecord(el, 'footerElements', idx));
+    });
     syntheticRecords.forEach((record) => selectionStore.actions.registerNode(record));
 
     return () => {
       syntheticRecords.forEach((record) => selectionStore.actions.unregisterNode(record.id));
     };
-  }, [adminNodeId, dataGuiNodeId, dataGuiComponent, headerNodeId, toggleButtonNodeId, resolvedElements, resolvedFooterElements, header]);
+  }, [adminNodeId, dataGuiNodeId, dataGuiComponent, headerNodeId, toggleButtonNodeId, plainBar, itemSpecs]);
 
   const renderElements = () =>
     resolvedElements.map((el, idx) => {
@@ -291,10 +304,13 @@ const LeftSidebar = ({
         // instead of guessing one from the markup.
         ...((el as any)?.props?.label ? { 'data-gui-label': String((el as any).props.label) } : {}),
       };
-      if (el.type === 'link') return <LeftSidebarLink key={key} view={view} {...adminProps} {...el.props} />;
-      if (el.type === 'menu') return <LeftSidebarMenu key={key} view={view} {...adminProps} {...el.props} />;
-      if (el.type === 'action') return <LeftSidebarAction key={key} view={view} {...adminProps} {...el.props} />;
-      return null;
+      const item =
+        el.type === 'link' ? <LeftSidebarLink view={view} {...adminProps} {...el.props} />
+        : el.type === 'menu' ? <LeftSidebarMenu view={view} {...adminProps} {...el.props} />
+        : el.type === 'action' ? <LeftSidebarAction view={view} {...adminProps} {...el.props} />
+        : null;
+      // Anything an item registers (a launcher's own parts) belongs to it.
+      return item ? <GuiParent key={key} id={adminMeta.nodeId}>{item}</GuiParent> : null;
     });
   const renderFooterItems = () =>
     resolvedFooterElements.map((el, idx) => {
@@ -307,10 +323,12 @@ const LeftSidebar = ({
         // instead of guessing one from the markup.
         ...((el as any)?.props?.label ? { 'data-gui-label': String((el as any).props.label) } : {}),
       };
-      if (el.type === 'link') return <LeftSidebarLink key={`footer-link-${baseKey}`} view={view} {...adminProps} {...el.props} />;
-      if (el.type === 'menu') return <LeftSidebarMenu key={`footer-menu-${baseKey}`} view={view} {...adminProps} {...el.props} />;
-      if (el.type === 'action') return <LeftSidebarAction key={`footer-action-${baseKey}`} view={view} {...adminProps} {...el.props} />;
-      return null;
+      const item =
+        el.type === 'link' ? <LeftSidebarLink view={view} {...adminProps} {...el.props} />
+        : el.type === 'menu' ? <LeftSidebarMenu view={view} {...adminProps} {...el.props} />
+        : el.type === 'action' ? <LeftSidebarAction view={view} {...adminProps} {...el.props} />
+        : null;
+      return item ? <GuiParent key={`footer-${el.type}-${baseKey}`} id={adminMeta.nodeId}>{item}</GuiParent> : null;
     });
 
   if (view === 'rail') {
