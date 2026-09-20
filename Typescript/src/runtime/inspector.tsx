@@ -30,6 +30,12 @@ type TreeEntry = {
   /** Has an element of its own. */
   hasElement: boolean;
   /**
+   * Something that tells same-kind siblings apart (link.0 ... link.4): its
+   * aria-label / title, a link's path, a name or placeholder, or its short
+   * text -- read from the element. Absent when the node has no element.
+   */
+  hint: string | null;
+  /**
    * Actually on the page: an element of its own, or -- for a group like
    * GUI.bars -- one below it. Distinct from `enabled`: a page that is
    * declared and configured but whose route isn't active is enabled and not
@@ -88,6 +94,52 @@ function findTaggedElement(id: string, nth = 0): HTMLElement | null {
   }
 }
 
+function visibleText(el: Element): string {
+  let out = '';
+  el.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      out += node.textContent ?? '';
+    } else if (node instanceof HTMLElement) {
+      const cls = typeof node.className === 'string' ? node.className : '';
+      // Skip icons and anything hidden from assistive tech.
+      if (node.getAttribute('aria-hidden') === 'true' || /material|icon/i.test(cls) || /^[a-z]+(_[a-z0-9]+)+$/.test((node.textContent ?? '').trim())) return;
+      out += ` ${visibleText(node)} `;
+    }
+  });
+  return out;
+}
+
+// What makes THIS one of several similar nodes recognisable. Best signal
+// first; never anything that could be typed-in content of a field.
+function hintFor(el: HTMLElement | undefined, label: string): string | null {
+  if (!el) return null;
+  const clean = (v: string | null | undefined) => (v ?? '').replace(/\s+/g, ' ').trim();
+  const shorten = (v: string) => (v.length > 28 ? `${v.slice(0, 26)}…` : v);
+  let hint = clean(el.getAttribute('aria-label')) || clean(el.getAttribute('title'));
+  if (!hint && el.tagName === 'A') {
+    const href = el.getAttribute('href');
+    if (href) {
+      try {
+        hint = new URL(href, window.location.href).pathname;
+      } catch {
+        hint = href;
+      }
+    }
+  }
+  if (!hint) hint = clean(el.getAttribute('name')) || clean(el.getAttribute('placeholder'));
+  const tag = el.tagName;
+  if (!hint && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+    // The element's own words, without icon glyphs (a Material icon is text --
+    // 'chevron_left', 'dark_mode' -- that would read as a label). A container's
+    // whole text is not a name for it: only short text, or a leaf, qualifies.
+    const words = clean(visibleText(el));
+    if (words && (words.length <= 28 || el.childElementCount === 0)) hint = words;
+  }
+  if (!hint && el.id && !/^:r/.test(el.id)) hint = `#${el.id}`;
+  hint = shorten(hint);
+  return hint && hint !== label ? hint : null;
+}
+
 // The tree as the Inspector sees it right now: the GUI's declarations plus
 // whatever the DOM shows that nobody declared. Built once per refresh and
 // shared by the breadcrumb and the query.
@@ -123,6 +175,7 @@ function buildTreeModel() {
       enabled: rec?.enabled !== false,
       source: rec ? 'declared' : 'dom',
       hasElement: !!el,
+      hint: hintFor(el, label),
       rendered: !!el || [...elements.keys()].some((k) => k.startsWith(`${id}.`)),
     };
   };
@@ -203,7 +256,7 @@ function readTreeView(
 
 function treeSignature(view: TreeView | null): string {
   if (!view) return '';
-  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
+  const key = (e: TreeEntry) => `${e.id}:${e.label}:${e.hint}:${e.enabled}:${e.source}:${e.hasElement}:${e.rendered}`;
   const rowKey = (r: TreeRow) => (r.kind === 'node' ? `${key(r.entry)}|${r.prefix}|${r.hasChildren}|${r.open}` : `${r.id}|${r.count}`);
   return `${view.path.map(key).join('>')}#${view.rows.map(rowKey).join(';')}#${view.around.parent?.id}|${view.around.prev?.id}|${view.around.next?.id}|${view.around.child?.id}|${view.around.at}/${view.around.total}`;
 }
@@ -2314,6 +2367,7 @@ export function RuntimeInspector({
                               style={{ fontSize: 14, fontWeight: 700, padding: '0 8px', borderRadius: 6, background: ui.fillActive, opacity: treeEntryState(entry) ? 0.65 : 1 }}
                             >
                               {treeEntryLabel(entry)}
+                              {entry.hint && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, opacity: 0.65 }}>{entry.hint}</span>}
                             </span>
                           ) : (
                             <button
@@ -2426,6 +2480,11 @@ export function RuntimeInspector({
                           {row.hasChildren ? (row.open ? '▾' : '▸') : '·'}
                         </span>
                         <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal' }}>{entry.label}</span>
+                        {entry.hint && (
+                          <span style={{ marginLeft: 8, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: ui.fgMuted, fontWeight: 400 }}>
+                            {entry.hint}
+                          </span>
+                        )}
                         {state && <span style={{ color: ui.fgMuted, fontWeight: 400 }}>{` · ${state}`}</span>}
                       </div>
                     );
