@@ -93,7 +93,8 @@ function normalizeNodeSegment(value: string, fallback: string): string {
   const normalized = String(value || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
+    // No dots: a dot would read as a level of the path.
+    .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '');
   return normalized || fallback;
@@ -345,15 +346,14 @@ export function BlocksTable({
   const [expandedNamespaces, setExpandedNamespaces] = React.useState<Record<string, boolean>>({});
   const parentNodeId = String(dataGuiNodeId || 'BlocksTable');
   const parentNodeType = String(dataGuiComponent || 'BlocksTable');
-  const parentNodePath = React.useMemo(() => {
-    const normalized = parentNodeId.replace(/\/+/g, '.').replace(/^\.+|\.+$/g, '');
-    return normalized || 'BlocksTable';
-  }, [parentNodeId]);
-  const nodeId = React.useCallback((segment: string) => `${parentNodeId}/${segment}`, [parentNodeId]);
-  const nodePath = React.useCallback(
-    (segment: string) => `${parentNodePath}.${segment.replace(/\//g, '.')}`,
-    [parentNodePath],
+  // Ids are paths (`GUI.content.blockchain.table.rows.12.hash.copy`): the same
+  // syntax as everywhere else in the GUI, and a part's parent is its path minus
+  // the last segment. The table itself is the root; "" names it.
+  const nodeId = React.useCallback(
+    (segment: string) => (segment ? `${parentNodeId}.${segment}` : parentNodeId),
+    [parentNodeId],
   );
+  const nodePath = nodeId;
   const nodeAttrs = React.useCallback(
     (segment: string, component: string) => ({
       'data-gui-node-id': nodeId(segment),
@@ -361,9 +361,9 @@ export function BlocksTable({
     }),
     [nodeId],
   );
+  // A block is its number in the chain.
   const getRowSegment = React.useCallback((row: BlocksTableEntry, index: number) => {
-    const hashPart = normalizeNodeSegment(String(row.hash || '').slice(0, 12), `hash-${index + 1}`);
-    return `rows/block-${normalizeNodeSegment(String(row.id || index + 1), String(index + 1))}-${hashPart}`;
+    return `rows.${normalizeNodeSegment(String(row.id ?? index + 1), String(index + 1))}`;
   }, []);
   const safeRenderLimit = React.useMemo(
     () => Math.max(1, Math.min(500, Number(rowsLimit || 120))),
@@ -589,7 +589,7 @@ export function BlocksTable({
       });
     };
 
-    registerNode(nodeId('content'), nodePath('content'), `${parentNodeType}.Content`, {
+    registerNode(nodeId(''), nodePath(''), `${parentNodeType}.Content`, {
       endpoint,
       namespaceRootUrl,
       namespaceLabel,
@@ -606,14 +606,14 @@ export function BlocksTable({
       visibleRows: displayRows.length,
       safeRenderLimit,
     });
-    registerNode(nodeId('table'), nodePath('table'), `${parentNodeType}.Table`, {
+    registerNode(nodeId('rows'), nodePath('rows'), `${parentNodeType}.Table`, {
       totalRows: data.length,
       visibleRows: displayRows.length,
     });
-    registerNode(nodeId('head'), nodePath('head'), `${parentNodeType}.Head`, {
+    registerNode(nodeId('rows.head'), nodePath('rows.head'), `${parentNodeType}.Head`, {
       columns: ['identity', 'expression', 'hash'],
     });
-    registerNode(nodeId('empty-state'), nodePath('empty-state'), `${parentNodeType}.EmptyState`, {
+    registerNode(nodeId('rows.empty'), nodePath('rows.empty'), `${parentNodeType}.EmptyState`, {
       visible: displayRows.length === 0,
     });
 
@@ -636,21 +636,21 @@ export function BlocksTable({
         operator: row.operator,
         timestamp: row.timestamp,
       });
-      registerNode(nodeId(`${rowSegment}/identity`), nodePath(`${rowSegment}/identity`), `${parentNodeType}.RowIdentity`, {
+      registerNode(nodeId(`${rowSegment}.identity`), nodePath(`${rowSegment}.identity`), `${parentNodeType}.RowIdentity`, {
         subject: identity.subject,
         root: identity.root,
         handle: identity.handle,
         namespaceUrl,
         namespaceExpanded: Boolean(expandedNamespaces[namespaceKey]),
       });
-      registerNode(nodeId(`${rowSegment}/identity/qr`), nodePath(`${rowSegment}/identity/qr`), `${parentNodeType}.RowIdentityQr`, {
+      registerNode(nodeId(`${rowSegment}.identity.qr`), nodePath(`${rowSegment}.identity.qr`), `${parentNodeType}.RowIdentityQr`, {
         namespaceUrl,
         subject: identity.subject,
         enabled: Boolean(namespaceUrl),
       });
       registerNode(
-        nodeId(`${rowSegment}/identity/label`),
-        nodePath(`${rowSegment}/identity/label`),
+        nodeId(`${rowSegment}.identity.label`),
+        nodePath(`${rowSegment}.identity.label`),
         `${parentNodeType}.RowIdentityLabel`,
         {
           label: identity.subject === identity.root ? identity.subject : `@${identity.subject}`,
@@ -659,8 +659,8 @@ export function BlocksTable({
         },
       );
       registerNode(
-        nodeId(`${rowSegment}/expression`),
-        nodePath(`${rowSegment}/expression`),
+        nodeId(`${rowSegment}.expression`),
+        nodePath(`${rowSegment}.expression`),
         `${parentNodeType}.RowExpression`,
         {
           expression,
@@ -670,15 +670,15 @@ export function BlocksTable({
           timestamp: eventTime.full,
         },
       );
-      registerNode(nodeId(`${rowSegment}/hash`), nodePath(`${rowSegment}/hash`), `${parentNodeType}.RowHash`, {
+      registerNode(nodeId(`${rowSegment}.hash`), nodePath(`${rowSegment}.hash`), `${parentNodeType}.RowHash`, {
         hash: row.hash,
         expanded: Boolean(expandedHashes[String(row.hash || '').trim()]),
         copied: copiedHash === row.hash,
         focused: focusedHash === row.hash,
       });
       registerNode(
-        nodeId(`${rowSegment}/hash/value`),
-        nodePath(`${rowSegment}/hash/value`),
+        nodeId(`${rowSegment}.hash.value`),
+        nodePath(`${rowSegment}.hash.value`),
         `${parentNodeType}.RowHashValue`,
         {
           hash: row.hash,
@@ -688,8 +688,8 @@ export function BlocksTable({
       );
       if (row.prevHash) {
         registerNode(
-          nodeId(`${rowSegment}/hash/prev`),
-          nodePath(`${rowSegment}/hash/prev`),
+          nodeId(`${rowSegment}.hash.prev`),
+          nodePath(`${rowSegment}.hash.prev`),
           `${parentNodeType}.RowPrevHash`,
           {
             hash: row.prevHash,
@@ -699,8 +699,8 @@ export function BlocksTable({
         );
       }
       registerNode(
-        nodeId(`${rowSegment}/hash/copy`),
-        nodePath(`${rowSegment}/hash/copy`),
+        nodeId(`${rowSegment}.hash.copy`),
+        nodePath(`${rowSegment}.hash.copy`),
         `${parentNodeType}.RowHashCopy`,
         {
           hash: row.hash,
@@ -736,7 +736,7 @@ export function BlocksTable({
 
   return (
     <Box
-      {...nodeAttrs('content', `${parentNodeType}.Content`)}
+      {...nodeAttrs('', `${parentNodeType}.Content`)}
       sx={{
         borderRadius: 2,
         border: '1px solid',
@@ -769,11 +769,11 @@ export function BlocksTable({
         </Box>
       ) : null}
       <Table
-        {...nodeAttrs('table', `${parentNodeType}.Table`)}
+        {...nodeAttrs('rows', `${parentNodeType}.Table`)}
         size="small"
         sx={{ minWidth: 720 }}
       >
-        <TableHead {...nodeAttrs('head', `${parentNodeType}.Head`)}>
+        <TableHead {...nodeAttrs('rows.head', `${parentNodeType}.Head`)}>
           <TableRow sx={{ background: 'background.paper' }}>
             <TableCell><Typography fontWeight={700}>.me</Typography></TableCell>
             <TableCell><Typography fontWeight={700}>Expression</Typography></TableCell>
@@ -783,7 +783,7 @@ export function BlocksTable({
 
         <TableBody>
           {displayRows.length === 0 && (
-            <TableRow {...nodeAttrs('empty-state', `${parentNodeType}.EmptyState`)}>
+            <TableRow {...nodeAttrs('rows.empty', `${parentNodeType}.EmptyState`)}>
               <TableCell colSpan={3}>
                 <Typography sx={{ opacity: 0.6, py: 3, textAlign: 'center' }}>No blockchain entries yet.</Typography>
               </TableCell>
@@ -807,7 +807,7 @@ export function BlocksTable({
               }}
             >
               <TableCell
-                {...nodeAttrs(`${getRowSegment(r, index)}/identity`, `${parentNodeType}.RowIdentity`)}
+                {...nodeAttrs(`${getRowSegment(r, index)}.identity`, `${parentNodeType}.RowIdentity`)}
                 sx={{ minWidth: 260 }}
               >
                 {(() => {
@@ -925,7 +925,7 @@ export function BlocksTable({
                           }
                         >
                           <Box
-                            {...nodeAttrs(`${getRowSegment(r, index)}/identity/qr`, `${parentNodeType}.RowIdentityQr`)}
+                            {...nodeAttrs(`${getRowSegment(r, index)}.identity.qr`, `${parentNodeType}.RowIdentityQr`)}
                             sx={{
                               width: 36,
                               height: 36,
@@ -941,6 +941,7 @@ export function BlocksTable({
                             }}
                           >
                             <CleakerQR
+                              data-gui-node-id={nodeId(`${getRowSegment(r, index)}.identity.qr.icon`)}
                               value={namespaceUrl}
                               username={identity.subject}
                               endpoint={namespaceRootUrl || endpoint}
@@ -953,7 +954,7 @@ export function BlocksTable({
                         </Tooltip>
                       ) : (
                         <Box
-                          {...nodeAttrs(`${getRowSegment(r, index)}/identity/qr`, `${parentNodeType}.RowIdentityQr`)}
+                          {...nodeAttrs(`${getRowSegment(r, index)}.identity.qr`, `${parentNodeType}.RowIdentityQr`)}
                           sx={{
                             width: 36,
                             height: 36,
@@ -988,7 +989,7 @@ export function BlocksTable({
                       </Avatar>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.15, minWidth: 0 }}>
                         <Typography
-                          {...nodeAttrs(`${getRowSegment(r, index)}/identity/label`, `${parentNodeType}.RowIdentityLabel`)}
+                          {...nodeAttrs(`${getRowSegment(r, index)}.identity.label`, `${parentNodeType}.RowIdentityLabel`)}
                           variant="body2"
                           component="button"
                           type="button"
@@ -1028,7 +1029,7 @@ export function BlocksTable({
                 })()}
               </TableCell>
               <TableCell
-                {...nodeAttrs(`${getRowSegment(r, index)}/expression`, `${parentNodeType}.RowExpression`)}
+                {...nodeAttrs(`${getRowSegment(r, index)}.expression`, `${parentNodeType}.RowExpression`)}
                 sx={{ minWidth: 260 }}
               >
                 {(() => {
@@ -1095,7 +1096,7 @@ export function BlocksTable({
                 })()}
               </TableCell>
               <TableCell
-                {...nodeAttrs(`${getRowSegment(r, index)}/hash`, `${parentNodeType}.RowHash`)}
+                {...nodeAttrs(`${getRowSegment(r, index)}.hash`, `${parentNodeType}.RowHash`)}
                 sx={{ width: 164, minWidth: 164, maxWidth: 164 }}
               >
                 <Box
@@ -1117,7 +1118,7 @@ export function BlocksTable({
                     }}
                   >
                     <Typography
-                      {...nodeAttrs(`${getRowSegment(r, index)}/hash/value`, `${parentNodeType}.RowHashValue`)}
+                      {...nodeAttrs(`${getRowSegment(r, index)}.hash.value`, `${parentNodeType}.RowHashValue`)}
                       variant="body2"
                       title={r.hash}
                       component="button"
@@ -1161,7 +1162,7 @@ export function BlocksTable({
                         }
                       >
                         <Typography
-                          {...nodeAttrs(`${getRowSegment(r, index)}/hash/prev`, `${parentNodeType}.RowPrevHash`)}
+                          {...nodeAttrs(`${getRowSegment(r, index)}.hash.prev`, `${parentNodeType}.RowPrevHash`)}
                           variant="caption"
                           title={r.prevHash}
                           component="button"
@@ -1192,7 +1193,7 @@ export function BlocksTable({
                   </Box>
                   <Tooltip title={copiedHash === r.hash ? 'Copied!' : 'Copy full hash'} placement="top" arrow>
                     <IconButton
-                      {...nodeAttrs(`${getRowSegment(r, index)}/hash/copy`, `${parentNodeType}.RowHashCopy`)}
+                      {...nodeAttrs(`${getRowSegment(r, index)}.hash.copy`, `${parentNodeType}.RowHashCopy`)}
                       size="small"
                       onClick={async () => {
                         const ok = await copyToClipboard(r.hash);

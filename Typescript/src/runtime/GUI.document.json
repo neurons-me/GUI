@@ -143,7 +143,29 @@
             "component": "Blockchain",
             "route": "/blockchain",
             "note": "Everything written to this namespace, as one stream.",
-            "label": "Blockchain"
+            "label": "Blockchain",
+            "children": {
+              "table": {
+                "label": "Blocks table",
+                "note": "One row per block; the rows are data and appear under rows, by block number, when loaded.",
+                "children": {
+                  "summary": {
+                    "label": "Summary"
+                  },
+                  "rows": {
+                    "label": "Rows",
+                    "children": {
+                      "head": {
+                        "label": "Head"
+                      },
+                      "empty": {
+                        "label": "Empty"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "url": {
             "label": "URL",
