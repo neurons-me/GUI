@@ -1343,7 +1343,6 @@ export function RuntimeInspector({
       path: selectedNodeId,
       spec: { type, props },
       resolvedProps: props,
-      provenance: { source: 'dom', note: 'Not registered by the GUI: what the page shows for this element.' },
     } as any;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRecord, selectedNodeId]);
@@ -2712,9 +2711,89 @@ export function RuntimeInspector({
                 <code>{selected.part}</code>
               </div>
             )}
+            {/* SPEC: this node and the parts it covers -- the main thing to read. */}
+            <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }}>SPEC</span>
+                  <span style={{ fontSize: 10.5, opacity: 0.55 }}>
+                    {tab === 'spec' ? 'this node and the parts it covers' : tab === 'resolved' ? 'after runtime resolution' : 'spec vs runtime'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button type="button" onClick={() => setTab('spec')} style={tabButtonStyle(tab === 'spec')}>
+                    Spec
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab('resolved')}
+                    style={tabButtonStyle(tab === 'resolved')}
+                    title="Shows the JSON after runtime prop resolution"
+                  >
+                    Runtime
+                  </button>
+                  <button type="button" onClick={() => setTab('diff')} style={tabButtonStyle(tab === 'diff')}>
+                    Diff
+                  </button>
+                </div>
+              </div>
+            {tab === 'spec' && (
+              <div style={{ marginBottom: 10 }}>
+                <CodeBlock
+                  code={safeStringify(
+                    // The node's own spec, then the parts it covers below it.
+                    subtree
+                      ? (() => {
+                          const { children, ...own } = subtree;
+                          return {
+                            ...own,
+                            ...(selected?.spec?.props && Object.keys(selected.spec.props).length ? { props: selected.spec.props } : {}),
+                            ...(children ? { children } : {}),
+                          };
+                        })()
+                      : selected?.spec ?? null
+                  )}
+                  language="json"
+                  variant={codeVariant}
+                  title="raw.spec.json"
+                  showLineNumbers
+                  wrapLongLines
+                  showCopyButton
+                />
+              </div>
+            )}
+
+            {tab === 'resolved' && (
+              <div>
+                <CodeBlock
+                  code={safeStringify(selected?.resolvedProps ?? null)}
+                  language="json"
+                  variant={codeVariant}
+                  title="resolved.props.json"
+                  showLineNumbers
+                  wrapLongLines
+                  showCopyButton
+                />
+              </div>
+            )}
+
+            {tab === 'diff' && (
+              <div>
+                <CodeBlock
+                  code={safeStringify(diffPayload)}
+                  language="json"
+                  variant={codeVariant}
+                  title="spec-vs-resolved.diff.json"
+                  showLineNumbers
+                  wrapLongLines
+                  showCopyButton
+                />
+              </div>
+            )}
+            </div>
             {provenance && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>PROVENANCE</div>
+              <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12 }}>
+                <div style={{ ...{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }, marginBottom: 6 }}>PROVENANCE</div>
                 <CodeBlock
                   code={safeStringify(provenance)}
                   language="json"
@@ -2726,10 +2805,9 @@ export function RuntimeInspector({
                 />
               </div>
             )}
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>
-                PROVENANCE DETAILS
-              </div>
+            {explainPath || documentEntry || provenance ? (
+            <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12 }}>
+              <div style={{ ...{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }, marginBottom: 6 }}>EXPLAIN</div>
               <div
                 style={{
                   border: `1px solid ${ui.line}`,
@@ -3019,6 +3097,12 @@ export function RuntimeInspector({
                 )}
               </div>
             </div>
+            ) : (
+              <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12, fontSize: 11 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }}>EXPLAIN</span>
+                <span style={{ opacity: 0.6, marginLeft: 8 }}>not bound to the kernel</span>
+              </div>
+            )}
             {imagePreviews.length > 0 && (
               <div style={{ marginBottom: 10 }}>
                 <div style={{ opacity: 0.75, marginBottom: 6 }}>image preview</div>
@@ -3037,107 +3121,6 @@ export function RuntimeInspector({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-            {selectedMeta?.resolvedPath && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ opacity: 0.75 }}>resolved path</div>
-                <code>{selectedMeta.resolvedPath.join(' > ')}</code>
-              </div>
-            )}
-            <div style={{ marginBottom: 10 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 6,
-                }}
-              >
-                <div style={{ opacity: 0.75, fontWeight: 700 }}>JSON VIEW</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, opacity: 0.7 }}>{tabMetaLabel}</span>
-                  <button type="button" onClick={() => setTab('spec')} style={tabButtonStyle(tab === 'spec')}>
-                    Spec
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTab('resolved')}
-                    style={tabButtonStyle(tab === 'resolved')}
-                    title="Shows the JSON after runtime prop resolution"
-                  >
-                    Runtime
-                  </button>
-                  <button type="button" onClick={() => setTab('diff')} style={tabButtonStyle(tab === 'diff')}>
-                    Diff
-                  </button>
-                </div>
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.65 }}>
-                Changes only the JSON panel below.
-              </div>
-            </div>
-            {tab === 'spec' && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>
-                  INTENTION (RAW SPEC) — this node and the parts it covers
-                </div>
-                <CodeBlock
-                  code={safeStringify(
-                    // The node's own spec, then the parts it covers below it.
-                    subtree
-                      ? (() => {
-                          const { children, ...own } = subtree;
-                          return {
-                            ...own,
-                            ...(selected?.spec?.props && Object.keys(selected.spec.props).length ? { props: selected.spec.props } : {}),
-                            ...(children ? { children } : {}),
-                          };
-                        })()
-                      : selected?.spec ?? null
-                  )}
-                  language="json"
-                  variant={codeVariant}
-                  title="raw.spec.json"
-                  showLineNumbers
-                  wrapLongLines
-                  showCopyButton
-                />
-              </div>
-            )}
-
-            {tab === 'resolved' && (
-              <div>
-                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>
-                  MANIFESTATION (RUNTIME-RESOLVED JSON)
-                </div>
-                <CodeBlock
-                  code={safeStringify(selected?.resolvedProps ?? null)}
-                  language="json"
-                  variant={codeVariant}
-                  title="resolved.props.json"
-                  showLineNumbers
-                  wrapLongLines
-                  showCopyButton
-                />
-              </div>
-            )}
-
-            {tab === 'diff' && (
-              <div>
-                <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>
-                  DIFF (SPEC.PROPS VS RUNTIME-RESOLVED JSON)
-                </div>
-                <CodeBlock
-                  code={safeStringify(diffPayload)}
-                  language="json"
-                  variant={codeVariant}
-                  title="spec-vs-resolved.diff.json"
-                  showLineNumbers
-                  wrapLongLines
-                  showCopyButton
-                />
               </div>
             )}
           </div>
