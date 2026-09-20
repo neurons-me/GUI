@@ -216,7 +216,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       <Box
         role="button"
         tabIndex={0}
-        data-gui-node-id="RegisterMe.qrToggle"
+        data-gui-node-id="RegisterMe.qr"
         aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
         onClick={() => setExpanded((value) => !value)}
         onKeyDown={(event) => {
@@ -233,7 +233,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
           diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
           hoverFlip={false}
           clickFlip={false}
-          data-gui-node-id="RegisterMe.bubble"
+          data-gui-node-id="RegisterMe.qr.code"
           style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         />
       </Box>

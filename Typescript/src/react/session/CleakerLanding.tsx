@@ -784,7 +784,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             editableRoot={!authenticated}
             editableRootValue={namespaceRootLabel}
             onEditableRootChange={setNamespaceOverride}
-            data-gui-node-id={`${nodeId}.qr.bubble`}
+            data-gui-node-id={`${nodeId}.qr.code`}
             style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           />
         </Box>

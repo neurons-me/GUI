@@ -302,7 +302,12 @@ export default function QRme({
   const showingAvatar = pinned || (hoverFlip && hovered);
   const faceRotation = showingAvatar ? 180 : 0;
   const rootNodeId = String(dataGuiNodeId || 'QR.me');
-  const rootNodeType = String(dataGuiComponent || 'QR.me');
+  // The QR is one thing with three parts: the code itself, its namespace text
+  // and its status dot. When the caller names the code (`<qr>.code`), the
+  // namespace and status are its SIBLINGS (`<qr>.namespace`, `<qr>.status`),
+  // not children of the code: they sit beside it in the markup.
+  const qrBase = rootNodeId.endsWith('.code') ? rootNodeId.slice(0, -'.code'.length) : rootNodeId;
+  const rootNodeType = String(dataGuiComponent || (rootNodeId.endsWith('.code') ? 'code' : 'QR.me'));
   // 'confirmed' and the default 'idle' both fall through to the QR's own
   // normal color -- only 'checking'/'error' recolor anything. Kept as one
   // value (not two separate ring/ink colors) so the ink and the ring
@@ -569,8 +574,8 @@ export default function QRme({
         <>
           <Box
             aria-hidden="true"
-            data-gui-node-id={`${rootNodeId}.status`}
-            data-gui-component="QR.me.status"
+            data-gui-node-id={`${qrBase}.status`}
+            data-gui-component="status"
             sx={{
               position: 'absolute',
               // 2px of air around the dot itself: a 7px box's 1px outline
@@ -585,8 +590,8 @@ export default function QRme({
           {perimeterTextBox && (
             <Box
               aria-hidden="true"
-              data-gui-node-id={`${rootNodeId}.namespace`}
-              data-gui-component="QR.me.namespace"
+              data-gui-node-id={`${qrBase}.namespace`}
+              data-gui-component="namespace"
               sx={{
                 position: 'absolute',
                 left: perimeterTextBox.x,
@@ -750,7 +755,7 @@ export default function QRme({
                   (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.5}px ${qrBg})`,
                 ).join(' '),
               }}
-              data-gui-node-id="QR.me.wordmark"
+              data-gui-node-id={`${rootNodeId}.wordmark`}
             />
           </Box>
         </Box>
@@ -861,7 +866,7 @@ export default function QRme({
               borderColor,
               boxShadow: '0 6px 16px rgba(0,0,0,0.18)',
             }}
-            data-gui-node-id="QR.me.rootEdit.form"
+            data-gui-node-id={`${qrBase}.namespace.edit.form`}
           >
             <input
               ref={rootEditInputRef}
@@ -894,7 +899,7 @@ export default function QRme({
                 fontSize: '0.78rem',
                 color: theme.palette.text.primary,
               }}
-              data-gui-node-id="QR.me.rootEdit.input"
+              data-gui-node-id={`${qrBase}.namespace.edit.input`}
             />
           </Box>
         ) : (
@@ -929,7 +934,7 @@ export default function QRme({
               // steal that click.
               pointerEvents: rootEditHovered ? 'auto' : 'none',
             }}
-            data-gui-node-id="QR.me.rootEdit.trigger"
+            data-gui-node-id={`${qrBase}.namespace.edit`}
           >
             <Icon name="edit" fontSize="0.9rem" />
           </Box>
