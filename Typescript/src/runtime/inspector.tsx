@@ -2878,7 +2878,7 @@ export function RuntimeInspector({
                 />
               </div>
             )}
-            {explainPath || documentEntry || provenance ? (
+            {explainPath ? (
             <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12 }}>
               <div style={{ ...{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }, marginBottom: 6 }}>EXPLAIN</div>
               <div
@@ -3171,9 +3171,35 @@ export function RuntimeInspector({
               </div>
             </div>
             ) : (
-              <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12, fontSize: 11 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75 }}>EXPLAIN</span>
-                <span style={{ opacity: 0.6, marginLeft: 8 }}>not bound to the kernel</span>
+              // Nothing to ask the kernel: just where the node stands.
+              <div style={{ borderTop: `1px solid ${ui.line}`, paddingTop: 10, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', opacity: 0.75, marginBottom: 6 }}>EXPLAIN</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 12, rowGap: 2, fontSize: 11.5 }}>
+                  {documentEntry && (
+                    <>
+                      <span style={{ opacity: 0.6 }}>declared</span>
+                      <span>
+                        yes — GUI.document.json{documentEntry.component ? ` (${documentEntry.component})` : ''}
+                      </span>
+                      <span style={{ opacity: 0.6 }}>rendered</span>
+                      <span>
+                        {documentRendered
+                          ? 'yes — on the page now'
+                          : selected?.enabled === false
+                            ? 'no — the app did not configure it'
+                            : 'no — configured, not mounted right now'}
+                      </span>
+                      {documentEntry.route && (
+                        <>
+                          <span style={{ opacity: 0.6 }}>route</span>
+                          <code>{documentEntry.route}</code>
+                        </>
+                      )}
+                    </>
+                  )}
+                  <span style={{ opacity: 0.6 }}>kernel</span>
+                  <span>not bound</span>
+                </div>
               </div>
             )}
             {imagePreviews.length > 0 && (
