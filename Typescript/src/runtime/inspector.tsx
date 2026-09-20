@@ -37,8 +37,6 @@ type TreeEntry = {
   hint: string | null;
   /** 'declared' = the GUI named it; 'guessed' = read off the markup. */
   hintKind: 'declared' | 'guessed' | null;
-  /** A group the tree adds, not a node: the DOM branch under a GUI node. */
-  virtual: boolean;
   /**
    * Actually on the page: an element of its own, or -- for a group like
    * GUI.bars -- one below it. Distinct from `enabled`: a page that is
@@ -170,13 +168,6 @@ function buildTreeModel() {
     elements.set(id, el);
   });
 
-  // The tree has two kinds of node, and they are kept apart: what the GUI
-  // declared, and what is only in the page's DOM. Where a declared node has
-  // undeclared elements below it, they hang under a `DOM` group -- the point
-  // where the GUI's own declarations end and the page's markup begins.
-  const DOM_SUFFIX = '::DOM';
-  const isDomGroup = (id: string) => id.endsWith(DOM_SUFFIX);
-  const ownerOfGroup = (id: string) => id.slice(0, -DOM_SUFFIX.length);
   const nearestTaggedAncestor = (id: string): string | null =>
     elements.get(id)?.parentElement?.closest('[data-gui-node-id]')?.getAttribute('data-gui-node-id') ?? null;
 
@@ -204,53 +195,24 @@ function buildTreeModel() {
     parents.set(child, parent);
     if (parent) kids.set(parent, [...(kids.get(parent) ?? []), child]);
   };
-  const groups = new Set<string>();
   universe.forEach((id) => {
-    const declaredParent = records[id]?.parentId;
-    if (declaredParent) return link(id, declaredParent);
-    const ancestor = nearestTaggedAncestor(id);
-    if (!ancestor) return link(id, null);
-    // An undeclared element directly under a declared node goes under that
-    // node's DOM group; deeper undeclared elements just nest.
-    if (!records[id] && records[ancestor]) {
-      const group = `${ancestor}${DOM_SUFFIX}`;
-      groups.add(group);
-      return link(id, group);
-    }
-    link(id, ancestor);
+    // What the GUI declared says who the parent is; for anything else, the
+    // nearest tagged element above it in the page.
+    link(id, records[id]?.parentId || nearestTaggedAncestor(id));
   });
-  groups.forEach((group) => link(group, ownerOfGroup(group)));
 
   const parentOf = (id: string): string | null => parents.get(id) ?? null;
   const childrenOf = (id: string): string[] => {
-    const list = (kids.get(id) ?? []).filter((c) => c !== id);
-    // Declared parts first (document order), the DOM group last.
-    return list.filter((c) => !isDomGroup(c)).sort(byRank).concat(list.filter(isDomGroup));
+    return (kids.get(id) ?? []).filter((c) => c !== id).sort(byRank);
   };
 
   const entryFor = (id: string): TreeEntry => {
-    if (isDomGroup(id)) {
-      return {
-        id,
-        label: 'DOM',
-        enabled: true,
-        source: 'dom',
-        hasElement: false,
-        hint: null,
-        hintKind: null,
-        virtual: true,
-        rendered: true,
-      };
-    }
     const rec = records[id];
     const parent = parentOf(id);
     const el = elements.get(id);
-    // Relative to the parent -- for a child under a DOM group, to the node that
-    // owns the group (the group itself is not part of the id).
-    const base = parent && isDomGroup(parent) ? ownerOfGroup(parent) : parent;
     const label =
-      base && id.startsWith(`${base}.`)
-        ? id.slice(base.length + 1)
+      parent && id.startsWith(`${parent}.`)
+        ? id.slice(parent.length + 1)
         : el?.getAttribute('data-gui-component') || rec?.type || id;
     const hint = hintFor(el, label, docLabels.get(id) || el?.getAttribute('data-gui-label') || null);
     return {
@@ -261,7 +223,6 @@ function buildTreeModel() {
       hasElement: !!el,
       hint: hint.text,
       hintKind: hint.kind,
-      virtual: false,
       rendered: !!el || [...elements.keys()].some((k) => k.startsWith(`${id}.`)),
     };
   };
@@ -2235,7 +2196,7 @@ export function RuntimeInspector({
   const treeEntryTitle = (entry: TreeEntry) =>
     [
       entry.id,
-      entry.virtual ? "the page's own markup below this node; the GUI did not declare it" : entry.source === 'dom' ? 'detected in the DOM, not declared by the GUI' : null,
+      entry.source === 'dom' ? 'detected in the DOM, not declared by the GUI' : null,
       treeEntryState(entry) === 'off' ? 'declared by the GUI; the app did not configure it' : null,
       treeEntryState(entry) === 'not mounted' ? 'declared by the GUI and configured; not mounted right now' : null,
     ]
@@ -2545,7 +2506,7 @@ export function RuntimeInspector({
                         >
                           {row.hasChildren ? (row.open ? '▾' : '▸') : '·'}
                         </span>
-                        <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal', color: entry.virtual ? ui.fgMuted : undefined, letterSpacing: entry.virtual ? '0.06em' : undefined }}>{entry.label}</span>
+                        <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal' }}>{entry.label}</span>
                         {entry.hint && (
                           <span
                             title={entry.hintKind === 'declared' ? 'Named by the GUI' : 'Guessed from the markup (the GUI did not name it)'}
@@ -2579,7 +2540,7 @@ export function RuntimeInspector({
                       <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>DIMENSIONS</span>
                       {/* Which node these dimensions are of: its full id. */}
                       <code style={{ fontSize: 11, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }} title="The node these dimensions belong to">
-                        {selectedNodeId?.replace('::DOM', ' › DOM')}
+                        {selectedNodeId}
                       </code>
                     </div>
                     {layoutEdited && (
