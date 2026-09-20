@@ -44,7 +44,8 @@ function normalizeNodeSegment(value: string, fallback: string): string {
   const normalized = String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
+    // No dots: a dot in a username would read as a level of the path.
+    .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+/, "")
     .replace(/-+$/, "");
   return normalized || fallback;
@@ -88,15 +89,14 @@ export default function UsersTable({
   const [copied, setCopied] = useState(false);
   const parentNodeId = String(dataGuiNodeId || "UsersTable");
   const parentNodeType = String(dataGuiComponent || "UsersTable");
-  const parentNodePath = useMemo(() => {
-    const normalized = parentNodeId.replace(/\/+/g, ".").replace(/^\.+|\.+$/g, "");
-    return normalized || "UsersTable";
-  }, [parentNodeId]);
-  const nodeId = useCallback((segment: string) => `${parentNodeId}/${segment}`, [parentNodeId]);
-  const nodePath = useCallback(
-    (segment: string) => `${parentNodePath}.${segment.replace(/\//g, ".")}`,
-    [parentNodePath]
+  // Ids are paths (`GUI.content.users.table.shell.rows.ana`): the same syntax
+  // as everywhere else in the GUI, and a part's parent is its path minus the
+  // last segment. The table itself is the root; "" names it.
+  const nodeId = useCallback(
+    (segment: string) => (segment ? `${parentNodeId}.${segment}` : parentNodeId),
+    [parentNodeId]
   );
+  const nodePath = nodeId;
   const nodeAttrs = useCallback(
     (segment: string, component: string) => ({
       "data-gui-node-id": nodeId(segment),
@@ -105,7 +105,7 @@ export default function UsersTable({
     [nodeId]
   );
   const getRowSegment = useCallback(
-    (username: string, index: number) => `rows/${normalizeNodeSegment(username, `user-${index + 1}`)}`,
+    (username: string, index: number) => `shell.rows.${normalizeNodeSegment(username, `user-${index + 1}`)}`,
     []
   );
 
@@ -161,7 +161,7 @@ export default function UsersTable({
       });
     };
 
-    registerNode(nodeId("content"), nodePath("content"), `${parentNodeType}.Content`, {
+    registerNode(nodeId(""), nodePath(""), `${parentNodeType}.Content`, {
       endpoint,
       namespaceLabel,
       namespaceRootUrl,
@@ -176,32 +176,32 @@ export default function UsersTable({
       hasNamespaceLabel: Boolean(namespaceLabel),
       showTech,
     });
-    registerNode(nodeId("title"), nodePath("title"), `${parentNodeType}.Title`, {
+    registerNode(nodeId("header.title"), nodePath("header.title"), `${parentNodeType}.Title`, {
       text: "Users",
     });
-    registerNode(nodeId("advanced-toggle"), nodePath("advanced-toggle"), `${parentNodeType}.AdvancedToggle`, {
+    registerNode(nodeId("header.advanced"), nodePath("header.advanced"), `${parentNodeType}.AdvancedToggle`, {
       active: showTech,
       label: showTech ? "Hide advanced columns" : "Show advanced columns",
     });
-    registerNode(nodeId("namespace-caption"), nodePath("namespace-caption"), `${parentNodeType}.NamespaceCaption`, {
+    registerNode(nodeId("header.namespace"), nodePath("header.namespace"), `${parentNodeType}.NamespaceCaption`, {
       visible: Boolean(namespaceLabel),
       namespaceLabel,
     });
-    registerNode(nodeId("loading-state"), nodePath("loading-state"), `${parentNodeType}.LoadingState`, {
+    registerNode(nodeId("loading"), nodePath("loading"), `${parentNodeType}.LoadingState`, {
       visible: loading,
     });
-    registerNode(nodeId("error-state"), nodePath("error-state"), `${parentNodeType}.ErrorState`, {
+    registerNode(nodeId("error"), nodePath("error"), `${parentNodeType}.ErrorState`, {
       visible: Boolean(error),
       message: error,
     });
-    registerNode(nodeId("empty-state"), nodePath("empty-state"), `${parentNodeType}.EmptyState`, {
+    registerNode(nodeId("empty"), nodePath("empty"), `${parentNodeType}.EmptyState`, {
       visible: !loading && !error && rows.length === 0,
     });
-    registerNode(nodeId("table-shell"), nodePath("table-shell"), `${parentNodeType}.TableShell`, {
+    registerNode(nodeId("shell"), nodePath("shell"), `${parentNodeType}.TableShell`, {
       visible: rows.length > 0,
       rowCount: rows.length,
     });
-    registerNode(nodeId("table"), nodePath("table"), `${parentNodeType}.Table`, {
+    registerNode(nodeId("shell.rows"), nodePath("shell.rows"), `${parentNodeType}.Table`, {
       visible: rows.length > 0,
       rowCount: rows.length,
       showTech,
@@ -228,8 +228,8 @@ export default function UsersTable({
         namespaceUrl: rowUserUrl,
       });
       registerNode(
-        nodeId(`${rowSegment}/qr-action`),
-        nodePath(`${rowSegment}/qr-action`),
+        nodeId(`${rowSegment}.qr`),
+        nodePath(`${rowSegment}.qr`),
         `${parentNodeType}.RowQrAction`,
         {
           username: row.username,
@@ -238,8 +238,8 @@ export default function UsersTable({
         }
       );
       registerNode(
-        nodeId(`${rowSegment}/qr-action/button`),
-        nodePath(`${rowSegment}/qr-action/button`),
+        nodeId(`${rowSegment}.qr.button`),
+        nodePath(`${rowSegment}.qr.button`),
         `${parentNodeType}.RowQrActionButton`,
         {
           username: row.username,
@@ -248,8 +248,8 @@ export default function UsersTable({
         }
       );
       registerNode(
-        nodeId(`${rowSegment}/identity`),
-        nodePath(`${rowSegment}/identity`),
+        nodeId(`${rowSegment}.identity`),
+        nodePath(`${rowSegment}.identity`),
         `${parentNodeType}.RowIdentity`,
         {
           username: row.username,
@@ -258,8 +258,8 @@ export default function UsersTable({
         }
       );
       registerNode(
-        nodeId(`${rowSegment}/identity/${rowUserUrl ? "link" : "label"}`),
-        nodePath(`${rowSegment}/identity/${rowUserUrl ? "link" : "label"}`),
+        nodeId(`${rowSegment}.identity.${rowUserUrl ? "link" : "label"}`),
+        nodePath(`${rowSegment}.identity.${rowUserUrl ? "link" : "label"}`),
         `${parentNodeType}.${rowUserUrl ? "RowIdentityLink" : "RowIdentityLabel"}`,
         {
           username: row.username,
@@ -270,8 +270,8 @@ export default function UsersTable({
 
       if (showTech) {
         registerNode(
-          nodeId(`${rowSegment}/identity-hash`),
-          nodePath(`${rowSegment}/identity-hash`),
+          nodeId(`${rowSegment}.hash`),
+          nodePath(`${rowSegment}.hash`),
           `${parentNodeType}.RowIdentityHash`,
           {
             username: row.username,
@@ -279,8 +279,8 @@ export default function UsersTable({
           }
         );
         registerNode(
-          nodeId(`${rowSegment}/public-key`),
-          nodePath(`${rowSegment}/public-key`),
+          nodeId(`${rowSegment}.key`),
+          nodePath(`${rowSegment}.key`),
           `${parentNodeType}.RowPublicKey`,
           {
             username: row.username,
@@ -290,8 +290,8 @@ export default function UsersTable({
         );
         if (hasPublicKey) {
           registerNode(
-            nodeId(`${rowSegment}/public-key/copy`),
-            nodePath(`${rowSegment}/public-key/copy`),
+            nodeId(`${rowSegment}.key.copy`),
+            nodePath(`${rowSegment}.key.copy`),
             `${parentNodeType}.RowPublicKeyCopy`,
             {
               username: row.username,
@@ -300,8 +300,8 @@ export default function UsersTable({
           );
         }
         registerNode(
-          nodeId(`${rowSegment}/created-at`),
-          nodePath(`${rowSegment}/created-at`),
+          nodeId(`${rowSegment}.created`),
+          nodePath(`${rowSegment}.created`),
           `${parentNodeType}.RowCreatedAt`,
           {
             username: row.username,
@@ -309,8 +309,8 @@ export default function UsersTable({
           }
         );
         registerNode(
-          nodeId(`${rowSegment}/updated-at`),
-          nodePath(`${rowSegment}/updated-at`),
+          nodeId(`${rowSegment}.updated`),
+          nodePath(`${rowSegment}.updated`),
           `${parentNodeType}.RowUpdatedAt`,
           {
             username: row.username,
@@ -341,7 +341,7 @@ export default function UsersTable({
 
   return (
     <Box
-      {...nodeAttrs("content", `${parentNodeType}.Content`)}
+      {...nodeAttrs("", `${parentNodeType}.Content`)}
       sx={{ p: 2 }}
     >
       <Box
@@ -350,14 +350,14 @@ export default function UsersTable({
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
           <Typography
-            {...nodeAttrs("title", `${parentNodeType}.Title`)}
+            {...nodeAttrs("header.title", `${parentNodeType}.Title`)}
             variant="h6"
           >
             Users
           </Typography>
           {namespaceLabel ? (
             <Typography
-              {...nodeAttrs("namespace-caption", `${parentNodeType}.NamespaceCaption`)}
+              {...nodeAttrs("header.namespace", `${parentNodeType}.NamespaceCaption`)}
               variant="caption"
               sx={{ color: 'text.secondary' }}
             >
@@ -367,7 +367,7 @@ export default function UsersTable({
         </Box>
         <Tooltip title={showTech ? 'Hide advanced columns' : 'Show advanced columns'}>
           <IconButton
-            {...nodeAttrs("advanced-toggle", `${parentNodeType}.AdvancedToggle`)}
+            {...nodeAttrs("header.advanced", `${parentNodeType}.AdvancedToggle`)}
             size="small"
             onClick={() => setShowTech((v) => !v)}
             aria-label={showTech ? 'Hide advanced columns' : 'Show advanced columns'}
@@ -388,7 +388,7 @@ export default function UsersTable({
 
       {loading && (
         <Box
-          {...nodeAttrs("loading-state", `${parentNodeType}.LoadingState`)}
+          {...nodeAttrs("loading", `${parentNodeType}.LoadingState`)}
           sx={{ borderRadius: 2, p: 3, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}
         >
           <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
@@ -399,7 +399,7 @@ export default function UsersTable({
 
       {error && (
         <Box
-          {...nodeAttrs("error-state", `${parentNodeType}.ErrorState`)}
+          {...nodeAttrs("error", `${parentNodeType}.ErrorState`)}
           sx={{ mb: 2, borderRadius: 2, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'error.main' }}
         >
           <Typography variant="body2" sx={{ color: 'error.main' }}>
@@ -410,7 +410,7 @@ export default function UsersTable({
 
       {!loading && !error && rows.length === 0 && (
         <Box
-          {...nodeAttrs("empty-state", `${parentNodeType}.EmptyState`)}
+          {...nodeAttrs("empty", `${parentNodeType}.EmptyState`)}
           sx={{ borderRadius: 2, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider' }}
         >
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -421,7 +421,7 @@ export default function UsersTable({
 
       {rows.length > 0 && (
         <Box
-          {...nodeAttrs("table-shell", `${parentNodeType}.TableShell`)}
+          {...nodeAttrs("shell", `${parentNodeType}.TableShell`)}
           sx={{
             borderRadius: 2,
             border: '1px solid',
@@ -431,7 +431,7 @@ export default function UsersTable({
           }}
         >
           <Table
-            {...nodeAttrs("table", `${parentNodeType}.Table`)}
+            {...nodeAttrs("shell.rows", `${parentNodeType}.Table`)}
             size="small"
             sx={{
               '& th, & td': { borderColor: 'divider' },
@@ -452,7 +452,7 @@ export default function UsersTable({
                   {/* Mini QR cell */}
                                    {/* Scan / QR tooltip trigger (low-noise) */}
                   <TableCell
-                    {...nodeAttrs(`${rowSegment}/qr-action`, `${parentNodeType}.RowQrAction`)}
+                    {...nodeAttrs(`${rowSegment}.qr`, `${parentNodeType}.RowQrAction`)}
                     sx={{ width: 34, px: 0.5 }}
                   >
                     {(() => {
@@ -461,7 +461,7 @@ export default function UsersTable({
 
                       const trigger = (
                         <IconButton
-                          {...nodeAttrs(`${rowSegment}/qr-action/button`, `${parentNodeType}.RowQrActionButton`)}
+                          {...nodeAttrs(`${rowSegment}.qr.button`, `${parentNodeType}.RowQrActionButton`)}
                           size="small"
                           disabled={!hasUserUrl}
                           aria-label={hasUserUrl ? 'Show .me QR' : 'No namespace link'}
@@ -596,7 +596,7 @@ export default function UsersTable({
                     })()}
                   </TableCell>
                   <TableCell
-                    {...nodeAttrs(`${rowSegment}/identity`, `${parentNodeType}.RowIdentity`)}
+                    {...nodeAttrs(`${rowSegment}.identity`, `${parentNodeType}.RowIdentity`)}
                     sx={{ fontSize: 12, color: 'text.primary', pl: 0.25 }}
                   >
                     {(() => {
@@ -632,7 +632,7 @@ export default function UsersTable({
 
                           {href ? (
                             <Box
-                              {...nodeAttrs(`${rowSegment}/identity/link`, `${parentNodeType}.RowIdentityLink`)}
+                              {...nodeAttrs(`${rowSegment}.identity.link`, `${parentNodeType}.RowIdentityLink`)}
                               component="a"
                               href={href}
                               target="_blank"
@@ -660,7 +660,7 @@ export default function UsersTable({
                             </Box>
                           ) : (
                             <Typography
-                              {...nodeAttrs(`${rowSegment}/identity/label`, `${parentNodeType}.RowIdentityLabel`)}
+                              {...nodeAttrs(`${rowSegment}.identity.label`, `${parentNodeType}.RowIdentityLabel`)}
                               sx={{ fontWeight: 600 }}
                             >
                               {`@${r.username}`}
@@ -672,7 +672,7 @@ export default function UsersTable({
                   </TableCell>
                   {showTech && (
                     <TableCell
-                      {...nodeAttrs(`${rowSegment}/identity-hash`, `${parentNodeType}.RowIdentityHash`)}
+                      {...nodeAttrs(`${rowSegment}.hash`, `${parentNodeType}.RowIdentityHash`)}
                       sx={{
                         fontSize: 12,
                         color: 'text.secondary',
@@ -689,7 +689,7 @@ export default function UsersTable({
                   )}
                   {showTech && (
   <TableCell
-    {...nodeAttrs(`${rowSegment}/public-key`, `${parentNodeType}.RowPublicKey`)}
+    {...nodeAttrs(`${rowSegment}.key`, `${parentNodeType}.RowPublicKey`)}
     sx={{ fontSize: 12, color: 'text.secondary' }}
   >
     {(() => {
@@ -715,7 +715,7 @@ export default function UsersTable({
           {hasPk ? (
             <Tooltip title={copied ? 'Copied!' : 'Copy full public key'}>
               <IconButton
-                {...nodeAttrs(`${rowSegment}/public-key/copy`, `${parentNodeType}.RowPublicKeyCopy`)}
+                {...nodeAttrs(`${rowSegment}.key.copy`, `${parentNodeType}.RowPublicKeyCopy`)}
                 size="small"
                 onClick={async () => {
                   const ok = await copyToClipboard(pk);
@@ -746,7 +746,7 @@ export default function UsersTable({
 )}
                   {showTech && (
                     <TableCell
-                      {...nodeAttrs(`${rowSegment}/created-at`, `${parentNodeType}.RowCreatedAt`)}
+                      {...nodeAttrs(`${rowSegment}.created`, `${parentNodeType}.RowCreatedAt`)}
                       sx={{ fontSize: 12, color: 'text.secondary' }}
                     >
                       {new Date(r.createdAt).toLocaleString()}
@@ -754,7 +754,7 @@ export default function UsersTable({
                   )}
                   {showTech && (
                     <TableCell
-                      {...nodeAttrs(`${rowSegment}/updated-at`, `${parentNodeType}.RowUpdatedAt`)}
+                      {...nodeAttrs(`${rowSegment}.updated`, `${parentNodeType}.RowUpdatedAt`)}
                       sx={{ fontSize: 12, color: 'text.secondary' }}
                     >
                       {new Date(r.updatedAt).toLocaleString()}

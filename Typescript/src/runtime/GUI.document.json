@@ -98,7 +98,46 @@
             "component": "Users",
             "route": "/users",
             "note": "Public claims directory: who has claimed this namespace.",
-            "label": "Users"
+            "label": "Users",
+            "children": {
+              "table": {
+                "label": "Users table",
+                "note": "One row per claimed user; the rows are data and appear under shell.rows when loaded.",
+                "children": {
+                  "header": {
+                    "label": "Header",
+                    "children": {
+                      "title": {
+                        "label": "Title"
+                      },
+                      "namespace": {
+                        "label": "Namespace"
+                      },
+                      "advanced": {
+                        "label": "Advanced toggle"
+                      }
+                    }
+                  },
+                  "loading": {
+                    "label": "Loading"
+                  },
+                  "error": {
+                    "label": "Error"
+                  },
+                  "empty": {
+                    "label": "Empty"
+                  },
+                  "shell": {
+                    "label": "Table shell",
+                    "children": {
+                      "rows": {
+                        "label": "Rows"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "blockchain": {
             "component": "Blockchain",
