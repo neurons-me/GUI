@@ -323,6 +323,66 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
   return null;
 };
 
+// The directory search. It belongs to the TOP of the GUI (GUI.bars.top.search),
+// not to any one page: fixed to the top-right corner, it comes from above
+// every route. Filtering is the only piece specific to it -- collapse, expand,
+// focus and the results dropdown live in SearchField (a generic Molecule);
+// this supplies the live directory (netget's own monad: every claim made
+// through here, whichever root it was made under) and where a pick goes.
+// Filtered client-side -- the list is small enough that a real search
+// endpoint would be overbuilding it.
+const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string }> = ({ cleakerEndpoint, netgetMonadOrigin }) => {
+  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    fetch(`${getNetgetMonadOrigin(netgetMonadOrigin)}/`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data) => { if (!cancelled) setDirectoryUsers(Array.isArray(data?.users) ? data.users : []); })
+      .catch(() => { if (!cancelled) setDirectoryUsers([]); });
+    return () => { cancelled = true; };
+  }, [netgetMonadOrigin]);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchMatches = useMemo<SearchFieldResult[]>(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return directoryUsers
+      .filter((u) => u.username.toLowerCase().includes(query))
+      .slice(0, 6)
+      .map((u) => ({
+        id: u.username,
+        label: `@${u.username}`,
+        avatarSrc: u.profileImg,
+        avatarFallback: u.username,
+      }));
+  }, [directoryUsers, searchQuery]);
+
+  const visitUser = (result: SearchFieldResult) => {
+    try {
+      const href = buildCleakerNamespaceUrl(resolvedEndpoint, result.id);
+      window.open(href, '_blank', 'noopener,noreferrer');
+    } catch {
+      // Malformed handle — nothing to navigate to, just leave the field as-is.
+    }
+  };
+
+  return (
+    <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 12, sm: 20 }, zIndex: 20 }}>
+      <SearchField
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        results={searchMatches}
+        onSelectResult={visitUser}
+        placeholder="Search .me"
+        ariaLabel="Search .me"
+        data-gui-node-id="GUI.bars.top.search"
+      />
+    </Box>
+  );
+};
+
 const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'CleakerLanding' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
@@ -424,55 +484,6 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
     setActiveNamespaceRoot(namespaceRootLabel);
     return () => setActiveNamespaceRoot(null);
   }, [namespaceRootLabel]);
-
-  // Directory search — "look up an existing .me identity" before doing
-  // anything with your own. Same live claims directory UsersTable already
-  // reads (GET {origin}/apps/netget/ → { users: [...] }), fetched once on
-  // mount: this is the one monad backing the whole gateway (see
-  // netgetMonadTransportOrigin() in netget's own App.jsx — same computation,
-  // window.location.origin + '/apps/netget'), so it holds every claim made
-  // through here regardless of which root (local.cleaker/cleaker.me) a
-  // given claim was made under. Filtered client-side — this list is small
-  // enough that a real search endpoint would be overbuilding it.
-  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-    fetch(`${getNetgetMonadOrigin(netgetMonadOrigin)}/`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then((data) => { if (!cancelled) setDirectoryUsers(Array.isArray(data?.users) ? data.users : []); })
-      .catch(() => { if (!cancelled) setDirectoryUsers([]); });
-    return () => { cancelled = true; };
-  }, [netgetMonadOrigin]);
-
-  // Filtering is the only piece that's this page's own concern — collapse,
-  // expand, focus, and the results dropdown all live in SearchField
-  // (gui/Molecules/SearchField) now, a generic reusable Molecule extracted
-  // out of this file. This just turns the live directory into
-  // SearchFieldResult objects and opens whichever one gets picked.
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchMatches = useMemo<SearchFieldResult[]>(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return [];
-    return directoryUsers
-      .filter((u) => u.username.toLowerCase().includes(query))
-      .slice(0, 6)
-      .map((u) => ({
-        id: u.username,
-        label: `@${u.username}`,
-        avatarSrc: u.profileImg,
-        avatarFallback: u.username,
-      }));
-  }, [directoryUsers, searchQuery]);
-
-  const visitUser = (result: SearchFieldResult) => {
-    try {
-      const href = buildCleakerNamespaceUrl(resolvedEndpoint, result.id);
-      window.open(href, '_blank', 'noopener,noreferrer');
-    } catch {
-      // Malformed handle — nothing to navigate to, just leave the field as-is.
-    }
-  };
 
   // The bubble IS the QR (QRme — flips to an avatar on hover/click) rather
   // than a separate icon with a QR shown below it. Same address CleakerQR
@@ -705,24 +716,6 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
           in the shared sidebar -- see CleakerLayoutShell below, which
           mounts the real Layout/LeftBar around this whole route tree.
           Removed from here entirely rather than duplicated. */}
-
-      {/* Directory search — fixed to the top-right corner, out of the
-          centered identity flow entirely (looking someone else up is a
-          different concern from becoming someone yourself, below). The
-          collapse/expand/dropdown chrome itself lives in SearchField (a
-          generic reusable Molecule); this only supplies what's real to
-          this page — the live directory matches and where a pick goes. */}
-      <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 12, sm: 20 }, zIndex: 20 }}>
-        <SearchField
-          query={searchQuery}
-          onQueryChange={setSearchQuery}
-          results={searchMatches}
-          onSelectResult={visitUser}
-          placeholder="Search .me"
-          ariaLabel="Search .me"
-          data-gui-node-id={`${nodeId}.search`}
-        />
-      </Box>
 
       {/* Bubble — QRme: the QR itself is the bubble, not a plain icon with
           a separate QR shown below. Click toggles size, not the
@@ -1065,7 +1058,8 @@ const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, ne
     <Box
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
-      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
+      // pt: clear the search, fixed at the top-right of every route.
+      sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <UsersTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
@@ -1096,7 +1090,8 @@ const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoin
     <Box
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
-      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
+      // pt: clear the search, fixed at the top-right of every route.
+      sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <BlocksTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
@@ -2136,6 +2131,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
 
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
+      <CleakerTopSearch cleakerEndpoint={props.cleakerEndpoint} netgetMonadOrigin={props.netgetMonadOrigin} />
       <Layout
         LeftBar={{
           elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],

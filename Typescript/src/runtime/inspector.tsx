@@ -2285,8 +2285,10 @@ export function RuntimeInspector({
   //  off         -- the app didn't configure it (a bar it wasn't given)
   //  not mounted -- configured, but nothing is rendering it right now
   //                 (a page whose route isn't the active one)
+  // (A bar the app didn't configure but that still holds something on the page
+  // -- the top bar with the search -- is not 'off'.)
   const treeEntryState = (entry: TreeEntry): 'off' | 'not mounted' | null =>
-    !entry.enabled ? 'off' : entry.source === 'declared' && !entry.rendered ? 'not mounted' : null;
+    !entry.enabled && !entry.rendered ? 'off' : entry.source === 'declared' && !entry.rendered ? 'not mounted' : null;
   const treeEntryLabel = (entry: TreeEntry) => {
     const state = treeEntryState(entry);
     return state ? `${entry.label} · ${state}` : entry.label;
