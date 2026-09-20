@@ -231,7 +231,13 @@ export function buildTreeModel() {
     };
   };
 
-  return { parentOf, childrenOf, entryFor, ids: universe, orphans };
+  const typeOf = (id: string): string =>
+    records[id]?.type ||
+    elements.get(id)?.getAttribute('data-gui-component') ||
+    elements.get(id)?.tagName.toLowerCase() ||
+    entryFor(id).label;
+
+  return { parentOf, childrenOf, entryFor, typeOf, ids: universe, orphans };
 }
 
 function readTreeView(
@@ -283,6 +289,45 @@ function readTreeView(
       total: nb.total,
     },
   };
+}
+
+// The piece of the tree a node covers, as JSON: itself and every part below
+// it, nested by name. The root covers the whole rendered tree; a leaf covers
+// only itself. Capped so a table with hundreds of rows stays readable.
+const SUBTREE_MAX_DEPTH = 8;
+const SUBTREE_MAX_CHILDREN = 40;
+const SUBTREE_MAX_NODES = 400;
+
+function readSubtree(id: string | null, model = buildTreeModel()): Record<string, unknown> | null {
+  if (!id) return null;
+  let budget = SUBTREE_MAX_NODES;
+  const build = (nodeId: string, depth: number): Record<string, unknown> => {
+    budget--;
+    const e = model.entryFor(nodeId);
+    const out: Record<string, unknown> = { type: model.typeOf(nodeId) };
+    if (e.hint) out[e.hintKind === 'declared' ? 'label' : 'hint'] = e.hint;
+    if (e.source === 'dom') out.source = 'dom';
+    if (!e.enabled) out.state = 'off';
+    else if (e.source === 'declared' && !e.rendered) out.state = 'not mounted';
+    const kids = model.childrenOf(nodeId);
+    if (kids.length === 0) return out;
+    if (depth >= SUBTREE_MAX_DEPTH || budget <= 0) {
+      out.children = `… ${kids.length} more`;
+      return out;
+    }
+    const children: Record<string, unknown> = {};
+    kids.slice(0, SUBTREE_MAX_CHILDREN).forEach((kid) => {
+      if (budget <= 0) return;
+      const entry = model.entryFor(kid);
+      let key = entry.label;
+      for (let n = 2; key in children; n++) key = `${entry.label} (${n})`;
+      children[key] = build(kid, depth + 1);
+    });
+    if (kids.length > SUBTREE_MAX_CHILDREN) children['…'] = `${kids.length - SUBTREE_MAX_CHILDREN} more`;
+    out.children = children;
+    return out;
+  };
+  return build(id, 0);
 }
 
 function treeSignature(view: TreeView | null): string {
@@ -1476,6 +1521,7 @@ export function RuntimeInspector({
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
   const [htmlInfo, setHtmlInfo] = React.useState<HtmlInfo | null>(null);
+  const [subtree, setSubtree] = React.useState<Record<string, unknown> | null>(null);
   const [showFrameworkClasses, setShowFrameworkClasses] = React.useState(false);
   // Which nodes of the tree diagram are open. The focus and its ancestors are
   // always opened when the focus moves (so its children show); anything else
@@ -1486,12 +1532,14 @@ export function RuntimeInspector({
       setTreeView(null);
       setLayoutInfo(null);
       setHtmlInfo(null);
+      setSubtree(null);
       return;
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastSig = '\0';
     let lastLayoutSig = '\0';
     let lastHtmlSig = '\0';
+    let lastSubtreeSig = '\0';
     const refresh = () => {
       const model = buildTreeModel();
       const next = readTreeView(selectedNodeId, expanded, model);
@@ -1499,6 +1547,12 @@ export function RuntimeInspector({
       if (sig !== lastSig) {
         lastSig = sig;
         setTreeView(next);
+      }
+      const sub = readSubtree(selectedNodeId, model);
+      const subSig = sub ? JSON.stringify(sub) : '';
+      if (subSig !== lastSubtreeSig) {
+        lastSubtreeSig = subSig;
+        setSubtree(sub);
       }
       const html = readHtml(selectedNodeId);
       const htmlSig = html ? JSON.stringify(html) : '';
@@ -3027,10 +3081,22 @@ export function RuntimeInspector({
             {tab === 'spec' && (
               <div style={{ marginBottom: 10 }}>
                 <div style={{ opacity: 0.75, marginBottom: 6, fontWeight: 700 }}>
-                  INTENTION (RAW SPEC)
+                  INTENTION (RAW SPEC) — this node and the parts it covers
                 </div>
                 <CodeBlock
-                  code={safeStringify(selected?.spec ?? null)}
+                  code={safeStringify(
+                    // The node's own spec, then the parts it covers below it.
+                    subtree
+                      ? (() => {
+                          const { children, ...own } = subtree;
+                          return {
+                            ...own,
+                            ...(selected?.spec?.props && Object.keys(selected.spec.props).length ? { props: selected.spec.props } : {}),
+                            ...(children ? { children } : {}),
+                          };
+                        })()
+                      : selected?.spec ?? null
+                  )}
                   language="json"
                   variant={codeVariant}
                   title="raw.spec.json"
