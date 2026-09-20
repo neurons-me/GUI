@@ -70,24 +70,34 @@ function localCleakerOrigin(): string {
 }
 
 /**
- * Resolves the Cleaker origin from this gateway's OWN configuration —
- * `GET /main-server-namespace` (already served by the same backend
- * GatewaySetup polls) — never a hardcoded "local.cleaker" literal beyond
- * the last-resort fallback every other resolver in this codebase already
- * uses for the same reason.
+ * Resolves the Cleaker origin -- where the claimant's identity lives and signs --
+ * from this gateway's OWN configuration: `GET /main-server-namespace`, already
+ * served by the same backend GatewaySetup polls. Never a hardcoded
+ * "local.cleaker" literal beyond the last-resort fallback every other resolver
+ * in this codebase already uses for the same reason.
+ *
+ * The identity lives in the namespace the gateway's monad serves (`namespace`),
+ * because the gateway's first claim is only accepted for an identity rooted in
+ * that very namespace. `mainServerName` is a different thing -- the public NAME
+ * OF THE HOST that shows the admin screens (netget.site) -- and is only the
+ * answer on a gateway configured before `namespace` was reported.
  */
 async function resolveCleakerOrigin(base: string): Promise<string> {
   const result = await fetchJson(base, '/main-server-namespace');
-  const mainServerName = typeof result?.mainServerName === 'string' ? result.mainServerName.trim() : '';
-  if (!mainServerName || isLocalMeshValue(mainServerName)) return localCleakerOrigin();
-  // A real configured value is always a bare hostname ("cleaker.example.com")
-  // and always gets https. The one exception is a value that already
-  // spells out a scheme ("http://127.0.0.1:5174") -- never produced by a
-  // real deployment, but the one way to point this at a genuinely separate
-  // localhost origin for disposable, port-based testing, so it's passed
-  // through as-is rather than double-prefixed.
-  if (/^https?:\/\//i.test(mainServerName)) return mainServerName.replace(/\/+$/, '');
-  return `https://${mainServerName}`;
+  const candidates = [result?.namespace, result?.mainServerName];
+  for (const raw of candidates) {
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (!value || isLocalMeshValue(value)) continue;
+    // A real configured value is always a bare hostname ("cleaker.example.com")
+    // and always gets https. The one exception is a value that already
+    // spells out a scheme ("http://127.0.0.1:5174") -- never produced by a
+    // real deployment, but the one way to point this at a genuinely separate
+    // localhost origin for disposable, port-based testing, so it's passed
+    // through as-is rather than double-prefixed.
+    if (/^https?:\/\//i.test(value)) return value.replace(/\/+$/, '');
+    return `https://${value}`;
+  }
+  return localCleakerOrigin();
 }
 
 /**
