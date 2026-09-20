@@ -607,6 +607,8 @@ export default function QRme({
       <Box
         data-gui-node-id={rootNodeId}
       data-gui-component={rootNodeType}
+      // Named by the GUI, so the Inspector says what this is instead of guessing.
+      data-gui-label={rootNodeId.endsWith('.code') ? 'QR code' : undefined}
       role={clickFlip ? 'button' : undefined}
       tabIndex={clickFlip ? 0 : undefined}
       aria-label={[showingAvatar ? 'Show .me QR' : 'Show avatar', statusLabel].filter(Boolean).join(' — ')}

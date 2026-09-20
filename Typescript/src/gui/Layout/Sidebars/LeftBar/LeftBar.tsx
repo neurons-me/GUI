@@ -25,6 +25,22 @@ import { mergeLeftSidebarCollections } from '@/gui/Layout/Sidebars/Collections/r
 // when their actual content is unchanged. One shared reference per constant
 // value lets the existing bail-out work as intended.
 const EMPTY_SYNTHETIC_PROPS: Record<string, unknown> = {};
+
+// The bar's own configuration as plain data, for the Inspector's JSON view:
+// its links and actions with their labels, routes and icons. Functions and
+// React elements (a launcher, a custom header) can't be shown as data, so they
+// appear as placeholders.
+function toPlainSpec(value: unknown, depth = 0): unknown {
+  if (value == null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'function') return '[function]';
+  if (React.isValidElement(value)) return '[element]';
+  if (depth > 5) return '[…]';
+  if (Array.isArray(value)) return value.map((item) => toPlainSpec(item, depth + 1));
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toPlainSpec(v, depth + 1)]));
+  }
+  return String(value);
+}
 const LEFT_SIDEBAR_TOGGLE_PROVENANCE = {
   source: 'LeftBar.LeftSidebarToggleButton',
   note: 'Expand/collapse control for the left sidebar rail; view state is local (useLeftSidebar context), not kernel-bound, so no semanticPath/explainPath applies.',
@@ -194,6 +210,11 @@ const LeftSidebar = ({
     // the plain `id` prop or the 'LeftSidebar' default). The header/toggle
     // sub-records below are always safe — their ids are derived from
     // adminNodeId and the renderer never separately resolves them.
+    const barSpecProps = {
+      header: toPlainSpec(header),
+      elements: toPlainSpec(resolvedElements),
+      footerElements: toPlainSpec(resolvedFooterElements),
+    } as Record<string, unknown>;
     const syntheticRecords: ResolvedNodeRecord[] = dataGuiNodeId
       ? []
       : [
@@ -203,8 +224,9 @@ const LeftSidebar = ({
             path: rootPath,
             spec: {
               type: dataGuiComponent || 'left',
-              props: EMPTY_SYNTHETIC_PROPS,
+              props: barSpecProps,
             },
+            resolvedProps: barSpecProps,
           },
         ];
     syntheticRecords.push(
@@ -256,7 +278,7 @@ const LeftSidebar = ({
     return () => {
       syntheticRecords.forEach((record) => selectionStore.actions.unregisterNode(record.id));
     };
-  }, [adminNodeId, dataGuiNodeId, dataGuiComponent, headerNodeId, toggleButtonNodeId, resolvedElements, resolvedFooterElements]);
+  }, [adminNodeId, dataGuiNodeId, dataGuiComponent, headerNodeId, toggleButtonNodeId, resolvedElements, resolvedFooterElements, header]);
 
   const renderElements = () =>
     resolvedElements.map((el, idx) => {
