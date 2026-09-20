@@ -15,6 +15,8 @@ import { renderNode } from './renderer';
  * node's parent is its path minus the last segment.
  */
 export type GuiDocumentNode = {
+  /** Human name for this part, declared by the GUI ("Users", "Left bar"). */
+  label?: string;
   note?: string;
   /**
    * Name of the component that implements this part -- content.landing
@@ -35,6 +37,7 @@ export type GuiDocumentEntry = {
   /** Last path segment, e.g. `left`. */
   type: string;
   parentId?: string;
+  label?: string;
   note?: string;
   component?: string;
   route?: string;
@@ -53,6 +56,7 @@ export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocument
       id,
       type: key,
       parentId,
+      label: node.label,
       note: node.note,
       component: node.component,
       route: node.route,

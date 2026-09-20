@@ -35,6 +35,10 @@ type TreeEntry = {
    * text -- read from the element. Absent when the node has no element.
    */
   hint: string | null;
+  /** 'declared' = the GUI named it; 'guessed' = read off the markup. */
+  hintKind: 'declared' | 'guessed' | null;
+  /** A group the tree adds, not a node: the DOM branch under a GUI node. */
+  virtual: boolean;
   /**
    * Actually on the page: an element of its own, or -- for a group like
    * GUI.bars -- one below it. Distinct from `enabled`: a page that is
@@ -111,7 +115,19 @@ function visibleText(el: Element): string {
 
 // What makes THIS one of several similar nodes recognisable. Best signal
 // first; never anything that could be typed-in content of a field.
-function hintFor(el: HTMLElement | undefined, label: string): string | null {
+function hintFor(
+  el: HTMLElement | undefined,
+  label: string,
+  declared: string | null
+): { text: string | null; kind: 'declared' | 'guessed' | null } {
+  // What the GUI itself says this is (the document's `label`, or a
+  // data-gui-label the component set) always wins; the rest is a guess.
+  if (declared) return { text: declared !== label ? declared : null, kind: declared !== label ? 'declared' : null };
+  const guess = guessHint(el, label);
+  return { text: guess, kind: guess ? 'guessed' : null };
+}
+
+function guessHint(el: HTMLElement | undefined, label: string): string | null {
   if (!el) return null;
   const clean = (v: string | null | undefined) => (v ?? '').replace(/\s+/g, ' ').trim();
   const shorten = (v: string) => (v.length > 28 ? `${v.slice(0, 26)}…` : v);
@@ -154,51 +170,101 @@ function buildTreeModel() {
     elements.set(id, el);
   });
 
-  const parentOf = (id: string): string | null => {
-    const declared = records[id]?.parentId;
-    if (declared) return declared;
-    const el = elements.get(id);
-    return el?.parentElement?.closest('[data-gui-node-id]')?.getAttribute('data-gui-node-id') ?? null;
+  // The tree has two kinds of node, and they are kept apart: what the GUI
+  // declared, and what is only in the page's DOM. Where a declared node has
+  // undeclared elements below it, they hang under a `DOM` group -- the point
+  // where the GUI's own declarations end and the page's markup begins.
+  const DOM_SUFFIX = '::DOM';
+  const isDomGroup = (id: string) => id.endsWith(DOM_SUFFIX);
+  const ownerOfGroup = (id: string) => id.slice(0, -DOM_SUFFIX.length);
+  const nearestTaggedAncestor = (id: string): string | null =>
+    elements.get(id)?.parentElement?.closest('[data-gui-node-id]')?.getAttribute('data-gui-node-id') ?? null;
+
+  const docLabels = new Map(flattenGuiDocument().map((e) => [e.id, e.label] as const));
+  const indexOf = (ids: string[]) => new Map(ids.map((id, i) => [id, i] as const));
+  const docIndex = indexOf(flattenGuiDocument().map((e) => e.id));
+  const domIndex = indexOf([...elements.keys()]);
+  const universe = [...new Set([...Object.keys(records), ...elements.keys()])];
+  const regIndex = indexOf(universe);
+  // A defined, stable order for siblings: the GUI document's own order first
+  // (top, sticky, left, right, footer); then position on the page (DOM
+  // order); then registration order only as the last tiebreak, since
+  // re-registering a node moves it to the end.
+  const rank = (id: string) => [docIndex.get(id) ?? Infinity, domIndex.get(id) ?? Infinity, regIndex.get(id) ?? Infinity];
+  const byRank = (a: string, b: string) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
+  };
+
+  // Every parent, once.
+  const parents = new Map<string, string | null>();
+  const kids = new Map<string, string[]>();
+  const link = (child: string, parent: string | null) => {
+    parents.set(child, parent);
+    if (parent) kids.set(parent, [...(kids.get(parent) ?? []), child]);
+  };
+  const groups = new Set<string>();
+  universe.forEach((id) => {
+    const declaredParent = records[id]?.parentId;
+    if (declaredParent) return link(id, declaredParent);
+    const ancestor = nearestTaggedAncestor(id);
+    if (!ancestor) return link(id, null);
+    // An undeclared element directly under a declared node goes under that
+    // node's DOM group; deeper undeclared elements just nest.
+    if (!records[id] && records[ancestor]) {
+      const group = `${ancestor}${DOM_SUFFIX}`;
+      groups.add(group);
+      return link(id, group);
+    }
+    link(id, ancestor);
+  });
+  groups.forEach((group) => link(group, ownerOfGroup(group)));
+
+  const parentOf = (id: string): string | null => parents.get(id) ?? null;
+  const childrenOf = (id: string): string[] => {
+    const list = (kids.get(id) ?? []).filter((c) => c !== id);
+    // Declared parts first (document order), the DOM group last.
+    return list.filter((c) => !isDomGroup(c)).sort(byRank).concat(list.filter(isDomGroup));
   };
 
   const entryFor = (id: string): TreeEntry => {
+    if (isDomGroup(id)) {
+      return {
+        id,
+        label: 'DOM',
+        enabled: true,
+        source: 'dom',
+        hasElement: false,
+        hint: null,
+        hintKind: null,
+        virtual: true,
+        rendered: true,
+      };
+    }
     const rec = records[id];
     const parent = parentOf(id);
     const el = elements.get(id);
+    // Relative to the parent -- for a child under a DOM group, to the node that
+    // owns the group (the group itself is not part of the id).
+    const base = parent && isDomGroup(parent) ? ownerOfGroup(parent) : parent;
     const label =
-      parent && id.startsWith(`${parent}.`)
-        ? id.slice(parent.length + 1)
+      base && id.startsWith(`${base}.`)
+        ? id.slice(base.length + 1)
         : el?.getAttribute('data-gui-component') || rec?.type || id;
+    const hint = hintFor(el, label, docLabels.get(id) || el?.getAttribute('data-gui-label') || null);
     return {
       id,
       label,
       enabled: rec?.enabled !== false,
       source: rec ? 'declared' : 'dom',
       hasElement: !!el,
-      hint: hintFor(el, label),
+      hint: hint.text,
+      hintKind: hint.kind,
+      virtual: false,
       rendered: !!el || [...elements.keys()].some((k) => k.startsWith(`${id}.`)),
     };
   };
-
-  // A defined, stable order for "First" and "Last": the GUI document's own
-  // order first (top, sticky, left, right, footer); then position on the
-  // page (DOM order); then registration order for anything with neither.
-  // Registration order alone is not stable -- re-registering a node moves it
-  // to the end -- so it is only ever the last tiebreak.
-  const indexOf = (ids: string[]) => new Map(ids.map((id, i) => [id, i] as const));
-  const docIndex = indexOf(flattenGuiDocument().map((e) => e.id));
-  const domIndex = indexOf([...elements.keys()]);
-  const universe = [...new Set([...Object.keys(records), ...elements.keys()])];
-  const regIndex = indexOf(universe);
-  const rank = (id: string) => [docIndex.get(id) ?? Infinity, domIndex.get(id) ?? Infinity, regIndex.get(id) ?? Infinity];
-  const childrenOf = (id: string): string[] =>
-    universe
-      .filter((c) => c !== id && parentOf(c) === id)
-      .sort((a, b) => {
-        const ra = rank(a);
-        const rb = rank(b);
-        return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
-      });
 
   return { parentOf, childrenOf, entryFor };
 }
@@ -2169,7 +2235,7 @@ export function RuntimeInspector({
   const treeEntryTitle = (entry: TreeEntry) =>
     [
       entry.id,
-      entry.source === 'dom' ? 'detected in the DOM, not declared by the GUI' : null,
+      entry.virtual ? "the page's own markup below this node; the GUI did not declare it" : entry.source === 'dom' ? 'detected in the DOM, not declared by the GUI' : null,
       treeEntryState(entry) === 'off' ? 'declared by the GUI; the app did not configure it' : null,
       treeEntryState(entry) === 'not mounted' ? 'declared by the GUI and configured; not mounted right now' : null,
     ]
@@ -2367,7 +2433,7 @@ export function RuntimeInspector({
                               style={{ fontSize: 14, fontWeight: 700, padding: '0 8px', borderRadius: 6, background: ui.fillActive, opacity: treeEntryState(entry) ? 0.65 : 1 }}
                             >
                               {treeEntryLabel(entry)}
-                              {entry.hint && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, opacity: 0.65 }}>{entry.hint}</span>}
+                              {entry.hint && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 400, opacity: 0.65, fontStyle: entry.hintKind === 'guessed' ? 'italic' : 'normal' }}>{entry.hint}</span>}
                             </span>
                           ) : (
                             <button
@@ -2479,9 +2545,12 @@ export function RuntimeInspector({
                         >
                           {row.hasChildren ? (row.open ? '▾' : '▸') : '·'}
                         </span>
-                        <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal' }}>{entry.label}</span>
+                        <span style={{ fontStyle: entry.source === 'dom' ? 'italic' : 'normal', color: entry.virtual ? ui.fgMuted : undefined, letterSpacing: entry.virtual ? '0.06em' : undefined }}>{entry.label}</span>
                         {entry.hint && (
-                          <span style={{ marginLeft: 8, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: ui.fgMuted, fontWeight: 400 }}>
+                          <span
+                            title={entry.hintKind === 'declared' ? 'Named by the GUI' : 'Guessed from the markup (the GUI did not name it)'}
+                            style={{ marginLeft: 8, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: ui.fgMuted, fontWeight: 400, fontStyle: entry.hintKind === 'guessed' ? 'italic' : 'normal' }}
+                          >
                             {entry.hint}
                           </span>
                         )}
@@ -2510,7 +2579,7 @@ export function RuntimeInspector({
                       <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>DIMENSIONS</span>
                       {/* Which node these dimensions are of: its full id. */}
                       <code style={{ fontSize: 11, fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }} title="The node these dimensions belong to">
-                        {selectedNodeId}
+                        {selectedNodeId?.replace('::DOM', ' › DOM')}
                       </code>
                     </div>
                     {layoutEdited && (

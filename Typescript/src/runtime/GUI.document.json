@@ -6,21 +6,27 @@
         "note": "The edge bars around the content. All five are declared; which are on is resolved at runtime.",
         "children": {
           "top": {
-            "note": "Top bar."
+            "note": "Top bar.",
+            "label": "Top bar"
           },
           "sticky": {
-            "note": "Sticky options strip under the top bar."
+            "note": "Sticky options strip under the top bar.",
+            "label": "Sticky options"
           },
           "left": {
-            "note": "Left sidebar."
+            "note": "Left sidebar.",
+            "label": "Left bar"
           },
           "right": {
-            "note": "Right sidebar."
+            "note": "Right sidebar.",
+            "label": "Right bar"
           },
           "footer": {
-            "note": "Footer bar."
+            "note": "Footer bar.",
+            "label": "Footer"
           }
-        }
+        },
+        "label": "Bars"
       },
       "content": {
         "note": "Where the current page renders. Each child is a page: `component` implements it, `route` serves it.",
@@ -28,19 +34,23 @@
           "landing": {
             "component": "CleakerLanding",
             "route": "/",
-            "note": "The .me QR and sign-in / register / recover. Behavior stays in the component."
+            "note": "The .me QR and sign-in / register / recover. Behavior stays in the component.",
+            "label": "Landing"
           },
           "users": {
             "component": "CleakerUsersView",
             "route": "/users",
-            "note": "Public claims directory: who has claimed this namespace."
+            "note": "Public claims directory: who has claimed this namespace.",
+            "label": "Users"
           },
           "blockchain": {
             "component": "CleakerBlockchainView",
             "route": "/blockchain",
-            "note": "Everything written to this namespace, as one stream."
+            "note": "Everything written to this namespace, as one stream.",
+            "label": "Blockchain"
           }
-        }
+        },
+        "label": "Content"
       }
     }
   }

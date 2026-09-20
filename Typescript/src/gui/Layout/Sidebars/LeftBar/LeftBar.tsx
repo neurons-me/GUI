@@ -265,6 +265,9 @@ const LeftSidebar = ({
       const adminProps = {
         'data-gui-node-id': adminMeta.nodeId,
         'data-gui-component': adminMeta.componentName,
+        // The item's own name, declared by the GUI -- the Inspector shows it
+        // instead of guessing one from the markup.
+        ...((el as any)?.props?.label ? { 'data-gui-label': String((el as any).props.label) } : {}),
       };
       if (el.type === 'link') return <LeftSidebarLink key={key} view={view} {...adminProps} {...el.props} />;
       if (el.type === 'menu') return <LeftSidebarMenu key={key} view={view} {...adminProps} {...el.props} />;
@@ -278,6 +281,9 @@ const LeftSidebar = ({
       const adminProps = {
         'data-gui-node-id': adminMeta.nodeId,
         'data-gui-component': adminMeta.componentName,
+        // The item's own name, declared by the GUI -- the Inspector shows it
+        // instead of guessing one from the markup.
+        ...((el as any)?.props?.label ? { 'data-gui-label': String((el as any).props.label) } : {}),
       };
       if (el.type === 'link') return <LeftSidebarLink key={`footer-link-${baseKey}`} view={view} {...adminProps} {...el.props} />;
       if (el.type === 'menu') return <LeftSidebarMenu key={`footer-menu-${baseKey}`} view={view} {...adminProps} {...el.props} />;
