@@ -83,8 +83,12 @@ const TREE_HOVER_ATTR = 'data-gui-inspector-hover';
 //    "detected" (source: 'dom'), and only ever fill in what the registry
 //    doesn't say: an undeclared node's parent is its nearest tagged DOM
 //    ancestor.
+// Only the Inspector's own PANEL is left out of the tree. Other things are
+// flagged as Inspector controls just so a click on them isn't captured (the
+// Theme and Dev Tools launchers, which hold the on/off switch); they are part
+// of the page and are on it.
 function isInspectorElement(el: Element): boolean {
-  return !!el.closest('[data-gui-inspector-control="true"]');
+  return !!el.closest('aside[data-gui-inspector-control="true"]');
 }
 
 function findTaggedElement(id: string, nth = 0): HTMLElement | null {
@@ -217,7 +221,11 @@ export function buildTreeModel() {
     const label =
       parent && id.startsWith(`${parent}.`)
         ? id.slice(parent.length + 1)
-        : el?.getAttribute('data-gui-component') || rec?.type || id;
+        : // A part named after its component (ThemeLauncher.preview.showAll,
+          // hung under whatever hosts the launcher): the part's own path.
+          rec && id.includes('.')
+          ? id.slice(id.indexOf('.') + 1)
+          : el?.getAttribute('data-gui-component') || rec?.type || id;
     const hint = hintFor(el, label, docLabels.get(id) || el?.getAttribute('data-gui-label') || null);
     return {
       id,
