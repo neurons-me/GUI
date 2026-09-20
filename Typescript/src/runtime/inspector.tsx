@@ -2059,6 +2059,8 @@ export function RuntimeInspector({
 
   const [panelWidth, setPanelWidth] = React.useState<number>(() => readPanelWidth());
   const [resizing, setResizing] = React.useState(false);
+  // Room for the tree and the element's box side by side.
+  const twoColumns = panelWidth >= 520;
   const [panelFont, setPanelFont] = React.useState<string>('');
 
   React.useEffect(() => {
@@ -2535,6 +2537,12 @@ export function RuntimeInspector({
                   </div>
                 </div>
 
+                {/* Wide enough: the tree on the left, the selected node's element
+                    (dimensions, HTML) on the right. Narrow: one under the other. */}
+                <div
+                  style={twoColumns ? { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 236px', gap: 8, alignItems: 'start' } : undefined}
+                >
+                  <div style={{ minWidth: 0 }}>
                 {/* The tree, as a diagram. Arrow keys walk it. */}
                 <div
                   role="tree"
@@ -2546,7 +2554,7 @@ export function RuntimeInspector({
                     border: `1px solid ${ui.line}`,
                     borderRadius: 8,
                     padding: '4px 6px',
-                    maxHeight: 190,
+                    maxHeight: twoColumns ? 340 : 190,
                     overflowY: 'auto',
                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                     fontSize: 11,
@@ -2619,11 +2627,12 @@ export function RuntimeInspector({
                 <div style={{ fontSize: 10, opacity: 0.5, marginTop: 4 }}>
                   ↑↓ rows · ← close / parent · → open / child · italic = only in the DOM
                 </div>
-
+                  </div>
+                  <div style={{ minWidth: 0 }}>
                 {/* DIMENSIONS of the selected node only: the box, editable. */}
                 <div
                   style={{
-                    marginTop: 8,
+                    marginTop: twoColumns ? 0 : 8,
                     padding: '6px 10px 8px',
                     borderRadius: 10,
                     border: `1px solid ${ui.line}`,
@@ -2746,6 +2755,8 @@ export function RuntimeInspector({
                     </>)}
                   </div>
                 )}
+                  </div>
+                </div>
               </div>
             )}
             {selected?.part && (
