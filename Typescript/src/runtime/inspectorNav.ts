@@ -51,11 +51,13 @@ export function around(model: NavModel, id: string): Around {
  * down, and reach the root by going up -- otherwise the tree has parts you
  * cannot walk to. So the rules are strict:
  *
- *  - a node's parent is what the GUI declared, else the nearest tagged
- *    element above it in the page, else the node its own id is a path under
- *    (`a.b.c` and `a/b` are parts of `a.b` and `a`) -- so a part that is not
- *    on the page right now (a table's empty-state) still hangs where it
- *    belongs;
+ *  - a node's parent is, in this order and taking the first that exists:
+ *    what the GUI declared; the node its own id is a path under (`a.b.c` and
+ *    `a/b` are parts of `a.b` and `a`); the nearest tagged element above it
+ *    in the page. The id comes before the markup because it is the GUI's own
+ *    statement: a part rendered elsewhere (a mobile toggle drawn outside the
+ *    bar, a popover) or not on the page at all (a table's empty-state) still
+ *    hangs where it belongs;
  *  - a parent that does not exist, a node with no parent at all, and a cycle
  *    all become ORPHANS: they are attached to the root so they can still be
  *    reached, and reported, so a gap in what the GUI declares is visible
@@ -89,8 +91,10 @@ export function linkTree(input: {
       parents.set(id, null);
       continue;
     }
-    const wanted = input.declaredParent(id) || input.domParent(id) || idParent(id);
-    if (wanted && wanted !== id && known.has(wanted)) {
+    const wanted = [input.declaredParent(id), idParent(id), input.domParent(id)].find(
+      (candidate) => candidate && candidate !== id && known.has(candidate)
+    );
+    if (wanted) {
       parents.set(id, wanted);
     } else if (hasRoot) {
       parents.set(id, input.root);

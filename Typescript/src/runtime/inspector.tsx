@@ -175,7 +175,12 @@ export function buildTreeModel() {
   const indexOf = (ids: string[]) => new Map(ids.map((id, i) => [id, i] as const));
   const docIndex = indexOf(flattenGuiDocument().map((e) => e.id));
   const domIndex = indexOf([...elements.keys()]);
-  const universe = [...new Set([...Object.keys(records), ...elements.keys()])];
+  // mount(spec) names a spec node that has no id of its own `node:<path>`
+  // (`node:r` = the root, `node:r.0` = its first child): the app's host chain
+  // -- StrictMode, the theme provider, the App component -- React wrappers
+  // with no element and no meaning as GUI parts. Not GUI, so not in the tree.
+  const isAnonymousHost = (id: string) => id.startsWith('node:');
+  const universe = [...new Set([...Object.keys(records), ...elements.keys()])].filter((id) => !isAnonymousHost(id));
   const regIndex = indexOf(universe);
   // A defined, stable order for siblings: the GUI document's own order first
   // (top, sticky, left, right, footer); then position on the page (DOM

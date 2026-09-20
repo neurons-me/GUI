@@ -66,6 +66,15 @@ const reachDown = (parents: Map<string, string | null>, root: string) => {
   assert.deepEqual(orphans, []);
 }
 {
+  // The id's own path beats where the markup happens to put the element: a
+  // toggle drawn outside its bar still belongs to the toggle.
+  const ids = ['GUI', 'GUI.bars', 'GUI.bars.left', 'GUI.bars.left.toggle', 'GUI.bars.left.toggle.mobile'];
+  const decl: Record<string, string> = { 'GUI.bars': 'GUI', 'GUI.bars.left': 'GUI.bars', 'GUI.bars.left.toggle': 'GUI.bars.left' };
+  const { parents, orphans } = linkTree({ ids, declaredParent: (i) => decl[i], domParent: (i) => (i === 'GUI.bars.left.toggle.mobile' ? 'GUI' : null), root: 'GUI' });
+  assert.equal(parents.get('GUI.bars.left.toggle.mobile'), 'GUI.bars.left.toggle');
+  assert.deepEqual(orphans, []);
+}
+{
   // No parent at all, a parent that does not exist, and a cycle: all end up
   // reachable from the root, and all are reported as orphans.
   const ids = ['GUI', 'lonely', 'ghost.child', 'a', 'b'];
