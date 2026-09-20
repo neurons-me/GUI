@@ -9,6 +9,7 @@ import { alpha, getContrastRatio } from '@mui/material/styles';
 import { useGuiTheme } from '@/gui-internals/Hooks/useGuiTheme';
 import { useDocumentPalette } from './useDocumentPalette';
 import { selectionStore } from './selectionStore';
+import { explainWithLocalKernel, getGuiLocalKernel, isGuiPath } from './guiLocalKernel';
 import { findGuiDocumentEntry, flattenGuiDocument } from './guiDocument';
 import { around, linkTree } from './inspectorNav';
 
@@ -2137,14 +2138,15 @@ export function RuntimeInspector({
     () => selected?.provenance ?? selected?.spec?.provenance ?? null,
     [selected?.provenance, selected?.spec]
   );
-  const kernelAvailable = React.useMemo(
-    () => hasKernelExplain(me),
-    [me]
-  );
   const explainPath = React.useMemo(
     () => resolveExplainPath(provenance),
     [provenance]
   );
+  // GUI.* facts live in this tab's own kernel, asked before the monad's.
+  // Not memoised: the tab's kernel appears when a session does, after this
+  // panel may already have rendered with the same path.
+  const kernelAvailable =
+    hasKernelExplain(me) || (!!explainPath && isGuiPath(explainPath) && !!getGuiLocalKernel());
   // A part the GUI document declares is explainable on its own terms -- no
   // runtime and no kernel path needed: it says where it is declared, what it
   // resolved to, and that nothing is bound to the kernel (yet).
@@ -2243,6 +2245,27 @@ export function RuntimeInspector({
     });
 
     try {
+      // Under GUI, the tab's own kernel answers first; the monad only gets
+      // what it could not (nothing written there, or no local kernel).
+      const local = await explainWithLocalKernel(getGuiLocalKernel(), explainPath).catch(() => null);
+      if (local) {
+        setExplainState({
+          status: 'ready',
+          sourcePath: explainPath,
+          sourceMethod: local.method,
+          payload: local.payload,
+        });
+        return;
+      }
+      if (!hasKernelExplain(me)) {
+        setExplainState({
+          status: 'unsupported',
+          sourcePath: explainPath,
+          error: 'The local kernel has nothing written at this path, and no monad is attached to ask.',
+        });
+        return;
+      }
+
       const [explainResult, inspectResult] = await Promise.allSettled([
         requestKernelExplain(me, explainPath),
         requestKernelInspect(me, explainPath),

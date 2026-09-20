@@ -26,6 +26,7 @@ import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpres
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
+import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage } from '@/runtime/guiDocument';
@@ -314,6 +315,15 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // for a namespace-scoped, signed, cross-device fact -- this is neither).
 const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session }) => {
   const { themeId, mode } = useThemeContext();
+
+  // The tab's own kernel, where GUI.window.* and GUI.theme.* are written, is
+  // what the Inspector's Explain asks first for GUI paths (read-only).
+  useEffect(() => {
+    const me = session?.me;
+    if (!me) return;
+    setGuiLocalKernel(me);
+    return () => setGuiLocalKernel(null, me);
+  }, [session]);
 
   useEffect(() => {
     if (!session?.me || !themeId) return;
