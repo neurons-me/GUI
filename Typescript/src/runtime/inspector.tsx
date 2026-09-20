@@ -1522,6 +1522,20 @@ export function RuntimeInspector({
   const [htmlInfo, setHtmlInfo] = React.useState<HtmlInfo | null>(null);
   const [subtree, setSubtree] = React.useState<Record<string, unknown> | null>(null);
   const [showFrameworkClasses, setShowFrameworkClasses] = React.useState(false);
+  // The HTML card is collapsed unless someone opens it (and remembers that).
+  const [htmlOpen, setHtmlOpenState] = React.useState<boolean>(() => {
+    try {
+      return localStorage.getItem('this.gui:inspectorHtmlOpen') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setHtmlOpen = React.useCallback((open: boolean) => {
+    setHtmlOpenState(open);
+    try {
+      localStorage.setItem('this.gui:inspectorHtmlOpen', open ? '1' : '0');
+    } catch {}
+  }, []);
   // Which nodes of the tree diagram are open. The focus and its ancestors are
   // always opened when the focus moves (so its children show); anything else
   // opens and closes only when asked.
@@ -2665,10 +2679,38 @@ export function RuntimeInspector({
                       color: ui.fg,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                    <button
+                      type="button"
+                      aria-expanded={htmlOpen}
+                      onClick={() => setHtmlOpen(!htmlOpen)}
+                      title={htmlOpen ? 'Collapse' : 'Show the element\'s HTML'}
+                      style={{
+                        display: 'flex',
+                        width: '100%',
+                        alignItems: 'baseline',
+                        gap: 8,
+                        marginBottom: htmlOpen ? 6 : 0,
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'inherit',
+                        font: 'inherit',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span aria-hidden="true" style={{ width: 10, opacity: 0.6, fontSize: 10 }}>{htmlOpen ? '▾' : '▸'}</span>
                       <span style={{ fontWeight: 700, opacity: 0.75, fontSize: 11 }}>HTML</span>
-                      <span style={{ fontSize: 10.5, opacity: 0.55 }} title="Read from the page as it is; the GUI document does not declare it">detected in the DOM</span>
-                    </div>
+                      {htmlOpen ? (
+                        <span style={{ fontSize: 10.5, opacity: 0.55 }}>detected in the DOM</span>
+                      ) : (
+                        // Collapsed: just enough to know what it is.
+                        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11, opacity: 0.7 }}>
+                          {`<${htmlInfo.tag}>`}{htmlInfo.id ? ` #${htmlInfo.id}` : ''}
+                        </span>
+                      )}
+                    </button>
+                    {htmlOpen && (<>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 11 }}>
                       <span style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillActive, fontWeight: 700 }}>{`<${htmlInfo.tag}>`}</span>
                       {htmlInfo.id && <span style={{ padding: '1px 7px', borderRadius: 6, background: ui.fillSoft }} title="id">#{htmlInfo.id}</span>}
@@ -2701,6 +2743,7 @@ export function RuntimeInspector({
                         ))}
                       </div>
                     )}
+                    </>)}
                   </div>
                 )}
               </div>
