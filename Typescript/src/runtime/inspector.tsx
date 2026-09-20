@@ -218,9 +218,18 @@ export function buildTreeModel() {
     const rec = records[id];
     const parent = parentOf(id);
     const el = elements.get(id);
+    // Relative to the nearest ancestor whose id it extends (a toggle under
+    // the header is 'GUI.bars.left.toggle': relative to the bar, not the header).
+    let prefixed: string | null = null;
+    for (let a: string | null = parent, hops = 0; a && hops < 30; a = parentOf(a), hops++) {
+      if (id.startsWith(`${a}.`)) {
+        prefixed = id.slice(a.length + 1);
+        break;
+      }
+    }
     const label =
-      parent && id.startsWith(`${parent}.`)
-        ? id.slice(parent.length + 1)
+      prefixed
+        ? prefixed
         : // A part named after its component (ThemeLauncher.preview.showAll,
           // hung under whatever hosts the launcher): the part's own path.
           rec && id.includes('.')
@@ -315,7 +324,7 @@ function readSubtree(id: string | null, model = buildTreeModel()): Record<string
     const out: Record<string, unknown> = { type: model.typeOf(nodeId) };
     if (e.hint) out[e.hintKind === 'declared' ? 'label' : 'hint'] = e.hint;
     if (e.source === 'dom') out.source = 'dom';
-    if (!e.enabled) out.state = 'off';
+    if (!e.enabled && !e.rendered) out.state = 'off';
     else if (e.source === 'declared' && !e.rendered) out.state = 'not mounted';
     const kids = model.childrenOf(nodeId);
     if (kids.length === 0) return out;

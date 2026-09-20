@@ -7,7 +7,19 @@
         "children": {
           "top": {
             "note": "Top bar.",
-            "label": "Top bar"
+            "label": "Top bar",
+            "children": {
+              "search": {
+                "label": "Search",
+                "component": "SearchField",
+                "note": "Directory search, fixed at the top-right of every route.",
+                "children": {
+                  "toggle": {
+                    "label": "Search button"
+                  }
+                }
+              }
+            }
           },
           "sticky": {
             "note": "Sticky options strip under the top bar.",
@@ -35,7 +47,52 @@
             "component": "CleakerLanding",
             "route": "/",
             "note": "The .me QR and sign-in / register / recover. Behavior stays in the component.",
-            "label": "Landing"
+            "label": "Landing",
+            "children": {
+              "qr": {
+                "label": "QR",
+                "note": "The .me QR with its namespace and status.",
+                "children": {
+                  "status": {
+                    "label": "Status"
+                  },
+                  "namespace": {
+                    "label": "Namespace",
+                    "children": {
+                      "edit": {
+                        "label": "Edit namespace"
+                      }
+                    }
+                  },
+                  "code": {
+                    "label": "QR code",
+                    "children": {
+                      "wordmark": {
+                        "label": ".me mark"
+                      }
+                    }
+                  }
+                }
+              },
+              "heading": {
+                "label": "Heading"
+              },
+              "username": {
+                "label": "Username"
+              },
+              "secret": {
+                "label": "Secret"
+              },
+              "submit": {
+                "label": "Submit"
+              },
+              "register": {
+                "label": "Register"
+              },
+              "recover": {
+                "label": "Recover"
+              }
+            }
           },
           "users": {
             "component": "CleakerUsersView",
