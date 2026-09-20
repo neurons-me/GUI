@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Box } from '@/gui/Atoms';
 import PixelWordmark from '../me/QR/PixelWordmark';
 import { NETGET_WORDMARK_BITMAP } from './netgetWordmarkBitmap';
+import { useGuiNodeId } from '@/runtime/guiNodeId';
 
 export interface NetGetMarkProps {
   /** Caps how wide the mark can grow inside a very wide container.
@@ -41,6 +42,9 @@ export default function NetGetMark({
   background = '#0b0d12',
   sx,
 }: NetGetMarkProps) {
+  // Under a placed view it is that view's mark (`<view>.mark`); alone, its own.
+  const viewId = useGuiNodeId('');
+
   return (
     <Box
       data-gui-component="NetGetMark"
@@ -73,7 +77,7 @@ export default function NetGetMark({
         fg={color}
         ariaLabel="NETGET"
         style={{ width: '50%', height: 'auto', display: 'block' }}
-        data-gui-node-id="NetGetMark/wordmark"
+        data-gui-node-id={viewId ? `${viewId}.mark` : 'NetGetMark/wordmark'}
       />
     </Box>
   );

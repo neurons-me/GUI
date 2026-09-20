@@ -16,6 +16,7 @@
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
+import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
 
 export interface MainServerViewProps {
   /** This netget's own base URL (its own backend, not a monad — same
@@ -29,6 +30,8 @@ export interface MainServerViewProps {
   /** Poll interval in ms. Defaults to 5000, matching the original page. */
   pollIntervalMs?: number;
   sx?: any;
+  /** Where this view sits in the GUI tree. Its parts hang under it. */
+  'data-gui-node-id'?: string;
 }
 
 type Entrypoint = { host: string };
@@ -152,10 +155,11 @@ function StatusDot({ on }: { on: boolean }) {
 }
 
 function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows: string[] }) {
+  const base = useGuiNodeId('MainServerView');
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return (
     <Box
-      data-gui-node-id={`MainServerView.${slug}`}
+      data-gui-node-id={`${base}.${slug}`}
       sx={{
         flex: '1 1 240px',
         minWidth: 200,
@@ -166,7 +170,7 @@ function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows:
         bgcolor: 'background.paper',
       }}
     >
-      <Typography variant="subtitle2" data-gui-node-id={`MainServerView.${slug}.title`}>{title}</Typography>
+      <Typography variant="subtitle2" data-gui-node-id={`${base}.${slug}.title`}>{title}</Typography>
       <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 1 }}>
         {hint}
       </Typography>
@@ -187,7 +191,7 @@ function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows:
   );
 }
 
-export default function MainServerView({ endpoint, namespaceRootUrl, pollIntervalMs = 5000, sx }: MainServerViewProps) {
+export default function MainServerView({ endpoint, namespaceRootUrl, pollIntervalMs = 5000, sx, 'data-gui-node-id': nodeId = 'MainServerView' }: MainServerViewProps) {
   const [state, setState] = React.useState<MainServerState>(EMPTY_STATE);
   const [connected, setConnected] = React.useState(false);
   const [ownerExpanded, setOwnerExpanded] = React.useState(false);
@@ -232,8 +236,9 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
   }, [endpoint, pollIntervalMs]);
 
   return (
+    <GuiNodeIdBase value={nodeId}>
     <Box
-      data-gui-node-id="MainServerView"
+      data-gui-node-id={nodeId}
       data-gui-component="MainServerView"
       sx={{
         maxWidth: 720,
@@ -246,7 +251,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
-        <Typography variant="h5" data-gui-node-id="MainServerView.host">{state.gatewayHost || 'This main server'}</Typography>
+        <Typography variant="h5" data-gui-node-id={`${nodeId}.host`}>{state.gatewayHost || 'This main server'}</Typography>
         <Typography variant="caption" sx={{ color: connected ? 'success.main' : 'text.secondary' }}>
           {connected ? 'online' : 'connecting…'}
         </Typography>
@@ -287,7 +292,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           {state.servingNamespace ? (
             <Typography
               component="a"
-              data-gui-node-id="MainServerView.namespaceLink"
+              data-gui-node-id={`${nodeId}.namespace`}
               href={buildCleakerNamespaceUrl(state.servingNamespace) || `//${state.servingNamespace}`}
               variant="body2"
               sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
@@ -354,7 +359,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
                       return url ? (
                         <Typography
                           component="a"
-                          data-gui-node-id="MainServerView.ownerLink"
+                          data-gui-node-id={`${nodeId}.owner`}
                           href={url}
                           variant="body2"
                           sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
@@ -379,7 +384,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
                 <Typography
                   component="button"
                   type="button"
-                  data-gui-node-id="MainServerView.ownerHash"
+                  data-gui-node-id={`${nodeId}.hash`}
                   onClick={() => setOwnerExpanded((v) => !v)}
                   variant="caption"
                   sx={{
@@ -427,6 +432,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       </Box>
 
       <Box
+        data-gui-node-id={`${nodeId}.openresty`}
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -439,7 +445,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle2" data-gui-node-id="MainServerView.openresty.title">OpenResty</Typography>
+          <Typography variant="subtitle2" data-gui-node-id={`${nodeId}.openresty.title`}>OpenResty</Typography>
           {state.openrestyMode && (
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               {state.openrestyMode}
@@ -469,5 +475,6 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         rows={state.entrypoints.map((e) => e.host)}
       />
     </Box>
+    </GuiNodeIdBase>
   );
 }

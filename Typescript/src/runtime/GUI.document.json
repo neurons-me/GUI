@@ -44,7 +44,7 @@
         "note": "Where the current page renders. Each child is a page: `component` implements it, `route` serves it.",
         "children": {
           "landing": {
-            "component": "CleakerLanding",
+            "component": "Landing",
             "route": "/",
             "note": "The .me QR and sign-in / register / recover. Behavior stays in the component.",
             "label": "Landing",
@@ -95,16 +95,152 @@
             }
           },
           "users": {
-            "component": "CleakerUsersView",
+            "component": "Users",
             "route": "/users",
             "note": "Public claims directory: who has claimed this namespace.",
             "label": "Users"
           },
           "blockchain": {
-            "component": "CleakerBlockchainView",
+            "component": "Blockchain",
             "route": "/blockchain",
             "note": "Everything written to this namespace, as one stream.",
             "label": "Blockchain"
+          },
+          "url": {
+            "label": "URL",
+            "component": "Url",
+            "route": "/url",
+            "note": "Opens a real NRP channel to a URL under this namespace root.",
+            "children": {
+              "heading": {
+                "label": "Heading"
+              },
+              "input": {
+                "label": "URL"
+              },
+              "submit": {
+                "label": "Open"
+              }
+            }
+          },
+          "keychain": {
+            "label": "Keychain",
+            "component": "Keychain",
+            "route": "/keychain",
+            "note": "The signing keys of the signed-in identity."
+          },
+          "netget": {
+            "label": "Netget",
+            "component": "Netget",
+            "route": "/netget",
+            "note": "The gateway that serves this namespace: its status, and setting it up.",
+            "children": {
+              "heading": {
+                "label": "Heading",
+                "note": "Shown when no gateway is reachable here."
+              },
+              "status": {
+                "label": "Main server",
+                "note": "Public identity and status of the gateway.",
+                "children": {
+                  "host": {
+                    "label": "Host"
+                  },
+                  "namespace": {
+                    "label": "Namespace"
+                  },
+                  "owner": {
+                    "label": "Owner"
+                  },
+                  "hash": {
+                    "label": "Owner hash"
+                  },
+                  "openresty": {
+                    "label": "OpenResty",
+                    "children": {
+                      "title": {
+                        "label": "Title"
+                      }
+                    }
+                  },
+                  "entrypoints": {
+                    "label": "Entrypoints",
+                    "children": {
+                      "title": {
+                        "label": "Title"
+                      }
+                    }
+                  }
+                }
+              },
+              "setup": {
+                "label": "Gateway setup",
+                "note": "Install and claim the gateway.",
+                "children": {
+                  "code": {
+                    "label": "Setup code"
+                  },
+                  "unlock": {
+                    "label": "Unlock install"
+                  },
+                  "install": {
+                    "label": "Install OpenResty"
+                  },
+                  "retry": {
+                    "label": "Retry install"
+                  },
+                  "submit": {
+                    "label": "Claim"
+                  },
+                  "review": {
+                    "label": "Review"
+                  },
+                  "mark": {
+                    "label": "NetGet mark"
+                  }
+                }
+              },
+              "claim": {
+                "label": "Claim",
+                "component": "Claim",
+                "route": "/keychain/claim",
+                "note": "Signs the claim of this gateway with the identity's key.",
+                "children": {
+                  "heading": {
+                    "label": "Heading"
+                  },
+                  "signin": {
+                    "label": "Sign in"
+                  },
+                  "passphrase": {
+                    "label": "Passphrase"
+                  },
+                  "confirm": {
+                    "label": "Confirm"
+                  }
+                }
+              },
+              "sign": {
+                "label": "Sign",
+                "component": "Sign",
+                "route": "/keychain/admin-sign",
+                "note": "Signs an admin action for the gateway with the identity's key.",
+                "children": {
+                  "heading": {
+                    "label": "Heading"
+                  },
+                  "signin": {
+                    "label": "Sign in"
+                  },
+                  "passphrase": {
+                    "label": "Passphrase"
+                  },
+                  "confirm": {
+                    "label": "Confirm"
+                  }
+                }
+              }
+            }
           }
         },
         "label": "Content"

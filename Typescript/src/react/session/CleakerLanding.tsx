@@ -28,7 +28,7 @@ import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
 import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import { useRegisterGuiNode } from '@/runtime/selection';
+import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
@@ -393,7 +393,7 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
   );
 };
 
-const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'CleakerLanding' }) => {
+const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -1056,7 +1056,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
 // deliberately separate from endpoint (the API to fetch FROM, netget's own
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
-const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.users', 'data-gui-component': nodeComponent = 'CleakerUsersView' }) => {
+const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.users', 'data-gui-component': nodeComponent = 'Users' }) => {
   // Declared by the GUI document (GUI.content.users), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
@@ -1088,7 +1088,7 @@ const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, ne
 // as one stream today, see Namespace-Is-Context.md §4 for the split this
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
-const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.blockchain', 'data-gui-component': nodeComponent = 'CleakerBlockchainView' }) => {
+const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.blockchain', 'data-gui-component': nodeComponent = 'Blockchain' }) => {
   // Declared by the GUI document (GUI.content.blockchain), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
@@ -1128,7 +1128,7 @@ const URL_VIEW_STATE_COLOR: Record<string, string> = {
 // resolved server-side (handleNrpOpen ignores ast) — so this will sit at
 // 'resolving' forever today. That's shown, not hidden: the point is
 // expressing real NRP intent through the real protocol, not faking a result.
-const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) => {
+const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'data-gui-node-id': nodeId = 'GUI.content.url', 'data-gui-component': nodeComponent = 'Url' }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -1147,11 +1147,11 @@ const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) 
 
   return (
     <Box
-      data-gui-node-id="CleakerUrlView"
-      data-gui-component="CleakerUrlView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box', ...sx }}
     >
-      <Typography variant="h5" data-gui-node-id="CleakerUrlView.heading" sx={{ fontWeight: 700, mb: 2 }}>
+      <Typography variant="h5" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, mb: 2 }}>
         URL
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
@@ -1165,13 +1165,13 @@ const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) 
           placeholder="https://example.com/page"
           fullWidth
           size="small"
-          data-gui-node-id="CleakerUrlView.input"
+          data-gui-node-id={`${nodeId}.input`}
         />
         <Box
           component="button"
           type="button"
           onClick={handleSubmit}
-          data-gui-node-id="CleakerUrlView.submit"
+          data-gui-node-id={`${nodeId}.submit`}
           sx={{
             px: 2,
             border: '1px solid',
@@ -1209,7 +1209,7 @@ const CleakerUrlView: React.FC<CleakerLandingProps> = ({ sx, cleakerEndpoint }) 
 // tree instead of a hardcoded demo phrase, and the endpoint is whatever
 // transportOrigin the session itself claimed/opened against — never a
 // second, separately-configured origin to keep in sync.
-const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
+const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.keychain', 'data-gui-component': nodeComponent = 'Keychain' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [client, setClient] = useState<KeychainClient | null>(null);
   const [keys, setKeys] = useState<KeychainKey[]>([]);
@@ -1256,7 +1256,7 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
 
   if (!ctx?.authenticated || !client) {
     return (
-      <Box data-gui-node-id="CleakerKeychainView" sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box' }}>
+      <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box' }}>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Sign in first to see your keychain.</Typography>
       </Box>
     );
@@ -1264,8 +1264,8 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
 
   return (
     <Box
-      data-gui-node-id="CleakerKeychainView"
-      data-gui-component="CleakerKeychainView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={{ p: 3, width: '100%', maxWidth: 480, boxSizing: 'border-box' }}
     >
       {notice && (
@@ -1369,7 +1369,7 @@ const CleakerKeychainView: React.FC<CleakerLandingProps> = () => {
 // (normalizeProofMessage(payload) below) -- it proves WHICH attempt this
 // return belongs to, not WHAT is being claimed, so signing it would
 // conflate two different guarantees for no benefit.
-const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
+const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.netget.claim', 'data-gui-component': nodeComponent = 'Claim' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [searchParams] = useSearchParams();
   const gatewayId = searchParams.get('gatewayId') || '';
@@ -1511,7 +1511,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
 
   if (!gatewayId || !challenge || !state || !returnTo || !returnToUrl) {
     return (
-      <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'error.main' }}>
             This link is missing required claim details. Go back to your gateway's setup page and try again.
@@ -1527,7 +1527,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
   // real answer comes back.
   if (returnToAuthorized === null) {
     return (
-      <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             Verifying this claim link…
@@ -1542,7 +1542,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
   // never merely flagged alongside a working sign flow.
   if (!returnToAuthorized) {
     return (
-      <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'error.main' }}>
             This link would return your signed claim to an untrusted destination ({returnToUrl.origin}) and has been
@@ -1570,10 +1570,10 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
     if (currentMonadParam) carryParams.set('monad', currentMonadParam);
     const signInHref = `/?${carryParams.toString()}`;
     return (
-      <Box data-gui-node-id="CleakerNetgetClaimView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>Sign in first to claim this gateway.</Typography>
-          <Typography component="a" data-gui-node-id="CleakerNetgetClaimView.signIn" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
+          <Typography component="a" data-gui-node-id={`${nodeId}.signin`} href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
             Sign in →
           </Typography>
         </Box>
@@ -1586,12 +1586,12 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
 
   return (
     <Box
-      data-gui-node-id="CleakerNetgetClaimView"
-      data-gui-component="CleakerNetgetClaimView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={shellSx}
     >
       <Box sx={{ width: '100%', maxWidth: 480 }}>
-        <Typography variant="h6" data-gui-node-id="CleakerNetgetClaimView.heading" sx={{ mb: 1 }}>Claim gateway</Typography>
+        <Typography variant="h6" data-gui-node-id={`${nodeId}.heading`} sx={{ mb: 1 }}>Claim gateway</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
           Signing as <strong>{semanticNamespace}</strong> for gateway <strong>{gatewayId}</strong>, returning to{' '}
           <strong>{returnToOrigin}</strong>.
@@ -1633,7 +1633,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
 
         {selectedKey && selectedKey.localAvailability !== 'available-unlocked' && (
           <TextField
-            data-gui-node-id="CleakerNetgetClaimView.passphrase"
+            data-gui-node-id={`${nodeId}.passphrase`}
             type="password"
             label="Passphrase"
             size="small"
@@ -1647,7 +1647,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
         <Button
           disabled={!selectedKey || signing}
           onClick={handleSignAndReturn}
-          data-gui-node-id="CleakerNetgetClaimView.confirm"
+          data-gui-node-id={`${nodeId}.confirm`}
         >
           {signing ? 'Signing…' : 'Sign and continue'}
         </Button>
@@ -1669,7 +1669,7 @@ const CleakerNetgetClaimView: React.FC<CleakerLandingProps> = () => {
 // itself in the same cross-origin round trip, so only one opaque,
 // short-lived, non-secret value (the session token) ever has to travel
 // back through the URL -- never a raw signature or challenge.
-const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
+const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.netget.sign', 'data-gui-component': nodeComponent = 'Sign' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo') || '';
@@ -1839,7 +1839,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 
   if (!returnTo || !returnToUrl) {
     return (
-      <Box data-gui-node-id="CleakerNetgetAdminSignView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'error.main' }}>
             This link is missing where to return to. Go back to the page that sent you here and try again.
@@ -1851,7 +1851,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 
   if (!returnToAuthorized) {
     return (
-      <Box data-gui-node-id="CleakerNetgetAdminSignView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'error.main' }}>
             This link would return your session to an untrusted destination
@@ -1870,10 +1870,10 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
     if (currentMonadParam) carryParams.set('monad', currentMonadParam);
     const signInHref = `/?${carryParams.toString()}`;
     return (
-      <Box data-gui-node-id="CleakerNetgetAdminSignView" sx={shellSx}>
+      <Box data-gui-node-id={nodeId} sx={shellSx}>
         <Box sx={{ width: '100%', maxWidth: 480 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>Sign in first to continue as an admin.</Typography>
-          <Typography component="a" data-gui-node-id="CleakerNetgetAdminSignView.signIn" href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
+          <Typography component="a" data-gui-node-id={`${nodeId}.signin`} href={signInHref} variant="body2" sx={{ color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}>
             Sign in →
           </Typography>
         </Box>
@@ -1883,12 +1883,12 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 
   return (
     <Box
-      data-gui-node-id="CleakerNetgetAdminSignView"
-      data-gui-component="CleakerNetgetAdminSignView"
+      data-gui-node-id={nodeId}
+      data-gui-component={nodeComponent}
       sx={shellSx}
     >
       <Box sx={{ width: '100%', maxWidth: 480 }}>
-        <Typography variant="h6" data-gui-node-id="CleakerNetgetAdminSignView.heading" sx={{ mb: 1 }}>Confirm admin session</Typography>
+        <Typography variant="h6" data-gui-node-id={`${nodeId}.heading`} sx={{ mb: 1 }}>Confirm admin session</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
           Signing as <strong>{semanticNamespace}</strong>.
         </Typography>
@@ -1929,7 +1929,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 
         {selectedKey && selectedKey.localAvailability !== 'available-unlocked' && (
           <TextField
-            data-gui-node-id="CleakerNetgetAdminSignView.passphrase"
+            data-gui-node-id={`${nodeId}.passphrase`}
             type="password"
             label="Passphrase"
             size="small"
@@ -1943,7 +1943,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
         <Button
           disabled={!selectedKey || signing}
           onClick={handleSignAndReturn}
-          data-gui-node-id="CleakerNetgetAdminSignView.confirm"
+          data-gui-node-id={`${nodeId}.confirm`}
         >
           {signing ? 'Signing…' : 'Sign and continue'}
         </Button>
@@ -1976,7 +1976,7 @@ const CleakerNetgetAdminSignView: React.FC<CleakerLandingProps> = () => {
 // authority, not just visibility, and belongs in its own pass, verified
 // against disposable infrastructure rather than this installation's real
 // gateway. This pass only reads and displays.
-const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget }) => {
+const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget, 'data-gui-node-id': nodeId = 'GUI.content.netget', 'data-gui-component': nodeComponent = 'Netget' }) => {
   const setupClient = useMemo(
     () => (netget.available ? createNetgetSetupClient(netget.endpoint, { returnPath: '/netget' }) : null),
     [netget.endpoint, netget.available],
@@ -1992,8 +1992,8 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
 
   if (!netget.available) {
     return (
-      <Box data-gui-node-id="CleakerNetgetView" sx={{ p: 3, maxWidth: 560 }}>
-        <Typography variant="h5" data-gui-node-id="CleakerNetgetView.heading" sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
+      <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, maxWidth: 560 }}>
+        <Typography variant="h5" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           No hay un gateway Netget disponible en este contexto todavía.
         </Typography>
@@ -2002,11 +2002,12 @@ const CleakerNetgetView: React.FC<{ netget: { endpoint: string; available: boole
   }
 
   return (
-    <Box data-gui-node-id="CleakerNetgetView" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <MainServerView endpoint={netget.endpoint} namespaceRootUrl={netget.endpoint} />
+    <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <MainServerView data-gui-node-id={`${nodeId}.status`} endpoint={netget.endpoint} namespaceRootUrl={netget.endpoint} />
 
       {setupClient && (
         <GatewaySetup
+          data-gui-node-id={`${nodeId}.setup`}
           endpoint={netget.endpoint}
           onSubmitSetupCode={setupClient.onSubmitSetupCode}
           onVerifySetupCode={setupClient.onVerifySetupCode}
@@ -2120,8 +2121,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   ];
 
   // Every page the document declares under GUI.content: what renders and
-  // where it is served both come from the document; the JSX below only keeps
-  // the routes that are not declared there yet (url, keychain, netget).
+  // where it is served both come from the document.
   const documentPageRoutes = flattenGuiDocument()
     .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
     .map((entry) => {
@@ -2132,7 +2132,16 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
         props:
           entry.id === LANDING_ID
             ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status }
-            : props,
+            : entry.id === 'GUI.content.netget'
+              ? {
+                  ...props,
+                  netget: {
+                    endpoint: verifiedRoot.cleakerEndpoint,
+                    available: verifiedRoot.netget.available,
+                    gatewayId: verifiedRoot.netget.gatewayId,
+                  },
+                }
+              : props,
       });
       return route.index
         ? <Route key={entry.id} index element={element} />
@@ -2165,16 +2174,9 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
       >
         <ThemeKernelMirror session={session} />
         <Routes>
-          {/* Landing, users, blockchain: declared by the GUI document, rendered
-              through the same renderer mount(spec) uses. */}
+          {/* Every page is declared by the GUI document and rendered through the
+              same renderer mount(spec) uses. */}
           {documentPageRoutes}
-          <Route path="url" element={<CleakerUrlView {...props} />} />
-          <Route path="keychain" element={<CleakerKeychainView {...props} />} />
-          <Route path="netget" element={<CleakerNetgetView netget={{
-            endpoint: verifiedRoot.cleakerEndpoint,
-            available: verifiedRoot.netget.available,
-            gatewayId: verifiedRoot.netget.gatewayId,
-          }} />} />
         </Routes>
       </Layout>
     </Box>
@@ -2183,9 +2185,14 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
 
 // Components the GUI document may name (`component`), by that name.
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
-  CleakerLanding: CleakerLandingHome,
-  CleakerUsersView,
-  CleakerBlockchainView,
+  Landing: CleakerLandingHome,
+  Users: CleakerUsersView,
+  Blockchain: CleakerBlockchainView,
+  Url: CleakerUrlView,
+  Keychain: CleakerKeychainView,
+  Netget: CleakerNetgetView,
+  Claim: CleakerNetgetClaimView,
+  Sign: CleakerNetgetAdminSignView,
 };
 
 // A document `route` ("/" or "/users") as react-router wants it: the index
@@ -2195,11 +2202,44 @@ function documentRoute(route?: string): { index?: true; path?: string } {
   return route === '/' ? { index: true } : { path: route.replace(/^\//, '') };
 }
 
+// A signing screen is not a page inside the GUI's navigation, so it renders
+// without the shell's Layout -- but it is still the same GUI: the same root
+// and the same declared parts, so the tree above it reaches `GUI`.
+// One object, not one per render: a fresh provenance each render is a new
+// record each time, and the registry re-renders whatever registered it.
+const STANDALONE_ROOT_PROVENANCE = { semanticPath: 'GUI', note: 'Generative User Interface' };
+
+const StandalonePage: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, STANDALONE_ROOT_PROVENANCE);
+  useRegisterGuiNodes(
+    flattenGuiDocument()
+      .filter((entry) => entry.parentId)
+      .map((entry) => ({
+        id: entry.id,
+        type: entry.component ?? entry.type,
+        parentId: entry.parentId,
+        // No bars here: declared, off.
+        enabled: entry.parentId !== 'GUI.bars',
+        provenance: { source: 'document', documentPath: entry.id, note: entry.note },
+      }))
+  );
+  return <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">{children}</Box>;
+};
+
+// The steps of the netget claim (claim, sign) are declared under
+// GUI.content.netget and served on their own routes, outside the shell.
 const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
   <Routes>
     <Route path="/*" element={<CleakerLayoutShell {...props} />} />
-    <Route path="/keychain/claim" element={<CleakerNetgetClaimView {...props} />} />
-    <Route path="/keychain/admin-sign" element={<CleakerNetgetAdminSignView {...props} />} />
+    {flattenGuiDocument()
+      .filter((entry) => entry.parentId === 'GUI.content.netget' && entry.component && entry.route)
+      .map((entry) => (
+        <Route
+          key={entry.id}
+          path={entry.route}
+          element={<StandalonePage>{renderGuiDocumentPage(entry.id, { React, registry: DOCUMENT_PAGES, props })}</StandalonePage>}
+        />
+      ))}
   </Routes>
 );
 

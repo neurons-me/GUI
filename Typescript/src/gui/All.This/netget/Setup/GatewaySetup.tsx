@@ -39,6 +39,7 @@
 // and picks the flow back up when the browser returns carrying a signed
 // proof — never the private key or any unlock passphrase — as URL params.
 import * as React from 'react';
+import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
 import { Box, Typography } from '@/gui/Atoms';
 import NetGetMark from '../NetGetMark';
 import {
@@ -119,6 +120,8 @@ export interface GatewaySetupProps {
    *  A real consumer never sets this. */
   initialPhase?: SetupPhase;
   sx?: any;
+  /** Where this view sits in the GUI tree. Its parts hang under it. */
+  'data-gui-node-id'?: string;
 }
 
 type FetchedState = {
@@ -298,6 +301,7 @@ function OpenRestyInstallControl({
   endpoint: string;
   onVerifySetupCode?: (code: string) => Promise<{ ok: boolean; setupToken?: string; message?: string }>;
 }) {
+  const gsId = useGuiNodeId('GatewaySetup');
   const base = String(endpoint || '').replace(/\/+$/, '');
   const [setupToken, setSetupToken] = React.useState<string | null>(null);
   const [codeInput, setCodeInput] = React.useState('');
@@ -383,9 +387,9 @@ function OpenRestyInstallControl({
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Enter your setup code to let this screen install OpenResty for you.
         </Typography>
-        <TextField label="Setup code" value={codeInput} onChange={setCodeInput} nodeId="GatewaySetup.setupCode" />
+        <TextField label="Setup code" value={codeInput} onChange={setCodeInput} nodeId={`${gsId}.code`} />
         {codeError && <Typography variant="caption" sx={{ color: 'error.main' }}>{codeError}</Typography>}
-        <PrimaryButton nodeId="GatewaySetup.unlockInstall" onClick={handleVerifyCode} disabled={verifying || !codeInput.trim()}>
+        <PrimaryButton nodeId={`${gsId}.unlock`} onClick={handleVerifyCode} disabled={verifying || !codeInput.trim()}>
           {verifying ? 'Checking…' : 'Unlock automatic install'}
         </PrimaryButton>
       </Box>
@@ -412,7 +416,7 @@ function OpenRestyInstallControl({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="caption" sx={{ color: 'error.main' }}>{job.message || 'The install failed.'}</Typography>
         <TerminalSnippet>{job.log.slice(-6).join('\n')}</TerminalSnippet>
-        <PrimaryButton nodeId="GatewaySetup.retryInstall" onClick={handleInstall}>Try again</PrimaryButton>
+        <PrimaryButton nodeId={`${gsId}.retry`} onClick={handleInstall}>Try again</PrimaryButton>
       </Box>
     );
   }
@@ -433,7 +437,7 @@ function OpenRestyInstallControl({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {actionError && <Typography variant="caption" sx={{ color: 'error.main' }}>{actionError}</Typography>}
-      <PrimaryButton nodeId="GatewaySetup.install" onClick={handleInstall}>Install OpenResty</PrimaryButton>
+      <PrimaryButton nodeId={`${gsId}.install`} onClick={handleInstall}>Install OpenResty</PrimaryButton>
     </Box>
   );
 }
@@ -476,6 +480,7 @@ export default function GatewaySetup({
   onNavigateSameOrigin,
   initialPhase,
   sx,
+  'data-gui-node-id': nodeId = 'GatewaySetup',
 }: GatewaySetupProps) {
   const [fetched, setFetched] = React.useState<FetchedState>(EMPTY_FETCHED);
   const [phase, setPhase] = React.useState<SetupPhase>(initialPhase ?? 'checking');
@@ -594,8 +599,9 @@ export default function GatewaySetup({
   };
 
   return (
+    <GuiNodeIdBase value={nodeId}>
     <Box
-      data-gui-node-id="GatewaySetup"
+      data-gui-node-id={nodeId}
       data-gui-component="GatewaySetup"
       sx={{
         maxWidth: 440,
@@ -673,6 +679,7 @@ export default function GatewaySetup({
         <ClaimedPanel ownerUsername={ownerUsername ?? fetched.ownerUsername} />
       )}
     </Box>
+    </GuiNodeIdBase>
   );
 }
 
@@ -691,6 +698,7 @@ function UnclaimedPanel({
   onRedirecting: () => void;
   externalError: string | null;
 }) {
+  const gsId = useGuiNodeId('GatewaySetup');
   const [code, setCode] = React.useState('');
   const [error, setError] = React.useState<string | null>(externalError);
   const [busy, setBusy] = React.useState(false);
@@ -737,9 +745,9 @@ function UnclaimedPanel({
         <code> netget init</code> (or <code>netget claim</code>) ran on this machine — that's
         what makes claiming from a browser as trustworthy as claiming from the terminal itself.
       </Typography>
-      <TextField label="Setup code" value={code} onChange={setCode} autoFocus nodeId="GatewaySetup.claimCode" />
+      <TextField label="Setup code" value={code} onChange={setCode} autoFocus nodeId={`${gsId}.code`} />
       {error && <Typography variant="caption" sx={{ color: 'error.main' }}>{error}</Typography>}
-      <PrimaryButton nodeId="GatewaySetup.submitCode" onClick={submit} disabled={busy || !code.trim()}>
+      <PrimaryButton nodeId={`${gsId}.submit`} onClick={submit} disabled={busy || !code.trim()}>
         {busy ? 'Checking…' : 'Continue'}
       </PrimaryButton>
       <Typography variant="caption" sx={{ color: 'text.disabled', textAlign: 'center' }}>
@@ -751,6 +759,7 @@ function UnclaimedPanel({
 }
 
 function ClaimedPanel({ ownerUsername }: { ownerUsername: string | null }) {
+  const gsId = useGuiNodeId('GatewaySetup');
   const nextSteps = ['Configure the Main Server', 'Choose public domains (optional)', 'Register services & apps'];
   return (
     <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -772,7 +781,7 @@ function ClaimedPanel({ ownerUsername }: { ownerUsername: string | null }) {
           away rather than automatic. */}
       <Typography
         component="a"
-        data-gui-node-id="GatewaySetup.reviewLink"
+        data-gui-node-id={`${gsId}.review`}
         href="/home"
         variant="body2"
         sx={{ textAlign: 'center', color: 'primary.main', textDecoration: 'none', fontWeight: 600, '&:hover': { textDecoration: 'underline' } }}
