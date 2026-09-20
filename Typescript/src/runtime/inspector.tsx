@@ -231,7 +231,7 @@ export function buildTreeModel() {
     const label =
       prefixed
         ? prefixed
-        : // A part named after its component (ThemeLauncher.preview.showAll,
+        : // A part named after its component (ThemeLauncher.avatar, a launcher on its own,
           // hung under whatever hosts the launcher): the part's own path.
           rec && id.includes('.')
           ? id.slice(id.indexOf('.') + 1)

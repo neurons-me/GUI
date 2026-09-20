@@ -14,6 +14,8 @@ import { Drawer } from '@/gui/Molecules';
 import type { LeftSidebarView } from '@/gui-internals/Contexts';
 import { selectionStore } from '@/runtime/selectionStore';
 import { GuiParent } from '@/runtime/selection';
+import { GuiNodeIdBase } from '@/runtime/guiNodeId';
+import { buildLeftSidebarElementMeta, getSidebarRootPath } from './leftBarIds';
 import type { ResolvedNodeRecord } from '@/runtime/renderer';
 import { mergeLeftSidebarCollections } from '@/gui/Layout/Sidebars/Collections/resolveCollections';
 
@@ -57,35 +59,6 @@ const LEFT_SIDEBAR_TOGGLE_PROVENANCE = {
   source: 'LeftBar.LeftSidebarToggleButton',
   note: 'Expand/collapse control for the left sidebar rail; view state is local (useLeftSidebar context), not kernel-bound, so no semanticPath/explainPath applies.',
 } as const;
-
-function getSidebarRootPath(nodeId: string): string {
-  const normalized = String(nodeId || '').trim();
-  if (!normalized) return 'GUI.bars.left';
-  const parts = normalized.split(':');
-  if (parts.length > 1) return parts.slice(1).join(':');
-  return normalized.replace(/[^\w.-]+/g, '.');
-}
-
-function buildLeftSidebarElementMeta(
-  el: LeftSidebarElement,
-  rootNodeId: string,
-  section: 'elements' | 'footerElements',
-  idx: number
-) {
-  // Same word for the node's type and its path segment: me.GUI.bars.left.link.0
-  const componentByType = {
-    link: 'link',
-    menu: 'menu',
-    action: 'action',
-  } as const;
-  const explicitNodeId = el?.props?.['data-gui-node-id'];
-  const explicitComponent = el?.props?.['data-gui-component'];
-  const rootPath = getSidebarRootPath(rootNodeId);
-  const componentName = explicitComponent || componentByType[el.type];
-  const path = `${rootPath}.${section === 'footerElements' ? 'footer.' : ''}${el.type}.${idx}`;
-  const nodeId = explicitNodeId || path;
-  return { nodeId, path, componentName };
-}
 
 const LeftSidebar = ({
   elements = [],
@@ -310,7 +283,7 @@ const LeftSidebar = ({
         : el.type === 'action' ? <LeftSidebarAction view={view} {...adminProps} {...el.props} />
         : null;
       // Anything an item registers (a launcher's own parts) belongs to it.
-      return item ? <GuiParent key={key} id={adminMeta.nodeId}>{item}</GuiParent> : null;
+      return item ? <GuiParent key={key} id={adminMeta.nodeId}><GuiNodeIdBase value={adminMeta.nodeId}>{item}</GuiNodeIdBase></GuiParent> : null;
     });
   const renderFooterItems = () =>
     resolvedFooterElements.map((el, idx) => {
@@ -328,7 +301,7 @@ const LeftSidebar = ({
         : el.type === 'menu' ? <LeftSidebarMenu view={view} {...adminProps} {...el.props} />
         : el.type === 'action' ? <LeftSidebarAction view={view} {...adminProps} {...el.props} />
         : null;
-      return item ? <GuiParent key={`footer-${el.type}-${baseKey}`} id={adminMeta.nodeId}>{item}</GuiParent> : null;
+      return item ? <GuiParent key={`footer-${el.type}-${baseKey}`} id={adminMeta.nodeId}><GuiNodeIdBase value={adminMeta.nodeId}>{item}</GuiNodeIdBase></GuiParent> : null;
     });
 
   if (view === 'rail') {

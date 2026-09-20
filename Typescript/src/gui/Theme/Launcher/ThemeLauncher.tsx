@@ -14,6 +14,7 @@ import { getGuiThemes } from '@/gui/Theme/utils/catalog';
 import { LeftSidebarContext } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { useOptionalSelection, useRegisterGuiNode } from '@/runtime/selection';
 import { useLauncherPopover } from '@/runtime/launcherPopover';
+import { useGuiNodeId } from '@/runtime/guiNodeId';
 
 export interface ThemeLauncherProps {
   sx?: any;
@@ -49,10 +50,16 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   // layout/reflow work to make the tab appear to hang for several seconds.
   const optionalSelection = useOptionalSelection();
   const inspectorSelectedNodeId = optionalSelection?.selectedNodeId;
-  useRegisterGuiNode('ThemeLauncher.avatar', 'ThemeLauncherAvatar');
-  useRegisterGuiNode('ThemeLauncher.label', 'ThemeLauncherLabel');
-  useRegisterGuiNode('ThemeLauncher.preview.settingsButton', 'ThemeLauncherSettingsButton');
-  useRegisterGuiNode('ThemeLauncher.preview.showAll', 'ThemeLauncherShowAll');
+  // Its parts hang under the id it is given (`GUI.bars.left.footer.theme`),
+  // and are on the tree only while they are on the page: the avatar and label
+  // unless the full catalog is open, the label unless the bar is a rail, the
+  // two preview buttons while the preview is open.
+  const base = useGuiNodeId('ThemeLauncher');
+  const previewOpen = hoverOpen && !expanded;
+  useRegisterGuiNode(!expanded && `${base}.avatar`, 'avatar');
+  useRegisterGuiNode(!expanded && !isRailView && `${base}.label`, 'label');
+  useRegisterGuiNode(previewOpen && `${base}.settings`, 'settings');
+  useRegisterGuiNode(previewOpen && `${base}.showall`, 'showall');
   useEffect(() => {
     if (inspectorSelectedNodeId) {
       setExpanded(false);
@@ -113,8 +120,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
               no label to click there. */}
           <Box
             ref={bubbleRef}
-            data-gui-node-id="ThemeLauncher.avatar"
-            data-gui-component="ThemeLauncherAvatar"
+            data-gui-node-id={`${base}.avatar`}
+            data-gui-component="avatar"
             role={isRailView ? 'button' : undefined}
             tabIndex={isRailView ? 0 : undefined}
             aria-label={isRailView ? 'Open theme options' : undefined}
@@ -171,8 +178,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
             <Box
               component="button"
               type="button"
-              data-gui-node-id="ThemeLauncher.label"
-              data-gui-component="ThemeLauncherLabel"
+              data-gui-node-id={`${base}.label`}
+              data-gui-component="label"
               aria-label="Open theme options"
               aria-expanded={false}
               onClick={openCatalog}
@@ -280,8 +287,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
               <ThemeModeToggle variant="minimal" iconSize="small" />
               <IconButton
                 size="small"
-                data-gui-node-id="ThemeLauncher.preview.settingsButton"
-                data-gui-component="ThemeLauncherSettingsButton"
+                data-gui-node-id={`${base}.settings`}
+                data-gui-component="settings"
                 aria-label="Open theme settings"
                 onClick={() => {
                   setHoverOpen(false);
@@ -294,8 +301,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
             <Box
               component="button"
               type="button"
-              data-gui-node-id="ThemeLauncher.preview.showAll"
-              data-gui-component="ThemeLauncherShowAll"
+              data-gui-node-id={`${base}.showall`}
+              data-gui-component="showall"
               onClick={() => {
                 setHoverOpen(false);
                 openCatalog();

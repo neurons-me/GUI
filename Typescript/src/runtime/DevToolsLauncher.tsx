@@ -19,6 +19,7 @@ import ClickAwayListener from '@mui/material/ClickAwayListener';
 import { LeftSidebarContext } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { useOptionalSelection, useRegisterGuiNode } from './selection';
 import { useLauncherPopover } from './launcherPopover';
+import { useGuiNodeId } from './guiNodeId';
 
 export interface DevToolsLauncherProps {
   sx?: any;
@@ -26,13 +27,18 @@ export interface DevToolsLauncherProps {
 
 const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
   const selection = useOptionalSelection();
-  useRegisterGuiNode('DevToolsLauncher.icon', 'DevToolsLauncherIcon');
-  useRegisterGuiNode('DevToolsLauncher.label', 'DevToolsLauncherLabel');
-  useRegisterGuiNode('DevToolsLauncher.menu.inspectorToggle', 'DevToolsLauncherToggle');
-  useRegisterGuiNode('DevToolsLauncher.menu.gridToggle', 'DevToolsLauncherToggle');
   const leftSidebarContext = React.useContext(LeftSidebarContext);
   const isRailView = leftSidebarContext?.view === 'rail';
   const [open, setOpen] = useLauncherPopover('devtools');
+  // Its parts hang under the id it is given (`GUI.bars.left.footer.devtools`)
+  // and are on the tree only while they are on the page: nothing without a
+  // selection provider, the label unless the bar is a rail, the two toggles
+  // while the menu is open.
+  const base = useGuiNodeId('DevToolsLauncher');
+  useRegisterGuiNode(!!selection && `${base}.icon`, 'icon');
+  useRegisterGuiNode(!!selection && !isRailView && `${base}.label`, 'label');
+  useRegisterGuiNode(!!selection && open && `${base}.inspector`, 'toggle');
+  useRegisterGuiNode(!!selection && open && `${base}.grid`, 'toggle');
   const bubbleRef = useRef<HTMLDivElement>(null);
 
   // Only one floating dev-tools surface may be open at a time — see the
@@ -83,8 +89,8 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
             label to click there. */}
         <Box
           ref={bubbleRef}
-          data-gui-node-id="DevToolsLauncher.icon"
-          data-gui-component="DevToolsLauncherIcon"
+          data-gui-node-id={`${base}.icon`}
+          data-gui-component="icon"
           role={isRailView ? 'button' : undefined}
           tabIndex={isRailView ? 0 : undefined}
           aria-label={isRailView ? 'Open dev tools' : undefined}
@@ -137,8 +143,8 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
           <Box
             component="button"
             type="button"
-            data-gui-node-id="DevToolsLauncher.label"
-            data-gui-component="DevToolsLauncherLabel"
+            data-gui-node-id={`${base}.label`}
+            data-gui-component="label"
             aria-label="Open dev tools"
             aria-expanded={open}
             onClick={openMenu}
@@ -190,8 +196,8 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
             <Box
               component="button"
               type="button"
-              data-gui-node-id="DevToolsLauncher.menu.inspectorToggle"
-              data-gui-component="DevToolsLauncherToggle"
+              data-gui-node-id={`${base}.inspector`}
+              data-gui-component="toggle"
               onClick={() => setInspectorEnabled(!inspectorEnabled)}
               sx={{
                 width: '100%',
@@ -223,8 +229,8 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
             <Box
               component="button"
               type="button"
-              data-gui-node-id="DevToolsLauncher.menu.gridToggle"
-              data-gui-component="DevToolsLauncherToggle"
+              data-gui-node-id={`${base}.grid`}
+              data-gui-component="toggle"
               onClick={() => setGridEnabled(!gridEnabled)}
               sx={{
                 width: '100%',

@@ -64,7 +64,9 @@ export function GuiParent({ id, children }: { id: string; children: React.ReactN
 }
 
 export function useRegisterGuiNode(
-  id: string,
+  // A falsy id registers nothing: a part that is only on the page while
+  // something is open registers `open && id`.
+  id: string | null | undefined | false,
   type: string,
   parentId?: string,
   provenance?: GuiNodeProvenance
@@ -75,7 +77,7 @@ export function useRegisterGuiNode(
   const registerNode = ctx?.registerNode;
   const unregisterNode = ctx?.unregisterNode;
   React.useEffect(() => {
-    if (!registerNode || !unregisterNode) return;
+    if (!registerNode || !unregisterNode || !id) return;
     registerNode({ id, type, spec: { type }, path: id, parentId, provenance });
     return () => unregisterNode(id);
   }, [registerNode, unregisterNode, id, type, parentId, provenance]);

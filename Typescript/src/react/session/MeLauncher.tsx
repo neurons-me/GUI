@@ -28,6 +28,8 @@ import { LeftSidebarContext } from '@/gui-internals/Contexts/LeftSidebarContext'
 import { useOptionalSessionSurface } from './SessionSurface';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 import { useLauncherPopover } from '@/runtime/launcherPopover';
+import { useRegisterGuiNode } from '@/runtime/selection';
+import { useGuiNodeId } from '@/runtime/guiNodeId';
 import CleakerQR from '@/gui/All.This/Cleaker/QR/CleakerQR';
 
 export interface MeLauncherProps {
@@ -117,6 +119,12 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
   const isRailView = leftSidebarContext?.view === 'rail';
   const [open, setOpen] = useLauncherPopover('me');
   const bubbleRef = useRef<HTMLDivElement>(null);
+  // Its parts hang under the id it is given (`GUI.bars.left.footer.me`) and are
+  // on the tree only while they are on the page: nothing without a session
+  // view, the label unless the bar is a rail. (The QR registers itself.)
+  const base = useGuiNodeId('MeLauncher');
+  useRegisterGuiNode(!!view && `${base}.icon`, 'icon');
+  useRegisterGuiNode(!!view && !isRailView && `${base}.label`, 'label');
 
   if (!view) return null;
   const { authenticated, label: handle, pending, error, onEnter: enter, onLogout: logout, credentialsForm } = view;
@@ -151,8 +159,8 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
       >
         <Box
           ref={bubbleRef}
-          data-gui-node-id="MeLauncher.icon"
-          data-gui-component="MeLauncherIcon"
+          data-gui-node-id={`${base}.icon`}
+          data-gui-component="icon"
           role={isRailView ? 'button' : undefined}
           tabIndex={isRailView ? 0 : undefined}
           aria-label={isRailView ? 'Open .me session' : undefined}
@@ -207,8 +215,8 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
           <Box
             component="button"
             type="button"
-            data-gui-node-id="MeLauncher.label"
-            data-gui-component="MeLauncherLabel"
+            data-gui-node-id={`${base}.label`}
+            data-gui-component="label"
             aria-label="Open .me session"
             aria-expanded={open}
             onClick={openMenu}
@@ -301,7 +309,7 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
                           username={credentialsForm.username.trim()}
                           endpoint={cleakerEndpoint}
                           variant="icon"
-                          data-gui-node-id="MeLauncher.qr"
+                          data-gui-node-id={`${base}.qr`}
                         />
                       </Box>
                     )}
