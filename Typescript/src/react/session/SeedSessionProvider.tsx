@@ -355,7 +355,11 @@ function normalizeCredentialResolution(
 // unhumanized fallback message ("OPEN CLAIM_NOT_FOUND") verbatim. A real
 // "Register" affordance stays a separate, explicit action — never inferred
 // from this error.
-async function openExistingNamespace(session: SeedSession, namespace: string): Promise<void> {
+async function openExistingNamespace(
+  session: SeedSession,
+  namespace: string,
+  opts: { hasLocalVault?: boolean } = {},
+): Promise<void> {
   try {
     await session.open(namespace);
   } catch (openError) {
@@ -365,6 +369,15 @@ async function openExistingNamespace(session: SeedSession, namespace: string): P
       code === 'CLAIM_VERIFICATION_FAILED' ||
       code === 'CLAIM_NOT_FOUND'
     ) {
+      // Nothing on THIS address holds the identity's key: browser storage is per address (cleaker.me and
+      // www.cleaker.me do not share it, whatever namespace they both point at). That is a fact about this
+      // browser, not about the server, so saying so reveals nothing about which usernames exist.
+      if (opts.hasLocalVault === false) {
+        throw new SeedSessionContextError(
+          'INVALID_CLAIM',
+          "This browser has no key for that identity on this address (browser storage is separate for each address, such as cleaker.me and www.cleaker.me). Sign in at the address where you created it, or use Recover Account here.",
+        );
+      }
       throw new SeedSessionContextError(
         'INVALID_CLAIM',
         "We couldn't open this identity. Check your credentials. If you created it in another browser or on another device, use Recover Account.",
@@ -594,7 +607,7 @@ export function SeedSessionProvider({
 
       try {
         if (shouldAutoOpen) {
-          await openExistingNamespace(nextSession, fullNamespace);
+          await openExistingNamespace(nextSession, fullNamespace, { hasLocalVault: hasLocalIdentityVault(fullNamespace) });
         }
         commitSnapshot(nextSession);
         return nextSession;

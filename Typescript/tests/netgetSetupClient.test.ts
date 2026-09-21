@@ -23,6 +23,25 @@ await withMainServerNamespace({ namespace: 'cleaker.me', mainServerName: 'netget
   assert.equal(url.searchParams.get('returnTo'), 'https://netget.site/');
 });
 
+// signHere: the claim is signed in THIS app, at THIS origin -- never at the origin the identity is named by.
+// (An origin has its own session and its own local vault; another origin arrives with nobody signed in.)
+for (const page of ['https://www.cleaker.me', 'https://jabellae.cleaker.me', 'https://cleaker.me']) {
+  const realFetch = globalThis.fetch;
+  (globalThis as any).window = { location: { protocol: 'https:', origin: page, pathname: '/netget' } };
+  let asked = 0;
+  globalThis.fetch = (async () => { asked += 1; return { json: async () => ({ namespace: 'cleaker.me' }) }; }) as any;
+  try {
+    const here = new URL(await createNetgetSetupClient(page, { returnPath: '/netget', signHere: true }).resolveCleakerClaimUrl({ gatewayId: 'g', challenge: 'c', state: 's', returnTo: `${page}/netget` }));
+    assert.equal(here.origin, page, `signs at ${page}`);
+    assert.equal(here.pathname, '/keychain/claim');
+    assert.equal(here.searchParams.get('returnTo'), `${page}/netget`);
+    assert.equal(asked, 0, 'does not even ask which origin the identity is named by');
+    // without signHere (a gateway-only screen) it still goes to the identity's origin
+    const away = new URL(await createNetgetSetupClient(page).resolveCleakerClaimUrl({ gatewayId: 'g', challenge: 'c', state: 's', returnTo: page }));
+    assert.equal(away.origin, 'https://cleaker.me');
+  } finally { globalThis.fetch = realFetch; delete (globalThis as any).window; }
+}
+
 // an older gateway that only reports mainServerName still works
 await withMainServerNamespace({ mainServerName: 'cleaker.example.com' }, async () => {
   assert.equal((await claimUrl()).origin, 'https://cleaker.example.com');

@@ -114,7 +114,22 @@ async function resolveCleakerOrigin(base: string): Promise<string> {
  * ALLOWED_CLAIM_RETURN_PATHS must list that path too, or the challenge is
  * refused regardless of what's sent here.
  */
-export function createNetgetSetupClient(endpoint: string, options?: { returnPath?: string }): NetgetSetupClient {
+export function createNetgetSetupClient(
+  endpoint: string,
+  options?: {
+    returnPath?: string;
+    /**
+     * Sign the claim in THIS app, at THIS origin. The identity's session and its local
+     * vault live in the browser at the origin the person is on (cleaker.me and
+     * www.cleaker.me do not share them, whatever namespace they both point at), so a
+     * claim that jumps to another origin to be signed arrives with nobody signed in.
+     * True when the page embedding GatewaySetup is itself the Cleaker app (its own
+     * /keychain/claim route signs); false for a screen that is only the gateway's
+     * (netget.site), which sends the person to the Cleaker origin.
+     */
+    signHere?: boolean;
+  },
+): NetgetSetupClient {
   const base = String(endpoint || '').replace(/\/+$/, '');
 
   return {
@@ -156,7 +171,9 @@ export function createNetgetSetupClient(endpoint: string, options?: { returnPath
     },
 
     async resolveCleakerClaimUrl({ gatewayId, challenge, state, returnTo }) {
-      const cleakerOrigin = await resolveCleakerOrigin(base);
+      const cleakerOrigin = options?.signHere && typeof window !== 'undefined'
+        ? window.location.origin
+        : await resolveCleakerOrigin(base);
       const url = new URL('/keychain/claim', cleakerOrigin);
       url.searchParams.set('gatewayId', gatewayId);
       url.searchParams.set('challenge', challenge);

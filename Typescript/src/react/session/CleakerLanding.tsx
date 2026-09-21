@@ -36,7 +36,7 @@ import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
-import { useVerifiedCleakerRoot, type CleakerRootSeed, type CleakerRootStatus } from './verifiedCleakerRoot';
+import { useVerifiedCleakerRoot, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useMeLauncherView } from './MeLauncher';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -1372,6 +1372,7 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
 const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.netget.claim', 'data-gui-component': nodeComponent = 'Claim' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const gatewayId = searchParams.get('gatewayId') || '';
   const challenge = searchParams.get('challenge') || '';
   const state = searchParams.get('state') || '';
@@ -1500,7 +1501,13 @@ const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id
       target.searchParams.set('signature', signature);
       target.searchParams.set('timestamp', String(timestamp));
       target.searchParams.set('state', state);
-      window.location.href = target.toString();
+      if (target.origin === window.location.origin) {
+        // The claim was started, and is signed, at THIS origin: go back inside the app. A full
+        // page load here drops the in-memory session, and the person lands signed out.
+        navigate(`${target.pathname}${target.search}${target.hash}`);
+      } else {
+        window.location.href = target.toString();
+      }
     } catch (err) {
       setNotice(err instanceof Error ? err.message : 'Signing failed.');
       setSigning(false);
@@ -1978,7 +1985,13 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
 // gateway. This pass only reads and displays.
 const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget, 'data-gui-node-id': nodeId = 'GUI.content.netget', 'data-gui-component': nodeComponent = 'Netget' }) => {
   const setupClient = useMemo(
-    () => (netget.available ? createNetgetSetupClient(netget.endpoint, { returnPath: '/netget' }) : null),
+    () => (netget.available
+      ? createNetgetSetupClient(netget.endpoint, {
+          returnPath: '/netget',
+          // the gateway answers at this very origin: the claim is signed here, in this session
+          signHere: typeof window !== 'undefined' && netget.endpoint === window.location.origin,
+        })
+      : null),
     [netget.endpoint, netget.available],
   );
   // GatewaySetup is mounted embedded, in THIS SAME react-router tree --
@@ -2071,6 +2084,23 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
+
+  // The gateway is reached at the address this page was loaded from when that address answers it
+  // (every host of a namespace -- its root, www, a handle -- is served by the same monad). Browser
+  // state is per origin: a session, a local vault, and a same-origin request all belong to the
+  // address the person is on, so the claim starts, is signed and returns THERE. Only when this
+  // origin does not answer the gateway contract does the verified root's origin stand in.
+  const pageOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const [ownGateway, setOwnGateway] = React.useState<{ available: boolean; gatewayId: string | null } | null>(null);
+  React.useEffect(() => {
+    if (!pageOrigin) return undefined;
+    let alive = true;
+    probeNetgetGateway(pageOrigin).then((check) => { if (alive) setOwnGateway(check); });
+    return () => { alive = false; };
+  }, [pageOrigin]);
+  const netgetForView = ownGateway?.available
+    ? { endpoint: pageOrigin, available: true, gatewayId: ownGateway.gatewayId }
+    : { endpoint: verifiedRoot.cleakerEndpoint, available: verifiedRoot.netget.available, gatewayId: verifiedRoot.netget.gatewayId };
   // Real provenance for the tree's root: which monad actually answered for
   // this namespace, straight from its own /__surface payload. `selfSignature`
   // is only "the claim is internally consistent" (see checkMonadSurfaceClaim)
@@ -2135,11 +2165,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,
-                  netget: {
-                    endpoint: verifiedRoot.cleakerEndpoint,
-                    available: verifiedRoot.netget.available,
-                    gatewayId: verifiedRoot.netget.gatewayId,
-                  },
+                  netget: netgetForView,
                 }
               : props,
       });
