@@ -69,4 +69,43 @@ await withMainServerNamespace({ namespace: 'http://127.0.0.1:5174/' }, async () 
   globalThis.fetch = realFetch; delete (globalThis as any).window;
 }
 
+// ── where a passphrase may be typed: an exact origin, never a repaired lookalike ─────────────────────
+const { trustedCleakerOrigin, isOwnGatewayOrigin } = await import('../src/gui/All.This/netget/Setup/trustedOrigin');
+
+for (const [raw, origin] of [
+  ['cleaker.me', 'https://cleaker.me'],
+  ['https://cleaker.me', 'https://cleaker.me'],
+  ['https://cleaker.me/', 'https://cleaker.me'],
+  ['https://cleaker.me:8443', 'https://cleaker.me:8443'],
+  ['http://127.0.0.1:5174', 'http://127.0.0.1:5174'],
+  ['http://localhost:18461', 'http://localhost:18461'],
+  ['http://acme.localhost:3000', 'http://acme.localhost:3000'],
+] as const) assert.equal(trustedCleakerOrigin(raw), origin, raw);
+
+for (const raw of [
+  '', '   ', 'http://cleaker.me', 'http://evil.example', 'ftp://cleaker.me',
+  'https://cleaker.me@evil.example', 'https://user:pw@cleaker.me',
+  'https://evil.example/@cleaker.me', 'https://evil.example\\@cleaker.me',
+  'https://cleaker.me/keychain', 'https://cleaker.me?x=1', 'https://cleaker.me#x',
+  'javascript:alert(1)', 'https://', 'https://exa mple.com',
+]) assert.equal(trustedCleakerOrigin(raw), null, `refused: ${raw}`);
+
+// a configured value that is not an exact origin is skipped, and the next configured candidate is used
+await withMainServerNamespace({ namespace: 'https://evil.example/steal', mainServerName: 'netget.site' }, async () => {
+  assert.equal((await claimUrl()).origin, 'https://netget.site');
+});
+await withMainServerNamespace({ namespace: 'http://cleaker.me', mainServerName: 'https://x.example@evil.example' }, async () => {
+  assert.equal((await claimUrl()).origin, 'https://local.cleaker', 'nothing acceptable: the local fallback, not a guess');
+});
+
+// the setup code goes to the gateway at the page's own origin only
+assert.equal(isOwnGatewayOrigin('https://cleaker.me', 'https://cleaker.me'), true);
+assert.equal(isOwnGatewayOrigin('https://cleaker.me/', 'https://cleaker.me'), true);
+assert.equal(isOwnGatewayOrigin('https://jabellae.cleaker.me', 'https://jabellae.cleaker.me'), true);
+assert.equal(isOwnGatewayOrigin('https://cleaker.me', 'https://www.cleaker.me'), false, 'www is another origin');
+assert.equal(isOwnGatewayOrigin('https://other.example', 'https://cleaker.me'), false, 'a name-derived endpoint is not the page');
+assert.equal(isOwnGatewayOrigin('http://cleaker.me', 'https://cleaker.me'), false);
+assert.equal(isOwnGatewayOrigin('', 'https://cleaker.me'), false);
+assert.equal(isOwnGatewayOrigin('https://cleaker.me', ''), false);
+
 console.log('netgetSetupClient.test.ts: all assertions passed');

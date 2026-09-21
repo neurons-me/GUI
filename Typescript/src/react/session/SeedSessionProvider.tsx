@@ -21,7 +21,7 @@ import {
   type MonadOpenResult,
   type MonadWriteResult,
 } from '@/core/session/monadClient';
-import { getActiveNamespaceRoot, fetchGatewayHostname, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
+import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
 import { hasLocalIdentityVault, loadLocalIdentityVault } from '@/core/identity/localIdentityVault';
 
@@ -557,7 +557,8 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
-      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
+      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       // Day-to-day sign-in for a phrase-registered identity: if this
       // browser holds a local vault for this exact namespace (written at
@@ -593,7 +594,8 @@ export function SeedSessionProvider({
         input.transportOrigin || defaultTransportOrigin,
       );
       const nextSession = createCleakerSession({
-        username,
+        // the handle, whether the person typed it short or as a complete namespace
+        username: splitTypedNamespace(username, rootNamespace).handle,
         password,
         namespace: rootNamespace,
         transportOrigin: cleakerTransportOrigin,
@@ -654,7 +656,8 @@ export function SeedSessionProvider({
         input.transportOrigin || defaultTransportOrigin,
       );
       const nextSession = createCleakerSession({
-        username,
+        // the handle, whether the person typed it short or as a complete namespace
+        username: splitTypedNamespace(username, rootNamespace).handle,
         password,
         namespace: rootNamespace,
         transportOrigin: cleakerTransportOrigin,
@@ -664,7 +667,8 @@ export function SeedSessionProvider({
         createRuntime,
         live,
       });
-      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
+      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       try {
         // Deliberate register action — always claims, never tries open()
@@ -728,7 +732,8 @@ export function SeedSessionProvider({
         input.transportOrigin || defaultTransportOrigin,
       );
       const nextSession = createCleakerSession({
-        username,
+        // the handle, whether the person typed it short or as a complete namespace
+        username: splitTypedNamespace(username, rootNamespace).handle,
         namespace: rootNamespace,
         transportOrigin: cleakerTransportOrigin,
         fetchImpl,
@@ -737,7 +742,8 @@ export function SeedSessionProvider({
         createRuntime,
         live,
       });
-      const fullNamespace = buildGuessedFullNamespace(username, rootNamespace);
+      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       try {
         // open(), deliberately never claim(): recovery reconnects to an

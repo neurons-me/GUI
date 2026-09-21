@@ -16,6 +16,7 @@
 // router dependency, so that integration point moves to whatever page
 // mounts it, via the `initialSearch` prop, not into this file.
 import * as React from 'react';
+import { trustedCleakerOrigin } from '../Setup/trustedOrigin';
 import { Box, Typography } from '@/gui/Atoms';
 
 export type LogType = 'access' | 'error' | 'server';
@@ -207,8 +208,8 @@ async function resolveCleakerOrigin(base: string): Promise<string> {
     const body = await res.json().catch(() => null);
     const mainServerName = typeof body?.mainServerName === 'string' ? body.mainServerName.trim() : '';
     if (!mainServerName || isLocalMeshValue(mainServerName)) return 'http://local.cleaker';
-    if (/^https?:\/\//i.test(mainServerName)) return mainServerName.replace(/\/+$/, '');
-    return `https://${mainServerName}`;
+    // Where a passphrase gets typed: an exact origin only (see Setup/trustedOrigin.ts).
+    return trustedCleakerOrigin(mainServerName) ?? 'http://local.cleaker';
   } catch {
     return 'http://local.cleaker';
   }

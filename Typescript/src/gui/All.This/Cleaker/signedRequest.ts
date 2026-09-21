@@ -96,7 +96,29 @@ export function getActiveNamespaceRoot(): string | null {
 // subsequent visit, alias or not) closes that gap without this browser
 // ever needing to know how the server's canonicalization works.
 export function buildGuessedFullNamespace(username: string, rootNamespace: string): string {
-  return `${String(username || '').trim().toLowerCase()}.${String(rootNamespace || '').trim()}`;
+  return splitTypedNamespace(username, rootNamespace).fullNamespace;
+}
+
+/**
+ * What the person typed, split into the handle and the full namespace it names.
+ *
+ * A short name (`jabellae`) is completed with the monad's own namespace, once (`jabellae.cleaker.me`).
+ * A name that is already complete under that namespace (`jabellae.cleaker.me`) is respected as it is:
+ * the namespace is never appended to it again. "Complete" means it ends with `.<namespace>`, which
+ * is the only case a client can recognise without asking a server; any other dotted name (`a.b`) is
+ * still a short name, since a handle may itself contain dots.
+ *
+ * This only resolves the typed text. Which namespace is *selected* and kept while navigating is a
+ * separate matter, and is not decided here.
+ */
+export function splitTypedNamespace(typed: string, rootNamespace: string): { handle: string; fullNamespace: string } {
+  const text = String(typed || '').trim();
+  const root = String(rootNamespace || '').trim();
+  const suffix = root ? `.${root.toLowerCase()}` : '';
+  if (suffix && text.toLowerCase().endsWith(suffix) && text.length > suffix.length) {
+    return { handle: text.slice(0, text.length - suffix.length), fullNamespace: text.toLowerCase() };
+  }
+  return { handle: text, fullNamespace: `${text.toLowerCase()}.${root}` };
 }
 
 // Same formula this.me's ME_RESEED uses internally (me/Typescript/src/me.ts,

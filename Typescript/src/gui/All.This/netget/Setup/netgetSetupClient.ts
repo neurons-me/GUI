@@ -14,6 +14,7 @@
 // unlock passphrase.
 import type { SetupCodeResult, ActionResult } from './GatewaySetup';
 import type { ClaimReturnProof } from './setupState';
+import { trustedCleakerOrigin } from './trustedOrigin';
 
 export interface NetgetSetupClient {
   onSubmitSetupCode: (code: string) => Promise<SetupCodeResult>;
@@ -88,14 +89,13 @@ async function resolveCleakerOrigin(base: string): Promise<string> {
   for (const raw of candidates) {
     const value = typeof raw === 'string' ? raw.trim() : '';
     if (!value || isLocalMeshValue(value)) continue;
-    // A real configured value is always a bare hostname ("cleaker.example.com")
-    // and always gets https. The one exception is a value that already
-    // spells out a scheme ("http://127.0.0.1:5174") -- never produced by a
-    // real deployment, but the one way to point this at a genuinely separate
-    // localhost origin for disposable, port-based testing, so it's passed
-    // through as-is rather than double-prefixed.
-    if (/^https?:\/\//i.test(value)) return value.replace(/\/+$/, '');
-    return `https://${value}`;
+    // A real configured value is a bare hostname ("cleaker.example.com") and gets https; a value that
+    // spells out a scheme ("http://127.0.0.1:5174") is the one way to point this at a separate
+    // loopback origin for disposable testing. Either way this is where a passphrase gets typed, so
+    // only an exact origin is accepted (see trustedOrigin.ts): a value with credentials, a path, or
+    // plain http off loopback is skipped, never repaired into something plausible.
+    const origin = trustedCleakerOrigin(value);
+    if (origin) return origin;
   }
   return localCleakerOrigin();
 }

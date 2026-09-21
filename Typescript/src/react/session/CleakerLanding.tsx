@@ -47,6 +47,7 @@ import RecoverAccount from './RecoverAccount';
 import MainServerView from '@/gui/All.This/netget/MainServer/MainServerView';
 import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
 import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
+import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 
@@ -1984,15 +1985,21 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
 // against disposable infrastructure rather than this installation's real
 // gateway. This pass only reads and displays.
 const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget, 'data-gui-node-id': nodeId = 'GUI.content.netget', 'data-gui-component': nodeComponent = 'Netget' }) => {
+  // The setup code and the claim go to the gateway at THIS page's own origin, and to nowhere else. An
+  // endpoint that came from a name (a namespace Beatle resolved, a verified root) is good enough to
+  // READ a status from, but the setup code is what makes a claim as trustworthy as one made at the
+  // machine's terminal: it is not sent to a destination just because its name looks right.
+  const ownOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const canClaimHere = isOwnGatewayOrigin(netget.endpoint, ownOrigin);
   const setupClient = useMemo(
-    () => (netget.available
+    () => (netget.available && canClaimHere
       ? createNetgetSetupClient(netget.endpoint, {
           returnPath: '/netget',
           // the gateway answers at this very origin: the claim is signed here, in this session
-          signHere: typeof window !== 'undefined' && netget.endpoint === window.location.origin,
+          signHere: true,
         })
       : null),
-    [netget.endpoint, netget.available],
+    [netget.endpoint, netget.available, canClaimHere],
   );
   // GatewaySetup is mounted embedded, in THIS SAME react-router tree --
   // passed down so its own redirect to the Cleaker-origin sign view can
@@ -2017,6 +2024,13 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
   return (
     <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
       <MainServerView data-gui-node-id={`${nodeId}.status`} endpoint={netget.endpoint} namespaceRootUrl={netget.endpoint} />
+
+      {!canClaimHere && (
+        <Typography variant="body2" data-gui-node-id={`${nodeId}.setup`} sx={{ color: 'text.secondary', maxWidth: 560 }}>
+          Claiming is not available through this address: it does not serve this gateway itself, so no setup
+          code is sent from here. Open the gateway at its own address to claim it.
+        </Typography>
+      )}
 
       {setupClient && (
         <GatewaySetup
