@@ -58,7 +58,7 @@ export default function Spaces() {
         <Card>
           <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Esta es la superficie de autoría — crear/editar espacios requiere sesión.
+              This is the authoring surface — creating or editing spaces requires a session.
             </Typography>
             {error && (
               <Typography variant="body2" sx={{ color: 'error.main' }}>
@@ -66,7 +66,7 @@ export default function Spaces() {
               </Typography>
             )}
             <Button variant="contained" onClick={enter} disabled={pending}>
-              {pending ? 'Entrando…' : 'Entrar con .me'}
+              {pending ? 'Signing in…' : 'Sign in with .me'}
             </Button>
           </CardContent>
         </Card>
@@ -90,17 +90,17 @@ export default function Spaces() {
   return (
     <Box sx={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 640 }}>
       <Typography variant="h5" sx={{ fontWeight: 700 }}>
-        Espacios
+        Spaces
       </Typography>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        Cada espacio es solo un path bajo <code>apps.__APP_ID__</code> con miembros
-        (<code>[]</code>). Crear uno no requiere código nuevo.
+        Each space is just a path under <code>apps.__APP_ID__</code> with members
+        (<code>[]</code>). Creating one needs no new code.
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {spaces.length === 0 && (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Todavía no hay espacios.
+            There are no spaces yet.
           </Typography>
         )}
         {spaces.map((space: SpaceEntry) => (
@@ -122,12 +122,12 @@ export default function Spaces() {
 
       <Box sx={{ display: 'flex', gap: 1 }}>
         <TextField
-          placeholder="Nombre del espacio (p. ej. tractos)"
+          placeholder="Space name (e.g. tractors)"
           value={newSpaceName}
           onChange={(e: any) => setNewSpaceName(e.target.value)}
         />
         <Button variant="contained" onClick={createSpace}>
-          + Nuevo espacio
+          + New space
         </Button>
       </Box>
     </Box>
@@ -174,7 +174,7 @@ function SpaceDetail({ space, onBack }: { space: SpaceEntry; onBack: () => void 
         </Typography>
       </Box>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-        {space.path} · {members.length} miembro{members.length === 1 ? '' : 's'}
+        {space.path} · {members.length} member{members.length === 1 ? '' : 's'}
       </Typography>
 
       {columns.length > 0 && (
@@ -207,17 +207,17 @@ function SpaceDetail({ space, onBack }: { space: SpaceEntry; onBack: () => void 
       <Card>
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            + Nuevo miembro
+            + New member
           </Typography>
           {fields.map((field, i) => (
             <Box key={i} sx={{ display: 'flex', gap: 1 }}>
               <TextField
-                placeholder="campo"
+                placeholder="field"
                 value={field.key}
                 onChange={(e: any) => updateField(i, { key: e.target.value })}
               />
               <TextField
-                placeholder="valor"
+                placeholder="value"
                 value={field.value}
                 onChange={(e: any) => updateField(i, { value: e.target.value })}
               />
@@ -225,10 +225,10 @@ function SpaceDetail({ space, onBack }: { space: SpaceEntry; onBack: () => void 
           ))}
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button variant="outlined" onClick={addFieldRow}>
-              + Campo
+              + Field
             </Button>
             <Button variant="contained" onClick={saveMember}>
-              Guardar miembro
+              Save member
             </Button>
           </Box>
         </CardContent>

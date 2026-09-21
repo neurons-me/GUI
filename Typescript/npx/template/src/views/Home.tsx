@@ -6,7 +6,7 @@ const ROUTE_PATH = 'apps.__APP_ID__.route';
 
 /**
  * The public surface — renders identically with or without a session.
- * "Entrar con .me" is a visible action here, not something that happens
+ * "Sign in with .me" is a visible action here, not something that happens
  * for you: SessionSurface never auto-enters, so a first-time visitor always
  * sees this choice before anything is claimed on their behalf.
  */
@@ -47,7 +47,7 @@ export default function Home() {
                 </Typography>
               )}
               <Button variant="contained" onClick={enter} disabled={pending}>
-                {pending ? <Progress kind="circular" size={16} /> : 'Entrar con .me'}
+                {pending ? <Progress kind="circular" size={16} /> : 'Sign in with .me'}
               </Button>
             </>
           )}
@@ -55,7 +55,7 @@ export default function Home() {
       </Card>
 
       <Button variant="outlined" sx={{ alignSelf: 'flex-start' }} onClick={() => setRoute('admin')}>
-        Abrir Admin
+        Open Admin
       </Button>
     </Box>
   );

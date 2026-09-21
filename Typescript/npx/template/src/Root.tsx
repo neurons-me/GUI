@@ -9,7 +9,7 @@ export interface RootProps {
   runtime: RuntimeAdapter;
 }
 
-// "Inicio" is the published surface (public, read-first). "Admin" is the
+// "Home" is the published surface (public, read-first). "Admin" is the
 // authoring surface (the Spaces explorer) — visible to everyone in the nav
 // for discoverability, but its own view gates its content on having a
 // session (see Spaces.tsx). Kept as one flat nav, not a real /admin URL
@@ -18,7 +18,7 @@ export interface RootProps {
 // "/admin/:space" on — Spaces.tsx's own selected-space state already gives
 // that same effect without inventing one.
 const NAV_ITEMS = [
-  { route: 'home', label: 'Inicio', icon: 'home' },
+  { route: 'home', label: 'Home', icon: 'home' },
   { route: 'admin', label: 'Admin', icon: 'admin_panel_settings' },
 ];
 
