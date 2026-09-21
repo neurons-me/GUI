@@ -79,7 +79,7 @@ export function useMeLauncherView(): MeLauncherView | null {
     const { authenticated, handle, pending, error, enter, logout } = surface;
     return {
       authenticated,
-      label: authenticated ? (handle || '') : 'Entrar con .me',
+      label: authenticated ? (handle || '') : 'Sign in with .me',
       pending,
       error,
       onEnter: enter,
@@ -96,7 +96,7 @@ export function useMeLauncherView(): MeLauncherView | null {
       // The username itself doesn't survive SeedSessionProvider's remount
       // on first-login (see SessionSurface.tsx's comment on the same
       // issue) — identityHash comes from context state, so it does.
-      label: authenticated ? (identityHash ? identityHash.slice(0, 10) : 'Conectado') : 'Entrar con .me',
+      label: authenticated ? (identityHash ? identityHash.slice(0, 10) : 'Connected') : 'Sign in with .me',
       pending,
       error,
       onEnter: async () => {
@@ -235,7 +235,7 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
               variant="body2"
               sx={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >
-              {authenticated ? handle : 'Entrar con .me'}
+              {authenticated ? handle : 'Sign in with .me'}
             </Typography>
           </Box>
         )}
@@ -292,14 +292,14 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Icon name="logout" fontSize="1rem" />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Salir</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
                   </Box>
                 </Box>
               </>
             ) : (
               <>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                  Sin sesión — datos públicos visibles, escritura deshabilitada.
+                  Signed out — public data is visible, writing is disabled.
                 </Typography>
                 {credentialsForm && (
                   <>
@@ -363,7 +363,7 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
                   }}
                 >
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {pending ? 'Entrando…' : 'Entrar con .me'}
+                    {pending ? 'Entrando…' : 'Sign in with .me'}
                   </Typography>
                 </Box>
               </>

@@ -74,7 +74,7 @@ export interface SessionSurfaceProps {
  * SessionSurface never withholds `children` — the app's shell renders
  * whether or not anyone has entered. What it provides is a context
  * (`useSessionSurface()`) exposing `authenticated`/`session` state and an
- * `enter()` action, so a visible "Entrar con .me" affordance can live
+ * `enter()` action, so a visible "Sign in with .me" affordance can live
  * anywhere in the public UI instead of blocking it. Session, once active,
  * expands what's visible/writable — it never replaces the surface.
  *

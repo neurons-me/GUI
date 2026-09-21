@@ -395,7 +395,7 @@ const LeftSidebar = ({
           }}
         >
           <IconButton
-            aria-label="Abrir navegación"
+            aria-label="Open navigation"
             data-gui-node-id={`${adminNodeId}.toggle.mobile`}
             onClick={() => setMobileOpen(true)}
             sx={{

@@ -367,7 +367,7 @@ async function openExistingNamespace(session: SeedSession, namespace: string): P
     ) {
       throw new SeedSessionContextError(
         'INVALID_CLAIM',
-        'No pudimos abrir esta identidad. Revisa tus credenciales. Si la creaste en otro navegador o dispositivo, usa Recuperar cuenta.',
+        "We couldn't open this identity. Check your credentials. If you created it in another browser or on another device, use Recover Account.",
       );
     }
     throw openError;

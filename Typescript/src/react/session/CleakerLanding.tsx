@@ -192,13 +192,13 @@ const QR_DIAMETER_EXPANDED = 214;
 // rather than pulling in Beatle's English wording.
 const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
   idle: '',
-  parsing: 'Analizando…',
-  connecting: 'Conectando…',
-  resolving: 'Resolviendo…',
-  connected: 'Conectado',
-  streaming: 'Transmitiendo',
-  error: 'No se pudo conectar',
-  invalid: 'Dominio inválido',
+  parsing: 'Parsing…',
+  connecting: 'Connecting…',
+  resolving: 'Resolving…',
+  connected: 'Connected',
+  streaming: 'Streaming',
+  error: 'Could not connect',
+  invalid: 'Invalid domain',
   disconnected: '',
 };
 
@@ -826,7 +826,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
           <Box sx={{ display: 'flex', gap: 1 }}>
             {/* Keychain moved to the shared sidebar (CleakerLayoutShell,
                 shown only once authenticated -- same condition as before,
-                just relocated) instead of living inline here. Salir stays
+                just relocated) instead of living inline here. Sign out stays
                 -- it's an account action tied to this identity display,
                 not a navigation control. */}
             <Box
@@ -850,7 +850,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
               }}
             >
               <Icon name="logout" fontSize="1rem" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Salir</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
             </Box>
           </Box>
         </Box>
@@ -913,7 +913,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             {!secureContextOk && (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
                 <Typography variant="body2" sx={{ color: 'warning.main', textAlign: 'center', fontSize: '0.8rem' }}>
-                  Para iniciar sesión necesitas una conexión segura.
+                  Signing in requires a secure connection.
                 </Typography>
                 <Button
                   variant="outlined"
@@ -1995,7 +1995,7 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
       <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, maxWidth: 560 }}>
         <Typography variant="h5" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          No hay un gateway Netget disponible en este contexto todavía.
+          No Netget gateway is available in this context yet.
         </Typography>
       </Box>
     );

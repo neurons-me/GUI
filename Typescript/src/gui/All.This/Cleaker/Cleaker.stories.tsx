@@ -187,12 +187,12 @@ RegisterWithRecoveryPhrase.play = async ({ canvasElement }: { canvasElement: HTM
 
   // Real signed-in view (not RegisterMe's own static fallback) — proves
   // CleakerLanding's registrationComplete handoff also survived intact.
-  await waitFor(() => expect(canvas.getByRole('button', { name: /Salir/i })).toBeInTheDocument(), { timeout: 8000 });
+  await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
   await expect(canvas.getByText(`${username}.local.cleaker`)).toBeInTheDocument();
 
   // Logout must cleanly return to the sign-in surface, not re-show
   // Register — see CleakerLanding's wasAuthenticatedRef reset effect.
-  await user.click(canvas.getByRole('button', { name: /Salir/i }));
+  await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
     () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
     { timeout: 8000 },
