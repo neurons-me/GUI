@@ -102,23 +102,41 @@ export function buildGuessedFullNamespace(username: string, rootNamespace: strin
 /**
  * What the person typed, split into the handle and the full namespace it names.
  *
- * A short name (`jabellae`) is completed with the monad's own namespace, once (`jabellae.cleaker.me`).
- * A name that is already complete under that namespace (`jabellae.cleaker.me`) is respected as it is:
- * the namespace is never appended to it again. "Complete" means it ends with `.<namespace>`, which
- * is the only case a client can recognise without asking a server; any other dotted name (`a.b`) is
- * still a short name, since a handle may itself contain dots.
+ * - `short`: a handle (`jabellae`). Completed with the monad's own namespace, once (`jabellae.cleaker.me`).
+ * - `complete`: already under that namespace (`jabellae.cleaker.me`). Respected as it is; the namespace
+ *   is never appended to it again.
+ * - `foreign`: a dotted name that is not under that namespace (`jabellae.other.me`), or the namespace
+ *   itself. A handle is one DNS label (me-uri's HANDLE_RE), so a dotted name is a full name of some
+ *   namespace, and this client cannot open a namespace other than the one it is on until a namespace
+ *   can be selected. It is never reinterpreted as a short name: the current namespace is NOT appended
+ *   and callers must refuse it (`foreignNamespaceMessage`).
  *
+ * A value with `@` (an email used as a username) is left as before, as a short name.
  * This only resolves the typed text. Which namespace is *selected* and kept while navigating is a
  * separate matter, and is not decided here.
  */
-export function splitTypedNamespace(typed: string, rootNamespace: string): { handle: string; fullNamespace: string } {
+export type TypedNamespaceKind = 'short' | 'complete' | 'foreign';
+
+export function splitTypedNamespace(
+  typed: string,
+  rootNamespace: string,
+): { handle: string; fullNamespace: string; kind: TypedNamespaceKind } {
   const text = String(typed || '').trim();
   const root = String(rootNamespace || '').trim();
   const suffix = root ? `.${root.toLowerCase()}` : '';
   if (suffix && text.toLowerCase().endsWith(suffix) && text.length > suffix.length) {
-    return { handle: text.slice(0, text.length - suffix.length), fullNamespace: text.toLowerCase() };
+    return { handle: text.slice(0, text.length - suffix.length), fullNamespace: text.toLowerCase(), kind: 'complete' };
   }
-  return { handle: text, fullNamespace: `${text.toLowerCase()}.${root}` };
+  if (root && text.includes('.') && !text.includes('@')) {
+    return { handle: text, fullNamespace: text.toLowerCase(), kind: 'foreign' };
+  }
+  return { handle: text, fullNamespace: `${text.toLowerCase()}.${root}`, kind: 'short' };
+}
+
+/** What to tell the person when the typed name is under another namespace. */
+export function foreignNamespaceMessage(typed: string, rootNamespace: string): string {
+  const root = String(rootNamespace || '').trim();
+  return `"${String(typed || '').trim()}" is under a different namespace. This address opens names under ${root}, and choosing another namespace is not available yet. Type your name, or a full name ending in .${root}.`;
 }
 
 // Same formula this.me's ME_RESEED uses internally (me/Typescript/src/me.ts,

@@ -939,7 +939,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
                   }}
                   data-gui-node-id={`${nodeId}.https`}
                 >
-                  Abrir HTTPS
+                  Open HTTPS
                 </Button>
               </Box>
             )}

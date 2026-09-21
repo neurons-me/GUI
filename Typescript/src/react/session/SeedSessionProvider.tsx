@@ -21,7 +21,7 @@ import {
   type MonadOpenResult,
   type MonadWriteResult,
 } from '@/core/session/monadClient';
-import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace } from '@/gui/All.This/Cleaker/signedRequest';
+import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
 import { hasLocalIdentityVault, loadLocalIdentityVault } from '@/core/identity/localIdentityVault';
 
@@ -557,7 +557,12 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
-      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      // A name under another namespace is refused up front, never read as a handle of this one.
+      if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
+        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+      }
+
+      // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       // Day-to-day sign-in for a phrase-registered identity: if this
@@ -647,6 +652,11 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
+      // A name under another namespace is refused up front, never read as a handle of this one.
+      if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
+        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+      }
+
       React.startTransition(() => {
         setStatus('pending');
         setError(null);
@@ -667,7 +677,7 @@ export function SeedSessionProvider({
         createRuntime,
         live,
       });
-      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       try {
@@ -713,6 +723,11 @@ export function SeedSessionProvider({
         return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
+      // A name under another namespace is refused up front, never read as a handle of this one.
+      if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
+        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+      }
+
       // Derived and validated BEFORE flipping to 'pending' — an invalid
       // phrase is a purely local, instant failure, same reasoning
       // RegisterMe.tsx's derivation-error guard uses.
@@ -742,7 +757,7 @@ export function SeedSessionProvider({
         createRuntime,
         live,
       });
-      // The typed name is a handle or an already-complete namespace; the root is never added twice.
+      // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
       try {
