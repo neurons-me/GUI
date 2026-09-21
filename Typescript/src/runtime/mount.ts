@@ -147,7 +147,8 @@ const LazyRuntimeAdminView = React.lazy(async () => {
   return { default: mod.RuntimeAdminView };
 });
 
-function normalizeMountDevtools(options: MountOptions): NormalizedMountDevtools {
+// Exported for tests only (not part of the package entry): what a given `devtools` option mounts and starts ON.
+export function normalizeMountDevtools(options: MountOptions): NormalizedMountDevtools {
   const legacyInspectorSet = typeof options.inspectorEnabled === 'boolean';
   const legacyAdminViewSet = typeof options.adminViewEnabled === 'boolean';
   const legacyToggleSet = typeof options.inspectorToggleVisible === 'boolean';
