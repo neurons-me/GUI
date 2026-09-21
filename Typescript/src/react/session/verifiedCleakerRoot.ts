@@ -1,7 +1,20 @@
 import * as React from 'react';
 import { probeMonadSurface } from '@/runtime/monads';
 
-export type CleakerRootSeed = { label: string; cleakerEndpoint: string };
+export type CleakerRootSeed = {
+  /** The namespace being read (`acme.test`): a name, never a destination. */
+  label: string;
+  /** Where its reads are sent: the transport that carries them, chosen separately from the name. */
+  cleakerEndpoint: string;
+  /**
+   * When set, the transport is only accepted if what it answers at /__surface names exactly this
+   * namespace. Set when the transport is this page's own origin at a door of the namespace (www.<ns>,
+   * <handle>.<ns>): the same monad serves every door, but the namespace a REQUEST resolves to follows the
+   * door it came through (www.<ns> is <ns>; <handle>.<ns> is the handle's own), so that has to be checked
+   * against the answer, not assumed from the name.
+   */
+  expectNamespace?: string;
+};
 export type CleakerRootStatus = 'checking' | 'confirmed' | 'error';
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
@@ -39,6 +52,40 @@ export type SignatureCheck = 'absent' | 'valid' | 'invalid';
  * payload -- never inferred client-side. */
 export type ProbedMonad = { id: string; name: string | null };
 
+/**
+ * Does what a transport answered ("this is the namespace your request resolved to") name the namespace
+ * that was asked for? Exact, case-insensitive. A transport that did not say is not confirmed.
+ */
+export function namespaceIsServed(answered: string | null | undefined, expected: string): boolean {
+  const a = String(answered ?? '').trim().toLowerCase().replace(/\.$/, '');
+  const e = String(expected ?? '').trim().toLowerCase().replace(/\.$/, '');
+  return !!a && !!e && a === e;
+}
+
+/**
+ * Which transport carries the reads for `label`. The name never becomes an address by itself: when this page
+ * is loaded from a door of the namespace -- the namespace's own host, `www.<ns>`, or `<handle>.<ns>` -- the
+ * transport is the page's own origin (same origin: no cross-origin hop, and the monad that served this
+ * page is the one that answers), and at a door other than the namespace's own host that choice is
+ * verified against the answer (`expectNamespace`). Anywhere else (a page that is not a door of the
+ * namespace) the address the caller supplied stays as it was.
+ */
+export function pickRootTransport(input: {
+  label: string;
+  resolvedEndpoint: string;
+  page: { origin: string; hostname: string } | null;
+}): CleakerRootSeed {
+  const label = String(input.label || '').trim();
+  const ns = label.toLowerCase();
+  const page = input.page;
+  if (page && ns) {
+    const host = String(page.hostname || '').trim().toLowerCase();
+    if (host === ns) return { label, cleakerEndpoint: page.origin };
+    if (host.endsWith(`.${ns}`)) return { label, cleakerEndpoint: page.origin, expectNamespace: ns };
+  }
+  return { label, cleakerEndpoint: input.resolvedEndpoint };
+}
+
 export type CleakerRootCheck = {
   /** Required fields (a real monad id, a non-empty capability/resource
    * list) are present -- a real bar past "any JSON object," but nothing
@@ -46,6 +93,8 @@ export type CleakerRootCheck = {
   compatible: boolean;
   signature: SignatureCheck;
   monad?: ProbedMonad;
+  /** The namespace this transport says the request resolved to (payload.target.namespace.me), if it said. */
+  namespace?: string | null;
 };
 
 /**
@@ -83,6 +132,14 @@ export async function checkMonadSurfaceClaim(rawPayload: unknown): Promise<Cleak
   ];
   const compatible = Boolean(monadId) && capabilities.length > 0;
   if (!compatible) return { compatible: false, signature: 'absent' };
+  // A real /__surface names the namespace the request resolved to in `target.namespace.me` (the envelope's
+  // target); a top-level `namespace` is read too, for payloads that carry it there.
+  const answeredNamespace = String(
+    payload.target?.namespace?.me
+      ?? (typeof payload.namespace === 'string' ? payload.namespace : payload.namespace?.me)
+      ?? '',
+  ).trim();
+  const namespace = answeredNamespace || null;
   const monadName = String(payload.monad?.name || surfaceEntry?.monad?.name || '').trim() || null;
   const monad: ProbedMonad = { id: monadId, name: monadName };
 
@@ -90,10 +147,10 @@ export async function checkMonadSurfaceClaim(rawPayload: unknown): Promise<Cleak
   const signature = claim?.signature;
   const publicKeyPem = claim?.publicKey?.key;
   if (!signature?.value || !signature?.message || !publicKeyPem) {
-    return { compatible: true, signature: 'absent', monad };
+    return { compatible: true, signature: 'absent', monad, namespace };
   }
   if (signature.algorithm && signature.algorithm !== 'ed25519') {
-    return { compatible: true, signature: 'invalid', monad };
+    return { compatible: true, signature: 'invalid', monad, namespace };
   }
   try {
     const key = await crypto.subtle.importKey(
@@ -109,13 +166,13 @@ export async function checkMonadSurfaceClaim(rawPayload: unknown): Promise<Cleak
       base64UrlToArrayBuffer(signature.value),
       new TextEncoder().encode(String(signature.message)),
     );
-    return { compatible: true, signature: valid ? 'valid' : 'invalid', monad };
+    return { compatible: true, signature: valid ? 'valid' : 'invalid', monad, namespace };
   } catch {
-    return { compatible: true, signature: 'invalid', monad };
+    return { compatible: true, signature: 'invalid', monad, namespace };
   }
 }
 
-export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | null; signature: SignatureCheck; monad: ProbedMonad | null };
+export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | null; signature: SignatureCheck; monad: ProbedMonad | null; namespace?: string | null };
 
 /**
  * Tries the direct-to-Monad contract first (bare `${cleakerEndpoint}/__surface`
@@ -128,12 +185,17 @@ export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | n
  * that path outright (falls through to the other path, or to overall
  * failure) rather than degrading to "compatible, use it anyway."
  */
-export async function probeCleakerRoot(cleakerEndpoint: string): Promise<CleakerRootProbeResult> {
+export async function probeCleakerRoot(
+  cleakerEndpoint: string,
+  options: { expectNamespace?: string } = {},
+): Promise<CleakerRootProbeResult> {
+  // When a namespace is expected, a transport that answers for a different one is not this root's transport.
+  const answersFor = (check: CleakerRootCheck) => !options.expectNamespace || namespaceIsServed(check.namespace, options.expectNamespace);
   const direct = await probeMonadSurface({ endpoint: cleakerEndpoint, sources: ['manual'], timeoutMs: 4000 });
   if (direct.monad) {
     const check = await checkMonadSurfaceClaim(direct.endpoint.surface?.raw);
-    if (check.compatible && check.signature !== 'invalid') {
-      return { ok: true, via: 'direct', signature: check.signature, monad: check.monad ?? null };
+    if (check.compatible && check.signature !== 'invalid' && answersFor(check)) {
+      return { ok: true, via: 'direct', signature: check.signature, monad: check.monad ?? null, namespace: check.namespace ?? null };
     }
   }
 
@@ -144,8 +206,8 @@ export async function probeCleakerRoot(cleakerEndpoint: string): Promise<Cleaker
   });
   if (viaNetget.monad) {
     const check = await checkMonadSurfaceClaim(viaNetget.endpoint.surface?.raw);
-    if (check.compatible && check.signature !== 'invalid') {
-      return { ok: true, via: 'netget', signature: check.signature, monad: check.monad ?? null };
+    if (check.compatible && check.signature !== 'invalid' && answersFor(check)) {
+      return { ok: true, via: 'netget', signature: check.signature, monad: check.monad ?? null, namespace: check.namespace ?? null };
     }
   }
 
@@ -213,7 +275,7 @@ export async function verifyCleakerRootGeneration(
 ): Promise<GenerationCheckedResult> {
   const generation = ++guard.current;
   const [result, netgetCheck] = await Promise.all([
-    probeCleakerRoot(seed.cleakerEndpoint),
+    probeCleakerRoot(seed.cleakerEndpoint, { expectNamespace: seed.expectNamespace }),
     probeNetgetGateway(seed.cleakerEndpoint),
   ]);
   return { stale: guard.current !== generation, result, netget: netgetCheck };

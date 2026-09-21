@@ -36,7 +36,7 @@ import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
-import { useVerifiedCleakerRoot, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
+import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useMeLauncherView } from './MeLauncher';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -2080,19 +2080,19 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   // owns "let the user explore/switch what's on screen." See
   // verifiedCleakerRoot.ts for what "verified" actually checks).
   const rootSeed = useMemo<CleakerRootSeed>(() => {
-    // netget's App.jsx passes cleakerEndpoint="http://local.cleaker"
-    // literally, regardless of which scheme the browser actually loaded
-    // this page over (https, once netget's own redirect applies) --
-    // probing the mismatched http origin from an https-loaded page is
-    // mixed content, silently blocked, and indistinguishable from the
-    // destination actually being down. Same fix the old (now-removed)
-    // rootReachable check used: when the root being probed is the SAME
-    // host this page is already loaded from, trust window.location's own
-    // origin over the possibly-stale prop.
-    const endpoint = (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel)
-      ? window.location.origin
-      : resolvedEndpoint;
-    return { label: namespaceRootLabel, cleakerEndpoint: endpoint };
+    // The namespace (`namespaceRootLabel`) is a name; where its reads go is chosen separately. netget's
+    // App.jsx passes cleakerEndpoint="http://local.cleaker" literally, regardless of the scheme the
+    // browser loaded this page over -- probing a mismatched origin from an https-loaded page is mixed
+    // content, silently blocked, and indistinguishable from the destination being down. So when this
+    // page is loaded from a door of the namespace (its own host, www.<ns>, <handle>.<ns>), the reads use
+    // this page's own origin -- never a https://<ns> built from the name, which from another door is a
+    // different origin the gateway refuses -- and at a door other than the namespace's own host the choice
+    // is checked against what the transport answers (see pickRootTransport / expectNamespace).
+    return pickRootTransport({
+      label: namespaceRootLabel,
+      resolvedEndpoint,
+      page: typeof window !== 'undefined' ? { origin: window.location.origin, hostname: window.location.hostname } : null,
+    });
     // Intentionally NOT re-created when resolvedEndpoint/namespaceRootLabel
     // change across renders -- a one-time seed, not a live binding.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2140,7 +2140,12 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     };
   }, [verifiedRoot.status, verifiedRoot.monad, verifiedRoot.transportOrigin, verifiedRoot.signature, namespaceRootLabel]);
   useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, guiRootProvenance);
-  const { resolved } = useCleakerRootSidebar(rootSeed.label, verifiedRoot.transportOrigin, session);
+  // Reads for the sidebar wait for a transport that was CONFIRMED to answer for this namespace when the
+  // transport is this page's own origin at a door (expectNamespace): until then, or if it answers for a
+  // different namespace (a handle door answers for the handle), nothing is read -- not from the apex, and
+  // not from a transport that would return another namespace's tree. The built-in defaults render meanwhile.
+  const sidebarTransport = rootSeed.expectNamespace && verifiedRoot.status !== 'confirmed' ? '' : verifiedRoot.transportOrigin;
+  const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session);
 
   // A genuine Beatle "connected" resolution re-verifies that SAME
   // namespace here and only promotes it into the shared context on
