@@ -17,6 +17,7 @@ import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
+import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, type EntrypointsView } from './mainServerPresentation';
 
 export interface MainServerViewProps {
   /** This netget's own base URL (its own backend, not a monad — same
@@ -38,6 +39,8 @@ type Entrypoint = { host: string };
 
 type MainServerState = {
   gatewayHost: string;
+  // the gateway's stable identity: a different fact from the machine's name above
+  gatewayId: string;
   // The .me identity that claimed ownership of this surface -- a real
   // cleaker-style claim, not netget-specific: written to the monad ledger
   // at netget.<gatewayId>.meta.owner, proven the same way a human
@@ -85,10 +88,13 @@ type MainServerState = {
   localIP: string;
   publicIP: string;
   entrypoints: Entrypoint[];
+  // whether /entrypoints answered: an unanswered request is not an empty list
+  entrypointsView: EntrypointsView;
 };
 
 const EMPTY_STATE: MainServerState = {
   gatewayHost: '',
+  gatewayId: '',
   ownerIdentityHash: null,
   ownerUsername: null,
   bootstrapped: false,
@@ -102,6 +108,7 @@ const EMPTY_STATE: MainServerState = {
   localIP: '',
   publicIP: '',
   entrypoints: [],
+  entrypointsView: { kind: 'unavailable' },
 };
 
 async function fetchJson(base: string, path: string): Promise<any | null> {
@@ -154,7 +161,8 @@ function StatusDot({ on }: { on: boolean }) {
   );
 }
 
-function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows: string[] }) {
+// `emptyText` is what an empty list says; `unavailable` is a different fact (the request did not answer) and must not read as empty.
+function SurfaceList({ title, hint, rows, unavailable = false, emptyText = 'None yet.' }: { title: string; hint: string; rows: string[]; unavailable?: boolean; emptyText?: string }) {
   const base = useGuiNodeId('MainServerView');
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return (
@@ -174,9 +182,13 @@ function SurfaceList({ title, hint, rows }: { title: string; hint: string; rows:
       <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 1 }}>
         {hint}
       </Typography>
-      {rows.length === 0 ? (
+      {unavailable ? (
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          None yet.
+          Not available from this gateway.
+        </Typography>
+      ) : rows.length === 0 ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {emptyText}
         </Typography>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -210,7 +222,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
 
       setConnected(Boolean(identity || openresty || entrypointsRes));
       setState({
-        gatewayHost: identity ? String(identity.gatewayId || '').trim().toLowerCase() : '',
+        gatewayHost: hostnameOf(identity),
+        gatewayId: gatewayIdOf(identity),
         ownerIdentityHash: identity && identity.owner ? String(identity.owner) : null,
         ownerUsername: identity && identity.ownerUsername ? String(identity.ownerUsername) : null,
         bootstrapped: !!identity?.bootstrapped,
@@ -224,6 +237,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         localIP: ipInfo?.success ? String(ipInfo.localIP || '') : '',
         publicIP: ipInfo?.success ? String(ipInfo.publicIP || '') : '',
         entrypoints: Array.isArray(entrypointsRes?.entrypoints) ? entrypointsRes.entrypoints : [],
+        entrypointsView: describeEntrypoints(entrypointsRes),
       });
     }
 
@@ -282,6 +296,15 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           </Typography>
           <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
             {state.gatewayHost || '—'}
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
+            Gateway ID
+          </Typography>
+          <Typography variant="body2" sx={{ fontFamily: 'monospace' }} title={state.gatewayId || undefined}>
+            {state.gatewayId ? maskHash(state.gatewayId) : '—'}
           </Typography>
         </Box>
 
@@ -425,8 +448,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             Public IP
           </Typography>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: state.publicIP ? 'text.primary' : 'text.disabled' }}>
-            {state.publicIP || 'none — local-only'}
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: describePublicIP(state.publicIP).configured ? 'text.primary' : 'text.disabled' }}>
+            {describePublicIP(state.publicIP).text}
           </Typography>
         </Box>
       </Box>
@@ -472,7 +495,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       <SurfaceList
         title="Entrypoints"
         hint="Doors into this netget's own control plane."
-        rows={state.entrypoints.map((e) => e.host)}
+        rows={state.entrypointsView.kind === 'list' ? state.entrypointsView.rows : []}
+        unavailable={state.entrypointsView.kind === 'unavailable'}
       />
     </Box>
     </GuiNodeIdBase>
