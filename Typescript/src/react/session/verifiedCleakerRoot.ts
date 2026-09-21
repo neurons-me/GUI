@@ -191,7 +191,18 @@ export async function probeCleakerRoot(
 ): Promise<CleakerRootProbeResult> {
   // When a namespace is expected, a transport that answers for a different one is not this root's transport.
   const answersFor = (check: CleakerRootCheck) => !options.expectNamespace || namespaceIsServed(check.namespace, options.expectNamespace);
-  const direct = await probeMonadSurface({ endpoint: cleakerEndpoint, sources: ['manual'], timeoutMs: 4000 });
+  // ...and the question is asked in the request: /__surface?namespace=<ns> names the namespace. A monad that
+  // honors it answers for that namespace through any door; one that does not answers for the door's, and is
+  // not confirmed above.
+  const expected = options.expectNamespace;
+  const fetchImpl = expected
+    ? ((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url);
+        const named = url.replace(/(\/__surface)(\?.*)?$/, `$1?namespace=${encodeURIComponent(expected)}`);
+        return fetch(named, init);
+      }) as typeof fetch
+    : undefined;
+  const direct = await probeMonadSurface({ endpoint: cleakerEndpoint, sources: ['manual'], timeoutMs: 4000, fetchImpl });
   if (direct.monad) {
     const check = await checkMonadSurfaceClaim(direct.endpoint.surface?.raw);
     if (check.compatible && check.signature !== 'invalid' && answersFor(check)) {
@@ -203,6 +214,7 @@ export async function probeCleakerRoot(
     endpoint: `${cleakerEndpoint}/apps/netget`,
     sources: ['manual'],
     timeoutMs: 4000,
+    fetchImpl,
   });
   if (viaNetget.monad) {
     const check = await checkMonadSurfaceClaim(viaNetget.endpoint.surface?.raw);

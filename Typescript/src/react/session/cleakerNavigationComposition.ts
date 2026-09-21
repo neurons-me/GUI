@@ -52,7 +52,8 @@ const BUILTIN_ONLY = resolveSidebarComposition(['builtin'], { builtin: BUILTIN_S
 export function useCleakerRootSidebar(
   namespaceRootLabel: string,
   transportOrigin: string,
-  session: SeedSession | null
+  session: SeedSession | null,
+  options: { namedNamespace?: boolean } = {}
 ): { resolved: ResolvedSidebarItem[]; loading: boolean } {
   const [resolved, setResolved] = React.useState<ResolvedSidebarItem[]>(BUILTIN_ONLY);
   const [loading, setLoading] = React.useState(true);
@@ -70,7 +71,7 @@ export function useCleakerRootSidebar(
       const scopes: Record<string, ScopeData> = { builtin: BUILTIN_SCOPE };
 
       try {
-        scopes.visited = await readScopePublic(monad, transportOrigin, namespaceRootLabel, 'root');
+        scopes.visited = await readScopePublic(monad, transportOrigin, namespaceRootLabel, 'root', { namedNamespace: options.namedNamespace });
       } catch {
         // A closed or unreachable public root isn't an error for this page --
         // it just means this namespace hasn't declared anything extra yet.
@@ -92,7 +93,7 @@ export function useCleakerRootSidebar(
     return () => {
       cancelled = true;
     };
-  }, [namespaceRootLabel, transportOrigin, session]);
+  }, [namespaceRootLabel, transportOrigin, session, options.namedNamespace]);
 
   return { resolved, loading };
 }

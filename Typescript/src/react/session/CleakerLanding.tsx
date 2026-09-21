@@ -2140,12 +2140,14 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     };
   }, [verifiedRoot.status, verifiedRoot.monad, verifiedRoot.transportOrigin, verifiedRoot.signature, namespaceRootLabel]);
   useRegisterGuiNode(GUI_ROOT_ID, 'GUI', undefined, guiRootProvenance);
-  // Reads for the sidebar wait for a transport that was CONFIRMED to answer for this namespace when the
-  // transport is this page's own origin at a door (expectNamespace): until then, or if it answers for a
-  // different namespace (a handle door answers for the handle), nothing is read -- not from the apex, and
-  // not from a transport that would return another namespace's tree. The built-in defaults render meanwhile.
-  const sidebarTransport = rootSeed.expectNamespace && verifiedRoot.status !== 'confirmed' ? '' : verifiedRoot.transportOrigin;
-  const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session);
+  // At a door the reads NAME their namespace (?namespace=) instead of leaving it to the door: the connection
+  // carries them, the request says which tree they are about. They wait for a transport CONFIRMED to serve
+  // that namespace (asked the same way) -- a monad that does not honor the parameter answers for the door's
+  // namespace, and is not confirmed, so nothing is read from it and no other tree's content is shown. The
+  // built-in defaults render meanwhile.
+  const namedReads = Boolean(rootSeed.expectNamespace);
+  const sidebarTransport = namedReads && verifiedRoot.status !== 'confirmed' ? '' : verifiedRoot.transportOrigin;
+  const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session, { namedNamespace: namedReads });
 
   // A genuine Beatle "connected" resolution re-verifies that SAME
   // namespace here and only promotes it into the shared context on

@@ -62,11 +62,12 @@ export async function readScopePublic(
   monad: MonadClient,
   transportOrigin: string,
   semanticNamespace: string,
-  scopeId: ScopeId
+  scopeId: ScopeId,
+  options: { namedNamespace?: boolean } = {}
 ): Promise<ScopeData> {
   async function readPublic<TValue>(path: string): Promise<TValue | undefined> {
     try {
-      const result = await monad.readNamespacePath<TValue>({ semanticNamespace, transportOrigin, path });
+      const result = await monad.readNamespacePath<TValue>({ semanticNamespace, transportOrigin, path, namedNamespace: options.namedNamespace });
       return result.value;
     } catch (cause) {
       if (cause instanceof MonadClientError && (cause.code === 'NOT_FOUND' || cause.code === 'PATH_NOT_FOUND')) {

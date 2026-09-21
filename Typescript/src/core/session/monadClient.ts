@@ -33,6 +33,8 @@ const READ_ERROR_CODES = [
   'PATH_REQUIRED',
   'NOT_FOUND',
   'PATH_NOT_FOUND',
+  'NAMESPACE_NOT_SERVED',
+  'NAMESPACE_INVALID',
 ] as const;
 
 type ClaimErrorCodeTuple = typeof CLAIM_ERROR_CODES;
@@ -69,6 +71,7 @@ export type MonadWriteErrorCode =
 
 export type MonadReadErrorCode =
   | ReadErrorCodeTuple[number]
+  | 'NAMESPACE_MISMATCH'
   | MonadTransportErrorCode;
 
 export type MonadErrorCode =
@@ -139,6 +142,13 @@ export type MonadWriteInput<TValue = unknown> = MonadRequestOptions & {
 export type MonadReadInput = MonadRequestOptions & {
   semanticNamespace: string;
   path: string;
+  /**
+   * The read is about `semanticNamespace` whichever door carried it: the request names it (`?namespace=`) and
+   * the answer must say it resolved to exactly that namespace, or the read fails (NAMESPACE_MISMATCH) -- a
+   * monad that does not honor the parameter answers for the door's namespace, and that must not pass for the
+   * one that was asked for.
+   */
+  namedNamespace?: boolean;
 };
 
 export type MonadClaimResult = {
@@ -866,7 +876,7 @@ export async function readNamespacePath<TValue = unknown>(
     semanticNamespace,
     transportOrigin,
     method: 'GET',
-    path: `/${encodedPath}`,
+    path: `/${encodedPath}${input.namedNamespace ? `?namespace=${encodeURIComponent(semanticNamespace)}` : ''}`,
     knownErrorCodes: READ_ERROR_CODES,
     fetchImpl: input.fetchImpl,
     headers: input.headers,
@@ -878,6 +888,17 @@ export async function readNamespacePath<TValue = unknown>(
     semanticNamespace,
     transportOrigin,
   });
+
+  if (input.namedNamespace && normalizeMonadSemanticNamespace(target.namespace.me) !== semanticNamespace) {
+    throw createClientError<MonadReadErrorCode>({
+      code: 'NAMESPACE_MISMATCH',
+      status: 409,
+      operation: 'read',
+      semanticNamespace,
+      transportOrigin,
+      message: `This transport answered for ${target.namespace.me}, not for ${semanticNamespace}.`,
+    });
+  }
 
   return {
     ok: true,
