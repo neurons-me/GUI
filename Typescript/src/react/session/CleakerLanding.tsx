@@ -9,7 +9,8 @@
 // a demo with a fake local hash; this wires the same shape to the real
 // session (useMeLauncherView(), the same claim/open flow MeLauncher uses).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter, Routes, Route, Link, useInRouterContext, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { RouterProvider } from '@/Router/Router';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
 import Icon from '@/gui/Atoms/Icon/Icon';
@@ -2388,24 +2389,21 @@ const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
 // CleakerLanding is meant to be dropped in as an entire page (see the file
 // header), so it owns its own routing rather than depending on a host app
 // to already have one — but it can't just always wrap itself in a fresh
-// <BrowserRouter>: react-router v6 throws if a <Router> renders inside
-// another Router's context, and this component IS rendered inside one
-// already in at least one real place — Storybook's own global decorator
-// wraps every story in <MemoryRouter> (.storybook/preview.tsx), and
-// CleakerLanding is no exception. useInRouterContext() detects that case
-// and reuses the ambient router (MemoryRouter in Storybook, or whatever a
-// future host provides) instead of nesting a second one; only a truly
-// standalone render (netget's real App.jsx today — CleakerLanding renders
-// as a SIBLING of netget's own <Router>, not nested inside it) gets its
-// own <BrowserRouter>.
-const CleakerLanding: React.FC<CleakerLandingProps> = (props) => {
-  const inRouterContext = useInRouterContext();
-  if (inRouterContext) return <CleakerRoutes {...props} />;
-  return (
-    <BrowserRouter>
-      <CleakerRoutes {...props} />
-    </BrowserRouter>
-  );
-};
+// router: react-router v6 throws if a <Router> renders inside another
+// Router's context, and this component IS rendered inside one already in
+// at least one real place — Storybook's own global decorator wraps every
+// story in <MemoryRouter> (.storybook/preview.tsx), and CleakerLanding is
+// no exception. RouterProvider (Router/Router.tsx) is this exact guard,
+// already written once there — reused here instead of a second, hand-rolled
+// copy of the same useInRouterContext()+<BrowserRouter> check. It reuses
+// the ambient router (MemoryRouter in Storybook, or whatever a future host
+// provides) when already inside one; only a truly standalone render
+// (netget's real App.jsx today — CleakerLanding renders as a SIBLING of
+// netget's own <Router>, not nested inside it) gets its own <BrowserRouter>.
+const CleakerLanding: React.FC<CleakerLandingProps> = (props) => (
+  <RouterProvider>
+    <CleakerRoutes {...props} />
+  </RouterProvider>
+);
 
 export default CleakerLanding;
