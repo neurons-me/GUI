@@ -157,7 +157,7 @@ function deriveNamespaceRootLabel(endpoint: string): string {
 }
 
 // Same mixed-content fix as rootSeed's own derivation below (see
-// CleakerLayoutShell): when the namespace being resolved IS the host this
+// GUI): when the namespace being resolved IS the host this
 // page is already loaded from, trust window.location's own scheme over a
 // guessed https -- probing a scheme this page didn't actually load over
 // is indistinguishable from the destination being down.
@@ -178,7 +178,7 @@ function deriveNamespaceRootLabel(endpoint: string): string {
 //
 // Same gap, a second shape (found live, 2026-09-22): window.location's own
 // host is not the only already-known-good origin -- `knownRoot` (the
-// CleakerLayoutShell's own rootSeed: the exact namespace/endpoint pair
+// GUI's own rootSeed: the exact namespace/endpoint pair
 // useVerifiedCleakerRoot already confirmed once) is checked first, because
 // the page's origin and the resolved namespace root can legitimately
 // differ (a disposable dev host served from "localhost:5178" whose real
@@ -235,7 +235,7 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
 
 // Local extensions of CleakerLandingProps (like the removed `destination`
 // prop before them), not a change to that shared, exported type -- only
-// CleakerLayoutShell supplies these, wiring Beatle's own resolution into
+// GUI supplies these, wiring Beatle's own resolution into
 // the SAME shared context the sidebar and /netget read from, instead of
 // independently-drifting "current root" facts. onBeatleNamespaceResolved:
 // see handleBeatleConnect below and verifiedCleakerRoot.ts's `promote`.
@@ -763,7 +763,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
       }}
     >
       {/* Users/Blockchain/URL (and Keychain, once authenticated) now live
-          in the shared sidebar -- see CleakerLayoutShell below, which
+          in the shared sidebar -- see GUI below, which
           mounts the real Layout/LeftBar around this whole route tree.
           Removed from here entirely rather than duplicated. */}
 
@@ -864,7 +864,7 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
             <LiveOwnProfile session={activeSession} username={ownUsername} />
           )}
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {/* Keychain moved to the shared sidebar (CleakerLayoutShell,
+            {/* Keychain moved to the shared sidebar (GUI,
                 shown only once authenticated -- same condition as before,
                 just relocated) instead of living inline here. Sign out stays
                 -- it's an account action tied to this identity display,
@@ -2001,7 +2001,7 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
 
 // CleakerNetgetView — Netget's own real views (MainServerView, GatewaySetup)
 // mounted inside this SAME Layout, at /netget, reading the ONE shared
-// confirmed context CleakerLayoutShell already resolves (see
+// confirmed context GUI already resolves (see
 // verifiedCleakerRoot.ts) -- never a second, independently-guessed
 // gateway address. No new frontend, no new login, no new claim mechanism:
 // GatewaySetup's own existing checking→unclaimed→claim flow already
@@ -2101,7 +2101,7 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 // /keychain/claim and /keychain/admin-sign are deliberately NOT nested
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
-const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
+const GUI: React.FC<CleakerLandingProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
@@ -2372,7 +2372,7 @@ const StandalonePage: React.FC<{ children: React.ReactNode }> = ({ children }) =
 // GUI.content.netget and served on their own routes, outside the shell.
 const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
   <Routes>
-    <Route path="/*" element={<CleakerLayoutShell {...props} />} />
+    <Route path="/*" element={<GUI {...props} />} />
     {flattenGuiDocument()
       .filter((entry) => entry.parentId === 'GUI.content.netget' && entry.component && entry.route)
       .map((entry) => (
