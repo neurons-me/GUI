@@ -34,6 +34,7 @@ import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/C
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
 import Layout from '@/gui/Layout/Layout';
+import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useMeLauncherView } from './MeLauncher';
@@ -87,6 +88,8 @@ export interface CleakerLandingProps {
   document?: GuiDocument;
   /** Components the added parts name (`component`), by that name. Merged over the shell's own. */
   pages?: Record<string, React.ComponentType<any>>;
+  /** Extra LeftBar footer actions this app adds after Theme/Dev Tools (netget's Frontend Mode toggle). */
+  footerExtras?: LeftBarElement[];
 }
 
 // No hardcoded root here on purpose — cleaker.me/local.cleaker were never
@@ -2218,6 +2221,10 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
           footerElements: [
             { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
             { type: 'action', props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
+            // An app's own footer action (netget's Frontend Mode toggle) -- not part of the document's
+            // bars.left system (that's navigation, this is a control), so it stays a plain prop rather
+            // than a document part. Kept last so Theme/Dev Tools stay in the same place everywhere.
+            ...(props.footerExtras ?? []),
           ],
         }}
       >
