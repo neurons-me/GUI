@@ -9,7 +9,7 @@
 // a demo with a fake local hash; this wires the same shape to the real
 // session (useMeLauncherView(), the same claim/open flow MeLauncher uses).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter, Routes, Route, Link, useInRouterContext, useSearchParams, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useInRouterContext, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
 import Icon from '@/gui/Atoms/Icon/Icon';
@@ -175,7 +175,28 @@ function deriveNamespaceRootLabel(endpoint: string): string {
 // ERR_NAME_NOT_RESOLVED against "jabellae.local.cleaker" the moment Beatle
 // auto-connected to the just-signed-in identity, since no such host was
 // ever registered, only the bare root.
-function cleakerEndpointForNamespace(namespace: string): string {
+//
+// Same gap, a second shape (found live, 2026-09-22): window.location's own
+// host is not the only already-known-good origin -- `knownRoot` (the
+// CleakerLayoutShell's own rootSeed: the exact namespace/endpoint pair
+// useVerifiedCleakerRoot already confirmed once) is checked first, because
+// the page's origin and the resolved namespace root can legitimately
+// differ (a disposable dev host served from "localhost:5178" whose real
+// namespace root is "127.0.0.1:4603" -- no DNS relationship between the
+// two at all). Without this, Beatle reconnecting to that SAME root on every
+// remount fell through to the `https://${namespace}` guess below, which
+// silently drops the real port and forces https -- confirmed live: Beatle
+// reconnecting to its own already-confirmed root produced a hung/failing
+// `https://127.0.0.1/__surface` probe (ERR_SSL_VERSION_OR_CIPHER_MISMATCH),
+// leaving the position badge stuck on "Checking..." after a harmless
+// same-root reconnect, not just on a genuine namespace switch.
+function cleakerEndpointForNamespace(namespace: string, knownRoot?: CleakerRootSeed): string {
+  if (knownRoot?.label) {
+    const known = knownRoot.label;
+    if (known === namespace || namespace.endsWith(`.${known}`)) {
+      return knownRoot.cleakerEndpoint;
+    }
+  }
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     if (host === namespace || namespace.endsWith(`.${host}`)) {
@@ -542,7 +563,16 @@ const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndp
     : beatleState === 'connected' || beatleState === 'streaming'
       ? (sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
       : 'idle';
-  const qrStatusLabel = beatleState === 'idle' || beatleState === 'disconnected' ? '' : BEATLE_STATE_LABEL[beatleState];
+  // Built from qrStatus (the COMBINED value above), never from beatleState alone — that was the actual
+  // bug (found live, 2026-09-22): after a real disconnect, sharedRootStatus flipped qrStatus (the ring) to
+  // 'error', but this line kept reading beatleState directly, which Beatle's own WebSocket still called
+  // 'connected' — ring and label describing the same widget differently. One effective state now drives
+  // both; Beatle's own finer-grained labels (Parsing…/Connecting…/Resolving…) still show during the
+  // 'checking' bucket, since qrStatus collapses several beatleStates into it.
+  const qrStatusLabel = qrStatus === 'idle' ? ''
+    : qrStatus === 'error' ? 'Could not connect'
+    : qrStatus === 'confirmed' ? 'Connected'
+    : (BEATLE_STATE_LABEL[beatleState] || 'Checking…');
 
   // USED TO also override the QR's own encoded value with whatever
   // Beatle resolved (a `beatleResolvedUrl` state, permanently replacing
@@ -2108,6 +2138,44 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   }, []);
   const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
 
+  // The persistent "where am I" position — namespace/identity + the CURRENT route's path — shown at the
+  // shell level (below) so it survives navigation instead of only existing on the Landing page's own QR.
+  // Three things kept separate, per the review that asked for this: WHICH namespace is queried
+  // (namespaceRootLabel / session.semanticNamespace), WHICH node within it (location.pathname), and WHO
+  // is authenticated (session — never re-derived from the path itself, e.g. visiting /@someone must not
+  // read as "signed in as someone"). One expression, one QR value, both built from the SAME three parts
+  // here — not two independent derivations that could drift (the earlier gap this closes).
+  const location = useLocation();
+  const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
+  const positionIdentity = authenticated && session?.semanticNamespace ? session.semanticNamespace : namespaceRootLabel;
+  const positionExpression = `${positionIdentity}${currentNodePath}`;
+  const positionQrValue = useMemo(() => {
+    try {
+      const authedUsername = authenticated && session?.semanticNamespace
+        ? String(session.semanticNamespace).split('.')[0]
+        : undefined;
+      // buildCleakerNamespaceUrl has no path parameter of its own (namespace/identity only) — the current
+      // node path is appended here, after it. Verified correct for the plain-namespace case (no handle
+      // prefix); the interaction with its own "/@handle" form for a localish surface is a real, named,
+      // unverified edge case, not silently assumed to compose the same way.
+      return `${buildCleakerNamespaceUrl(resolvedEndpoint, authedUsername)}${currentNodePath}`;
+    } catch {
+      return resolvedEndpoint;
+    }
+  }, [resolvedEndpoint, authenticated, session?.semanticNamespace, currentNodePath]);
+  // One effective connection state for the position badge, from verifiedRoot ALONE — never from Beatle's
+  // own separate channel state. This is deliberate, not an oversight: mixing two independently-updating
+  // signals into one ring+label pair is exactly the bug found on the Landing page's own QR (the ring
+  // factored a second check the label's text never did, so they could show contradictory things after a
+  // real disconnect). verifiedRoot.status is already the one signal both the sidebar and /netget treat as
+  // authoritative — reusing it here, rather than adding a second source, is what keeps the ring and the
+  // label unable to disagree by construction.
+  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' = verifiedRoot.status;
+  const positionStatusLabel = verifiedRoot.status === 'checking' ? 'Checking…'
+    : verifiedRoot.status === 'error' ? 'Could not connect'
+    : verifiedRoot.status === 'confirmed' ? 'Connected'
+    : '';
+
   // The gateway is reached at the address this page was loaded from when that address answers it
   // (every host of a namespace -- its root, www, a handle -- is served by the same monad). Browser
   // state is per origin: a session, a local vault, and a same-origin request all belong to the
@@ -2166,8 +2234,8 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   // success -- this is what keeps the sidebar (and /netget) from silently
   // drifting from whatever Beatle's own resolution shows in the QR.
   const handleBeatleNamespaceResolved = useCallback((namespace: string) => {
-    verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace) });
-  }, [verifiedRoot.promote]);
+    verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
+  }, [verifiedRoot.promote, rootSeed]);
 
   // The left bar's own elements come from the document (`GUI.bars.left`): what leads the bar ("back to the
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
@@ -2203,6 +2271,24 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <CleakerTopSearch cleakerEndpoint={props.cleakerEndpoint} netgetMonadOrigin={props.netgetMonadOrigin} />
+      {/* The persistent position badge (see positionExpression/positionQrValue above) — visible on every
+          route this shell renders, including /netget, not only the Landing page's own bigger QR. Bubble
+          variant (small, click-to-toggle avatar/QR, no edit affordance): this is a read-only "where am I"
+          indicator, not the sign-in surface. */}
+      {/* top-right, left of the search icon (CleakerTopSearch sits at right: 12/20) -- top-LEFT was tried
+          first and collided with the sidebar's own toggle button occupying that exact corner. */}
+      <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 56, sm: 64 }, zIndex: 21 }}>
+        <QRme
+          variant="topbar"
+          value={positionQrValue}
+          username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
+          status={positionStatus}
+          statusLabel={positionStatusLabel}
+          perimeterLabel={positionExpression}
+          perimeterRootLabel={namespaceRootLabel}
+          data-gui-node-id="GUI.bars.top.position"
+        />
+      </Box>
       <Layout
         LeftBar={{
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
