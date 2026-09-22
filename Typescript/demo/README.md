@@ -5,7 +5,7 @@ to disposable monads/harnesses started separately (see each file's own
 header comment for exact launch commands) — never `local.cleaker` or any
 real ambient gateway.
 
-- **`cleakerHome.main.tsx`** (+ `cleakerHome.html`, `shared/pageBuilder.tsx`)
+- **`namespaceHome.main.tsx`** (+ `namespaceHome.html`, `shared/pageBuilder.tsx`)
   — the main, currently-active pilot. Mounts the real `CleakerLanding` at
   `/`, unmodified, plus a `Netget → Apps → app → page` route tree using the
   real `GatewaySetup`/`MainServerView`/`LogsView` components (previously
@@ -17,13 +17,13 @@ real ambient gateway.
   (real Netget backend, no monad of its own).
 - **`pageEditor.main.tsx`** — the page editor in isolation (own minimal
   sign-in form), sharing `shared/pageBuilder.tsx`'s `usePageView` core with
-  `cleakerHome.main.tsx`. Useful for iterating on the editor without the
+  `namespaceHome.main.tsx`. Useful for iterating on the editor without the
   rest of the Netget navigation.
 - **`claimFlow.main.tsx`** (+ `claimFlow.html`) — the real, redirect-based
   cross-origin gateway-claim signing flow (`CleakerNetgetClaimView`),
   proven end-to-end against
   `modules/netget/Typescript/.../dev-harness/claim-harness-server.mjs`.
-  Two-port (Cleaker role + netget role) by design, unlike `cleakerHome`'s
+  Two-port (Cleaker role + netget role) by design, unlike `namespaceHome`'s
   single-origin setup.
 - **`logsFlow.main.tsx`** (+ `logsFlow.html`) — the real `LogsView` +
   admin-session sign-in flow in isolation, against

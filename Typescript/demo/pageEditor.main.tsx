@@ -3,7 +3,7 @@
 // (apps.<appId>.pages.<pageId>), rendered inside GUI's own canonical
 // Theme -> Layout -> Page composition. All the actual rendering/editing
 // logic now lives in demo/shared/pageBuilder.tsx (shared with
-// cleakerHome.main.tsx) — this file only supplies this demo's own minimal
+// namespaceHome.main.tsx) — this file only supplies this demo's own minimal
 // sign-in form and mounts it.
 //
 // Real Cleaker identity (SeedSessionProvider, sessionBackend:'cleaker')

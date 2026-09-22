@@ -1,4 +1,4 @@
-// cleakerHome.main.tsx — local.cleaker's real entry point stays the real
+// namespaceHome.main.tsx — local.cleaker's real entry point stays the real
 // entry point. This demo mounts the actual CleakerLanding (the same
 // component this session already verified in Storybook — ".me" QR bubble,
 // register/sign-in/recover, users/blockchain directories) at "/",
@@ -40,7 +40,7 @@
 //                                            disposable stand-in endpoint
 //                                            (vite.config.js's
 //                                            "/api/netget/apps" middleware,
-//                                            DEMO_ROLE=cleakerHome only).
+//                                            DEMO_ROLE=namespaceHome only).
 //   "/netget/apps/:appId"                  → administer ONE app: its
 //                                            registry facts (where it runs
 //                                            — host/port/trust/frontendMode,
@@ -542,11 +542,11 @@ function AppPageEditorResolved({ appId, pageId, endpoint: pageEndpoint, rootName
 // same visual language CleakerLanding's own corner icons (Users,
 // Blockchain) already establish, without touching CleakerLanding.tsx to
 // add it natively.
-function CleakerHomeRoute() {
+function NamespaceHomeRoute() {
   return (
     <>
       <Box sx={{ position: 'fixed', bottom: { xs: 12, sm: 20 }, right: { xs: 12, sm: 20 }, zIndex: 1500 }}>
-        <Box component={Link} to="/netget" data-gui-node-id="CleakerHome.netgetLink"
+        <Box component={Link} to="/netget" data-gui-node-id="NamespaceHome.netgetLink"
           sx={{ display: 'inline-flex', alignItems: 'center', px: 1.5, py: 0.75, borderRadius: 999, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', color: 'text.secondary', textDecoration: 'none', fontSize: '0.8rem', boxShadow: 1, '&:hover': { color: 'text.primary', borderColor: 'primary.main' } }}>
           Netget →
         </Box>
@@ -567,7 +567,7 @@ function App() {
       {/* Everything else -- "/", "/users", "/blockchain", "/keychain", ...
           -- is the real CleakerLanding, unmodified, owning its own nested
           routes underneath this mount point. */}
-      <Route path="/*" element={<CleakerHomeRoute />} />
+      <Route path="/*" element={<NamespaceHomeRoute />} />
     </Routes>
   );
 }

@@ -95,7 +95,7 @@ export default defineConfig({
 
             // Known CleakerLanding page paths -- rewrite to this demo's own
             // HTML shell so BrowserRouter sees the real pathname, same
-            // reasoning as cleakerHome's own fallback below. GET/HEAD only;
+            // reasoning as namespaceHome's own fallback below. GET/HEAD only;
             // a browser never POSTs to one of these.
             if ((req.method === 'GET' || req.method === 'HEAD') &&
                 ['/', '/users', '/blockchain', '/keychain', '/keychain/claim', '/netget'].includes(pathOnly)) {
@@ -161,7 +161,7 @@ export default defineConfig({
             req.url = '/claimFlow.html?role=netget';
             return next();
           }
-          // cleakerHome.main.tsx composes the real CleakerLanding (its own
+          // namespaceHome.main.tsx composes the real CleakerLanding (its own
           // nested <Routes> for "/", "/users", "/blockchain", "/keychain",
           // ...) plus "/netget", "/netget/apps", "/netget/apps/:appId" and
           // "/netget/apps/:appId/pages/:pageId" for administering mounted
@@ -171,20 +171,23 @@ export default defineConfig({
           // claimFlow's own fallback above, just a different route set.
           // "/netget/apps/*" is prefix-matched (not a fixed list) because
           // appId/pageId are real route params now, not a hardcoded pair.
-          // Gated behind DEMO_ROLE=cleakerHome so it never shadows "/" for
+          // Gated behind DEMO_ROLE=namespaceHome so it never shadows "/" for
           // the other demos (index.html, claimFlow.html) sharing this same
-          // dev server.
-          if (process.env.DEMO_ROLE === 'cleakerHome') {
-            const cleakerHomeExactPaths = ['/', '/users', '/blockchain', '/keychain', '/keychain/claim', '/keychain/admin-sign', '/netget', '/netget/logs', '/netget/apps'];
+          // dev server. Named for what it actually demonstrates -- a
+          // namespace's own root connecting to a document -- not a specific
+          // branded shell; CleakerLanding is that shell's real component
+          // name (a separate, much larger rename, not done here).
+          if (process.env.DEMO_ROLE === 'namespaceHome') {
+            const namespaceHomeExactPaths = ['/', '/users', '/blockchain', '/keychain', '/keychain/claim', '/keychain/admin-sign', '/netget', '/netget/logs', '/netget/apps'];
             const pathOnly = url.split('?')[0];
-            if (cleakerHomeExactPaths.includes(pathOnly) || pathOnly.startsWith('/netget/apps/')) {
+            if (namespaceHomeExactPaths.includes(pathOnly) || pathOnly.startsWith('/netget/apps/')) {
               const queryIndex = url.indexOf('?');
-              req.url = queryIndex === -1 ? '/cleakerHome.html' : `/cleakerHome.html${url.slice(queryIndex)}`;
+              req.url = queryIndex === -1 ? '/namespaceHome.html' : `/namespaceHome.html${url.slice(queryIndex)}`;
               return next();
             }
           }
           // No stand-in for netget's mesh registry endpoint here anymore --
-          // cleakerHome.main.tsx now reads the REAL registry directly from
+          // namespaceHome.main.tsx now reads the REAL registry directly from
           // NETGET_ENDPOINT (the disposable netget-gateway-harness-server.mjs
           // process, backed by GET /apps in localNetget.js + appRegistry.ts's
           // readReportedApps()/upsertReportedApp()). A real monad's own
