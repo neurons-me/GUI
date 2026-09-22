@@ -1,5 +1,6 @@
 import documentJson from './GUI.document.json';
 import { renderNode } from './renderer';
+import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 
 /**
  * The GUI's own declaration of itself: a static, JSON-serializable tree
@@ -26,6 +27,20 @@ export type GuiDocumentNode = {
   component?: string;
   /** Where a page is served, e.g. "/" (index) or "/users". */
   route?: string;
+  /**
+   * An element of a bar (children of `GUI.bars.left`): where it navigates and its icon. A part with `to`
+   * under a bar is an element of that bar; the bar's own composition (what the namespace adds) layers
+   * around these.
+   */
+  to?: string;
+  icon?: string;
+  /** Shown only when the person has proven an identity (`session`). Visibility of DATA is the kernel's; this only hides a link that would lead nowhere. */
+  requires?: 'session';
+  /**
+   * Where the element sits in the bar: `start` (before what the namespace declares), `default` (a fallback the
+   * namespace may override by declaring the same id) or `end` (after). Defaults to `default`.
+   */
+  placement?: 'start' | 'default' | 'end';
   children?: Record<string, GuiDocumentNode>;
 };
 
@@ -41,6 +56,10 @@ export type GuiDocumentEntry = {
   note?: string;
   component?: string;
   route?: string;
+  to?: string;
+  icon?: string;
+  requires?: 'session';
+  placement?: 'start' | 'default' | 'end';
   /** Ids of the parts the document declares directly under this one. */
   childIds: string[];
 };
@@ -60,6 +79,10 @@ export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocument
       note: node.note,
       component: node.component,
       route: node.route,
+      to: node.to,
+      icon: node.icon,
+      requires: node.requires,
+      placement: node.placement,
       childIds: childKeys.map((k) => `${id}.${k}`),
     });
     childKeys.forEach((k) => walk(k, node.children![k], id));
@@ -110,4 +133,68 @@ export function renderGuiDocumentPage(
     },
     { React: options.React, registry: options.registry }
   );
+}
+
+
+/**
+ * Adds the parts of `extension` to `base` without changing `base`: a part in both keeps the base's own fields
+ * and gains the extension's children; a part only in the extension is added. This is how an app (netget) puts its
+ * own pages and bar elements on top of the root GUI instead of being a second GUI. The extension can add parts;
+ * it cannot remove or replace the base's `component`/`route` of a part that already has one.
+ */
+export function mergeGuiDocument(base: GuiDocument, extension: GuiDocument | undefined): GuiDocument {
+  if (!extension) return base;
+  const mergeNode = (a: GuiDocumentNode | undefined, b: GuiDocumentNode): GuiDocumentNode => {
+    if (!a) return structuredCloneNode(b);
+    const out: GuiDocumentNode = { ...b, ...a };
+    const keys = new Set([...Object.keys(a.children ?? {}), ...Object.keys(b.children ?? {})]);
+    if (keys.size) {
+      out.children = {};
+      keys.forEach((k) => {
+        out.children![k] = mergeNode(a.children?.[k], b.children?.[k] ?? ({} as GuiDocumentNode));
+      });
+    }
+    return out;
+  };
+  const out: GuiDocument = { ...base };
+  Object.keys(extension).forEach((k) => {
+    out[k] = base[k] ? mergeNode(base[k], extension[k]) : structuredCloneNode(extension[k]);
+  });
+  return out;
+}
+
+function structuredCloneNode(node: GuiDocumentNode): GuiDocumentNode {
+  return JSON.parse(JSON.stringify(node));
+}
+
+export type LeftBarSlots = {
+  start: LeftBarElement[];
+  defaults: LeftBarElement[];
+  end: LeftBarElement[];
+};
+
+/**
+ * The left bar's elements as the document declares them (children of `GUI.bars.left` that have `to`), split by
+ * `placement`, in declaration order. An element carries its document path as its node id, so the inspector shows
+ * ONE node for it (the declared one), not a second runtime-numbered copy. Elements that `require` a session are
+ * left out until `authenticated`.
+ */
+export function leftBarSlots(
+  doc: GuiDocument = GUI_DOCUMENT,
+  options: { authenticated?: boolean } = {}
+): LeftBarSlots {
+  const slots: LeftBarSlots = { start: [], defaults: [], end: [] };
+  const prefix = 'GUI.bars.left.';
+  flattenGuiDocument(doc)
+    .filter((e) => e.parentId === 'GUI.bars.left' && e.to)
+    .forEach((e) => {
+      if (e.requires === 'session' && !options.authenticated) return;
+      const key = e.id.slice(prefix.length);
+      const element = {
+        type: 'link' as const,
+        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id },
+      } as LeftBarElement;
+      (e.placement === 'start' ? slots.start : e.placement === 'end' ? slots.end : slots.defaults).push(element);
+    });
+  return slots;
 }

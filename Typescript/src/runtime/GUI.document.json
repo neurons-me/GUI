@@ -26,8 +26,44 @@
             "label": "Sticky options"
           },
           "left": {
-            "note": "Left sidebar.",
-            "label": "Left bar"
+            "note": "Left sidebar. Its elements are declared here; what the namespace adds is layered around them.",
+            "label": "Left bar",
+            "children": {
+              "home": {
+                "label": "Home",
+                "to": "/",
+                "icon": "home",
+                "placement": "start"
+              },
+              "users": {
+                "label": "Users",
+                "to": "/users",
+                "icon": "group"
+              },
+              "blockchain": {
+                "label": "Blockchain",
+                "to": "/blockchain",
+                "icon": "link"
+              },
+              "url": {
+                "label": "URL",
+                "to": "/url",
+                "icon": "language"
+              },
+              "keychain": {
+                "label": "Keychain",
+                "to": "/keychain",
+                "icon": "key",
+                "requires": "session",
+                "placement": "end"
+              },
+              "netget": {
+                "label": "Netget",
+                "to": "/netget",
+                "icon": "router",
+                "placement": "end"
+              }
+            }
           },
           "right": {
             "note": "Right sidebar.",

@@ -2,25 +2,24 @@ import * as React from 'react';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { createMonadClient } from '@/core/session/monadClient';
 import { readScope, readScopePublic } from '@/gui/Layout/Sidebars/Composition/sidebarCompositionIO';
+import { GUI_DOCUMENT, leftBarSlots, type GuiDocument } from '@/runtime/guiDocument';
 import {
   resolveSidebarComposition,
   type ResolvedSidebarItem,
   type ScopeData,
 } from '@/gui/Layout/Sidebars/Composition/sidebarComposition';
 
-// The real app's built-in navigation defaults -- a plain JS constant, never
-// read from or written to `.me`. This is the LAST-RESORT layer: it only
-// shows up for an id neither of the two `.me` layers below declares.
-const BUILTIN_SCOPE: ScopeData = {
-  itemIds: ['users', 'blockchain', 'url'],
-  items: {
-    // Same icon names the old top-right icon row used for these same three
-    // destinations, before that row was retired in favor of this sidebar.
-    users: { type: 'link', props: { id: 'users', label: 'Users', to: '/users', icon: 'group' } },
-    blockchain: { type: 'link', props: { id: 'blockchain', label: 'Blockchain', to: '/blockchain', icon: 'link' } },
-    url: { type: 'link', props: { id: 'url', label: 'URL', to: '/url', icon: 'language' } },
-  },
-};
+// The navigation defaults come from the GUI document (`GUI.bars.left`, elements with placement `default`), not
+// from a list here. This is the LAST-RESORT layer: it only shows up for an id neither of the two `.me` layers
+// below declares.
+function builtinScopeOf(doc: GuiDocument): ScopeData {
+  const defaults = leftBarSlots(doc).defaults;
+  const items: ScopeData['items'] = {};
+  defaults.forEach((el: any) => { items[el.props.id] = el; });
+  return { itemIds: defaults.map((el: any) => el.props.id), items };
+}
+
+const BUILTIN_SCOPE: ScopeData = builtinScopeOf(GUI_DOCUMENT);
 
 const BUILTIN_ONLY = resolveSidebarComposition(['builtin'], { builtin: BUILTIN_SCOPE });
 
@@ -53,14 +52,22 @@ export function useCleakerRootSidebar(
   namespaceRootLabel: string,
   transportOrigin: string,
   session: SeedSession | null,
-  options: { namedNamespace?: boolean } = {}
+  options: { namedNamespace?: boolean; document?: GuiDocument } = {}
 ): { resolved: ResolvedSidebarItem[]; loading: boolean } {
-  const [resolved, setResolved] = React.useState<ResolvedSidebarItem[]>(BUILTIN_ONLY);
+  const builtinScope = React.useMemo(
+    () => (options.document && options.document !== GUI_DOCUMENT ? builtinScopeOf(options.document) : BUILTIN_SCOPE),
+    [options.document]
+  );
+  const builtinOnly = React.useMemo(
+    () => (builtinScope === BUILTIN_SCOPE ? BUILTIN_ONLY : resolveSidebarComposition(['builtin'], { builtin: builtinScope })),
+    [builtinScope]
+  );
+  const [resolved, setResolved] = React.useState<ResolvedSidebarItem[]>(builtinOnly);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     if (!namespaceRootLabel || !transportOrigin) {
-      setResolved(BUILTIN_ONLY);
+      setResolved(builtinOnly);
       setLoading(false);
       return;
     }
@@ -68,7 +75,7 @@ export function useCleakerRootSidebar(
     setLoading(true);
     const monad = createMonadClient({ transportOrigin });
     (async () => {
-      const scopes: Record<string, ScopeData> = { builtin: BUILTIN_SCOPE };
+      const scopes: Record<string, ScopeData> = { builtin: builtinScope };
 
       try {
         scopes.visited = await readScopePublic(monad, transportOrigin, namespaceRootLabel, 'root', { namedNamespace: options.namedNamespace });
@@ -93,7 +100,7 @@ export function useCleakerRootSidebar(
     return () => {
       cancelled = true;
     };
-  }, [namespaceRootLabel, transportOrigin, session, options.namedNamespace]);
+  }, [namespaceRootLabel, transportOrigin, session, options.namedNamespace, builtinScope, builtinOnly]);
 
   return { resolved, loading };
 }

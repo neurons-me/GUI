@@ -29,12 +29,11 @@ import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSe
 import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
-import { flattenGuiDocument, renderGuiDocumentPage } from '@/runtime/guiDocument';
+import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
 import Layout from '@/gui/Layout/Layout';
-import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useMeLauncherView } from './MeLauncher';
@@ -81,6 +80,13 @@ export interface CleakerLandingProps {
    * isn't self-hosting the gateway it's describing.
    */
   netgetMonadOrigin?: string;
+  /**
+   * Parts an app adds on top of the root GUI's document (pages and left-bar elements). The shell is the one
+   * GUI: an app such as netget declares its own pages here instead of being a second application.
+   */
+  document?: GuiDocument;
+  /** Components the added parts name (`component`), by that name. Merged over the shell's own. */
+  pages?: Record<string, React.ComponentType<any>>;
 }
 
 // No hardcoded root here on purpose — cleaker.me/local.cleaker were never
@@ -2147,7 +2153,10 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
   // built-in defaults render meanwhile.
   const namedReads = Boolean(rootSeed.expectNamespace);
   const sidebarTransport = namedReads && verifiedRoot.status !== 'confirmed' ? '' : verifiedRoot.transportOrigin;
-  const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session, { namedNamespace: namedReads });
+  // The root GUI's document plus whatever the app adds on top (netget's pages): one GUI, not two.
+  const doc = useMemo<GuiDocument>(() => mergeGuiDocument(GUI_DOCUMENT, props.document), [props.document]);
+  const pageRegistry = useMemo(() => ({ ...DOCUMENT_PAGES, ...(props.pages ?? {}) }), [props.pages]);
+  const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session, { namedNamespace: namedReads, document: doc });
 
   // A genuine Beatle "connected" resolution re-verifies that SAME
   // namespace here and only promotes it into the shared context on
@@ -2157,29 +2166,22 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace) });
   }, [verifiedRoot.promote]);
 
-  // Always first -- "back to the start of everything" needs to lead the
-  // list, not sit wherever the .me-backed items or the auth-gated extras
-  // happen to land. A plain '/' link, not part of useCleakerRootSidebar's
-  // own .me-backed composition (that hook answers "what does THIS
-  // namespace declare", not "how do I get back to the root shell").
-  const homeElement: LeftBarElement = { type: 'link', props: { id: 'home', label: 'Home', to: '/', icon: 'home' } };
-
-  const extraElements: LeftBarElement[] = [
-    ...(authenticated
-      ? [{ type: 'link' as const, props: { id: 'keychain', label: 'Keychain', to: '/keychain', icon: 'key' } }]
-      : []),
-    { type: 'link' as const, props: { id: 'netget', label: 'Netget', to: '/netget', icon: 'router' } },
-  ];
+  // The left bar's own elements come from the document (`GUI.bars.left`): what leads the bar ("back to the
+  // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
+  // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
+  // element is shown.
+  const barSlots = leftBarSlots(doc, { authenticated });
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
-  const documentPageRoutes = flattenGuiDocument()
+  const documentPageRoutes = flattenGuiDocument(doc)
     .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
     .map((entry) => {
       const route = documentRoute(entry.route);
       const element = renderGuiDocumentPage(entry.id, {
         React,
-        registry: DOCUMENT_PAGES,
+        registry: pageRegistry,
+        doc,
         props:
           entry.id === LANDING_ID
             ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status }
@@ -2200,7 +2202,7 @@ const CleakerLayoutShell: React.FC<CleakerLandingProps> = (props) => {
       <CleakerTopSearch cleakerEndpoint={props.cleakerEndpoint} netgetMonadOrigin={props.netgetMonadOrigin} />
       <Layout
         LeftBar={{
-          elements: [homeElement, ...resolved.map((r) => r.element), ...extraElements],
+          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
           // of these exact components -- ThemeLauncher and DevToolsLauncher
           // are real, already-built launchers (this.gui's own ThemeContext/
