@@ -7,6 +7,7 @@ export { mount } from './runtime/mount';
 export * from './runtime/adapter';
 export * from './runtime/parts';
 export * from './runtime/provider';
+export * from './runtime/mountReference';
 export * from './runtime/monads';
 export * from './runtime/run-me';
 export { createWsMeRuntime } from './runtime/createWsMeRuntime';

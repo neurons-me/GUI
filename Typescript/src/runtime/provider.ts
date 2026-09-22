@@ -18,6 +18,10 @@ export type NamespaceProviderBoot = {
   kind: 'namespace-provider';
   version: 1;
   namespace: string;
+  /** The namespace every handle lives under -- `namespace` itself at the root, else its parent. */
+  rootNamespace?: string;
+  /** The handle when `namespace` is `<handle>.<rootNamespace>`, else null (the root itself). */
+  handle?: string | null;
   route: string;
   origin?: string;
   apiOrigin?: string;
@@ -25,6 +29,13 @@ export type NamespaceProviderBoot = {
   resolverDisplayName?: string;
   surfaceEntry?: Record<string, any> | null;
   endpoints: NamespaceProviderEndpoints;
+  /**
+   * Where under `namespace` this page/interface is mounted -- '' means the namespace's own root, a
+   * slash-form semantic path means an interior node acting as this interface's own root. Part of the
+   * MOUNT REFERENCE (namespace + node path) that ties a self-contained page to `.me` -- see
+   * GatewayAccessContract.md §7 and mountReference.ts. Names WHERE, never who or what may be done there.
+   */
+  nodePath?: string;
 };
 
 export type CreateHttpNamespaceProviderOptions = {
