@@ -26,6 +26,16 @@ const WRITE_ERROR_CODES = [
   'NAMESPACE_REQUIRED',
   'EXPRESSION_REQUIRED',
   'NAMESPACE_WRITE_FORBIDDEN',
+  // The signed body's namespace/expectedHeadHash didn't match this
+  // namespace's current chain head (or was missing) -- see writeNamespace's
+  // own doc comment and Surface-Identity-Claims.md §7.7. The remedy is
+  // always the same: fetchWriteHead() again and re-sign, never retry as-is.
+  'STALE_HEAD',
+] as const;
+
+const WRITE_HEAD_ERROR_CODES = [
+  'NAMESPACE_REQUIRED',
+  'CLAIM_NOT_FOUND',
 ] as const;
 
 const READ_ERROR_CODES = [
@@ -41,6 +51,7 @@ type ClaimErrorCodeTuple = typeof CLAIM_ERROR_CODES;
 type OpenErrorCodeTuple = typeof OPEN_ERROR_CODES;
 type WriteErrorCodeTuple = typeof WRITE_ERROR_CODES;
 type ReadErrorCodeTuple = typeof READ_ERROR_CODES;
+type WriteHeadErrorCodeTuple = typeof WRITE_HEAD_ERROR_CODES;
 
 export type MonadOperation = 'claim' | 'open' | 'write' | 'read';
 
@@ -74,11 +85,16 @@ export type MonadReadErrorCode =
   | 'NAMESPACE_MISMATCH'
   | MonadTransportErrorCode;
 
+export type MonadWriteHeadErrorCode =
+  | WriteHeadErrorCodeTuple[number]
+  | MonadTransportErrorCode;
+
 export type MonadErrorCode =
   | MonadClaimErrorCode
   | MonadOpenErrorCode
   | MonadWriteErrorCode
-  | MonadReadErrorCode;
+  | MonadReadErrorCode
+  | MonadWriteHeadErrorCode;
 
 export type MonadTargetNamespace = {
   me: string;
@@ -151,6 +167,10 @@ export type MonadReadInput = MonadRequestOptions & {
   namedNamespace?: boolean;
 };
 
+export type MonadWriteHeadInput = MonadRequestOptions & {
+  semanticNamespace: string;
+};
+
 export type MonadClaimResult = {
   ok: true;
   target: MonadTarget;
@@ -192,11 +212,18 @@ export type MonadReadResult<TValue = unknown> = {
   value: TValue;
 };
 
+export type MonadWriteHeadResult = {
+  ok: true;
+  namespace: string;
+  expectedHeadHash: string;
+};
+
 export interface MonadClient {
   claimNamespace(input: MonadClaimInput): Promise<MonadClaimResult>;
   openNamespace(input: MonadOpenInput): Promise<MonadOpenResult>;
   writeNamespace<TValue = unknown>(input: MonadWriteInput<TValue>): Promise<MonadWriteResult>;
   readNamespacePath<TValue = unknown>(input: MonadReadInput): Promise<MonadReadResult<TValue>>;
+  fetchWriteHead(input: MonadWriteHeadInput): Promise<MonadWriteHeadResult>;
 }
 
 export class MonadClientError<Code extends string = MonadErrorCode> extends Error {
@@ -909,6 +936,61 @@ export async function readNamespacePath<TValue = unknown>(
   };
 }
 
+// The chain head a caller must bind into a write's signed body before
+// calling writeNamespace() with a signature -- see writeNamespace's own doc
+// note and Surface-Identity-Claims.md §7.7. A successful writeNamespace()
+// response already carries its own new `memoryHash` as the NEXT head, so a
+// caller mid-session can chain off that directly without a fresh call here;
+// this is for a session's first signed write, or after any change this
+// session didn't itself make.
+export async function fetchWriteHead(input: MonadWriteHeadInput): Promise<MonadWriteHeadResult> {
+  const semanticNamespace = normalizeMonadSemanticNamespace(input.semanticNamespace);
+  const transportOrigin = normalizeMonadTransportOrigin(input.transportOrigin);
+
+  if (!semanticNamespace) {
+    throw createClientError<MonadWriteHeadErrorCode>({
+      code: 'NAMESPACE_REQUIRED',
+      status: 400,
+      operation: 'read',
+      semanticNamespace,
+      transportOrigin,
+      message: 'Semantic namespace is required.',
+    });
+  }
+
+  const payload = await requestEnvelope({
+    operation: 'read',
+    semanticNamespace,
+    transportOrigin,
+    method: 'GET',
+    path: `/api/v1/write-head?namespace=${encodeURIComponent(semanticNamespace)}`,
+    knownErrorCodes: WRITE_HEAD_ERROR_CODES,
+    fetchImpl: input.fetchImpl,
+    headers: input.headers,
+    signal: input.signal,
+  });
+
+  // `namespace` nests under target.namespace.me, like readNamespacePath's
+  // own target does (envelope.ts's nestResponseFields moves it there) --
+  // `expectedHeadHash` stays a plain top-level field, since it's not one of
+  // envelope.ts's three nested keys (namespace/path/value).
+  const target = requireTarget<MonadWriteHeadErrorCode>(payload, {
+    operation: 'read',
+    semanticNamespace,
+    transportOrigin,
+  });
+
+  return {
+    ok: true,
+    namespace: target.namespace.me,
+    expectedHeadHash: requireStringField<MonadWriteHeadErrorCode>(payload, 'expectedHeadHash', {
+      operation: 'read',
+      semanticNamespace,
+      transportOrigin,
+    }),
+  };
+}
+
 export function createMonadClient(options: MonadClientOptions = {}): MonadClient {
   return {
     claimNamespace(input) {
@@ -937,6 +1019,14 @@ export function createMonadClient(options: MonadClientOptions = {}): MonadClient
     },
     readNamespacePath(input) {
       return readNamespacePath({
+        ...input,
+        transportOrigin: input.transportOrigin || options.transportOrigin,
+        fetchImpl: input.fetchImpl || options.fetchImpl,
+        headers: mergeHeaders(options.headers, input.headers),
+      });
+    },
+    fetchWriteHead(input) {
+      return fetchWriteHead({
         ...input,
         transportOrigin: input.transportOrigin || options.transportOrigin,
         fetchImpl: input.fetchImpl || options.fetchImpl,

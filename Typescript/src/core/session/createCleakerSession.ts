@@ -424,13 +424,26 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     // The one signed-write entry point GUI code should call: "save this
     // value at this path", nothing more. Builds and signs the exact
     // canonical body the server verifies against (see monadClient.ts's
-    // writeNamespace() — operation/expression/value/identityHash, no other
-    // fields — and modules/monad's replay.ts's isNamespaceWriteAuthorized(),
-    // which checks the signature against toStableJson() of precisely that
-    // object; normalizeProofMessage is this.me's own copy of the same
-    // sorted-key canonical-JSON algorithm, confirmed byte-for-byte
-    // equivalent by reading both). A caller never assembles this payload
-    // itself — that was the exact mistake this method replaces.
+    // writeNamespace() — operation/expression/value/identityHash/namespace/
+    // expectedHeadHash, no other fields — and modules/monad's replay.ts's
+    // isNamespaceWriteAuthorized(), which checks the signature against
+    // toStableJson() of precisely that object; normalizeProofMessage is
+    // this.me's own copy of the same sorted-key canonical-JSON algorithm,
+    // confirmed byte-for-byte equivalent by reading both). A caller never
+    // assembles this payload itself — that was the exact mistake this
+    // method replaces.
+    //
+    // namespace + expectedHeadHash are read fresh (fetchWriteHead) right
+    // before signing, never cached across calls: a signature only proves
+    // "the claim holder authorized exactly this body" -- without binding it
+    // to which namespace and what state that namespace was in, the same
+    // signed body could be replayed later (e.g. silently un-revoking a
+    // delegate) or against a different namespace this same key also holds a
+    // claim on. The server rejects a mismatch as STALE_HEAD, distinct from
+    // NAMESPACE_WRITE_FORBIDDEN, precisely so a caller here knows to retry
+    // with a fresh head rather than treat it as a permission failure. See
+    // Surface-Identity-Claims.md §7.7 (cleaker repo typedocs) for the full
+    // design.
     //
     // identityHash/activeNamespace are read fresh at call time (the same
     // closure variables `write` and `open`/`claim` already share), so this
@@ -440,12 +453,18 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       if (!activeNamespace) {
         throw new SeedSessionError('NAMESPACE_REQUIRED', 'An active namespace is required for signAndWrite.');
       }
-      const signedFields = { operation: 'write', expression, value, identityHash };
+      const semanticNamespace = normalizeMonadSemanticNamespace(activeNamespace);
+      const { expectedHeadHash } = await monad.fetchWriteHead({ semanticNamespace, transportOrigin });
+      const signedFields = { operation: 'write', expression, value, identityHash, namespace: semanticNamespace, expectedHeadHash };
       const signedPayload = normalizeProofMessage(signedFields);
       const branchSeed = await deriveBranchProofSeed(kernelSeedHex, username);
       const { privateKey } = await importEd25519SigningKey(branchSeed);
       const signature = await signEd25519Proof(privateKey, signedPayload);
-      const result = await this.write(expression, value, { signature, signedPayload });
+      const result = await this.write(expression, value, {
+        signature,
+        signedPayload,
+        body: { namespace: semanticNamespace, expectedHeadHash },
+      });
       // Mirror the now-CONFIRMED value into the local kernel so reactive
       // consumers (useMeValue, the Inspector's me.explain()) observe the
       // same destination this write just durably reached — this mirroring
