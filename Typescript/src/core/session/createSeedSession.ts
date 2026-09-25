@@ -28,14 +28,33 @@ import {
 // throws ACTIVE_EXPRESSION_REQUIRED without it, and this session backend
 // is deliberately "already-derived seed, no username at construction" --
 // see SeedSessionProviderProps.sessionBackend's own doc comment.
+//
+// TODO (flagged in review, not fixed here): this reaches into a symbol
+// named `me.internal.*` -- an internal hook, not part of this.me's public
+// API surface -- from the GUI side of the package boundary. It works, and
+// nothing about the claim/open redesign depends on this specific
+// mechanism (buildProof() only needs SOME working active expression by
+// the time it calls prove()), but the cleaner fix is architectural, not
+// this call site: give createSeedSession() the username at construction
+// time (the same way createCleakerSession.ts's 2-arg ME(username, secret)
+// constructor already gets one for free) so this backend never needs to
+// reach past the public constructor at all.
 const ME_SET_ACTIVE_EXPRESSION = Symbol.for('me.internal.setActiveExpression');
 
-function randomNonce(): string {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
+// "open:" prefixed on purpose, matching cleaker's own generateOpenNonce()
+// (binder.ts) -- monad's openNamespace() requires this exact prefix on a
+// proof's `challenge` before treating it as an open nonce at all, since a
+// claim proof's own challenge is not reliably null for every caller (see
+// that function's own comment for the replay this closes).
+function openNonce(): string {
+  const random = (() => {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+  })();
+  return `open:${random}`;
 }
 
 // Builds a real this.me ClaimProof for `namespace`, reusing cleaker's own
@@ -366,7 +385,7 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
 
     // A fresh nonce every call -- this IS open's own anti-replay challenge
     // (monad's openNamespace() rejects a repeated one). Never cached.
-    const proof = await buildProof(me, semanticNamespace, randomNonce());
+    const proof = await buildProof(me, semanticNamespace, openNonce());
     const result = await monad.openNamespace({
       semanticNamespace,
       proof,
