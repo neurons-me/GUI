@@ -135,8 +135,8 @@ export function writeKernelThemeFacts(me: MeLike, themeId: string, mode: 'light'
 
 /**
  * The real, cross-device counterpart to writeKernelThemeFacts's local-only
- * GUI.theme.* mirror. Root-level theme.id/theme.mode -- same shape as
- * profile.name/profile.avatar/etc (see modules/GUI's claim.ts) -- written
+ * GUI.theme.* mirror. profile.theme.id/profile.theme.mode -- a preference
+ * belongs under the profile branch, not loose at the kernel root -- written
  * through the same real, signed self:write path writeMeValue already uses
  * for every other namespace-scoped fact. That means it hash-chains into
  * this identity's own memory log and hydrates back out on the NEXT
@@ -150,8 +150,8 @@ export function writeKernelThemeFacts(me: MeLike, themeId: string, mode: 'light'
  * profile-write timing).
  */
 export function writeSyncedThemePreference(me: MeLike, themeId: string, mode: 'light' | 'dark'): void {
-  writeMeValue(me, 'theme.id', themeId, { allowBarePath: true });
-  writeMeValue(me, 'theme.mode', mode, { allowBarePath: true });
+  writeMeValue(me, 'profile.theme.id', themeId, { allowBarePath: true });
+  writeMeValue(me, 'profile.theme.mode', mode, { allowBarePath: true });
 }
 
 /**
@@ -163,8 +163,8 @@ export function writeSyncedThemePreference(me: MeLike, themeId: string, mode: 'l
  * instead of stomping it with an empty choice.
  */
 export function readSyncedThemePreference(me: MeLike): { themeId: string | null; mode: 'light' | 'dark' | null } {
-  const themeId = String(readMeValue(me, 'theme.id', { allowBarePath: true }) || '').trim() || null;
-  const rawMode = readMeValue(me, 'theme.mode', { allowBarePath: true });
+  const themeId = String(readMeValue(me, 'profile.theme.id', { allowBarePath: true }) || '').trim() || null;
+  const rawMode = readMeValue(me, 'profile.theme.mode', { allowBarePath: true });
   const mode = rawMode === 'dark' ? 'dark' : rawMode === 'light' ? 'light' : null;
   return { themeId, mode };
 }

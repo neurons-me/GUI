@@ -349,14 +349,15 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 //    fact, not a synced/signed write. localStorage (this.gui's own
 //    Theme.tsx) stays the real, always-available store pre-session.
 // 2. Real sync -- once a namespace is actually authenticated,
-//    writeSyncedThemePreference makes theme.id/theme.mode a namespace-
-//    scoped fact (LiveOwnProfile's "signed, cross-device" shape, matching
-//    profile.name/profile.avatar), and on the transition INTO
-//    authenticated, any theme already synced from a prior session (any
-//    device/origin) overrides whatever localStorage happened to have for
-//    THIS origin -- closing the exact bug where cleaker.me/netget.site/
-//    local.cleaker each kept their own independent theme choice forever,
-//    since localStorage can never cross origins no matter who writes it.
+//    writeSyncedThemePreference makes profile.theme.id/profile.theme.mode
+//    a namespace-scoped fact (LiveOwnProfile's "signed, cross-device"
+//    shape) under the profile branch, not loose at the kernel root, and
+//    on the transition INTO authenticated, any theme already synced from
+//    a prior session (any device/origin) overrides whatever localStorage
+//    happened to have for THIS origin -- closing the exact bug where
+//    cleaker.me/netget.site/local.cleaker each kept their own independent
+//    theme choice forever, since localStorage can never cross origins no
+//    matter who writes it.
 // Renders nothing; pure effect.
 const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session }) => {
   const { themeId, mode, setThemeId, setMode } = useThemeContext();
