@@ -27,14 +27,6 @@ const ROOT_BYTES = 32;
 // scheme.
 const HKDF_SALT = 'this.me/bip39-recovery:v1';
 const AUTH_ROOT_INFO = 'this.me/bip39-auth-root:v1';
-// Domain-separated from AUTH_ROOT_INFO on purpose, even though both derive
-// FROM the same 32-byte root (not from the raw BIP-39 seed again — see
-// deriveWireSecretFromRootBytes's own doc comment for why that specific
-// choice matters for recovery). Two different derived values from one
-// root, each scoped to its own use, is the same pattern this.me's own
-// crypto.ts already uses for auth vs. other branch-scoped keys.
-const WIRE_SECRET_INFO = 'this.me/bip39-wire-secret:v1';
-const WIRE_SECRET_BYTES = 32;
 
 function normalizePhrase(words: string[]): string {
   return words.map((w) => String(w || '').trim().toLowerCase()).join(' ').trim();
@@ -103,32 +95,3 @@ export async function deriveIdentityRootHexFromPhrase(words: string[]): Promise<
   return bytesToHex(await deriveIdentityRootBytesFromPhrase(words));
 }
 
-/**
- * Derives the `secret` sent over the wire to claim/signIn — the value
- * modules/monad's claim/records.ts scrypt's into the key that
- * encrypts/decrypts `noise` (verified live: that derivation is completely
- * independent of identityHash/publicKey/the signed proof; see
- * createCleakerSession.ts's identityRootHex doc comment).
- *
- * Deliberately derived from the ROOT (not from username+password, and not
- * by re-deriving from the raw BIP-39 seed a second time) — this is what
- * makes full data recovery possible without any server change: the same
- * root is reconstructible from EITHER the 12-word phrase (recovery, no
- * password involved at all) OR the local encrypted vault (day-to-day,
- * password only ever unlocks the vault, never reaches the server). Either
- * path derives the exact same wire secret, which reproduces the exact same
- * `noise` decryption key the original claim established — recovery is
- * then just calling the ALREADY-EXISTING signIn/open endpoint with a
- * re-derived secret, not a new server capability.
- *
- * Deriving from the root specifically (not the raw bip39Seed) matters
- * because day-to-day sign-in only ever has the ROOT on hand (unwrapped
- * from the vault) — it never re-touches the phrase or the raw BIP-39 seed
- * at all after registration. One shared root, two domain-separated
- * children (this and the auth-root's branch-proof key) — never the other
- * way around.
- */
-export async function deriveWireSecretFromRootBytes(rootBytes: Uint8Array): Promise<string> {
-  const secretBytes = await deriveHkdfBytes(rootBytes, HKDF_SALT, WIRE_SECRET_INFO, WIRE_SECRET_BYTES);
-  return bytesToHex(secretBytes);
-}

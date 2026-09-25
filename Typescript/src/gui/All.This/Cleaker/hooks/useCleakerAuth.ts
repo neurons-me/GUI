@@ -626,8 +626,14 @@ export function useCleakerAuth(options: UseCleakerAuthOptions): UseCleakerAuthRe
   ]);
 
   const handleSignUpSubmit = useCallback(async (input: CleakerSignUpSubmitInput) => {
-    // Gateway-native claim — no monad needed.
-    // Derives keypair locally, registers pubkey with the gateway via POST /me/claim.
+    // Monad claim first, gateway claim second — reversed from the old
+    // order. The monad claim is who OWNS this namespace's data; the
+    // gateway claim (POST /me/claim, below) is who SERVES this hostname —
+    // a legitimately separate registry, but one that must never be
+    // established for a namespace whose data claim didn't actually
+    // succeed, or a hostname ends up routed to data that isn't the
+    // claiming identity's. If the monad claim fails, this throws and the
+    // gateway is never touched.
     const validated = validateUsername(input.username);
 
     if (!validated.value || validated.error) {
@@ -649,21 +655,67 @@ export function useCleakerAuth(options: UseCleakerAuthOptions): UseCleakerAuthRe
 
       // Step 2 — derive keypair from credentials
       const node = deriveCleakerNode(validated.value, input.password, hostname);
+      const userNamespace = `${validated.value}.${hostname}`;
 
-      // Step 3 — build signed claim proof
-      const nonce     = genNonce();
-      const timestamp = Date.now();
-      const challenge = canonicalJson({ method: 'POST', nonce, path: '/me/claim', timestamp });
-      const proof     = await (node as any).prove({ rootNamespace: hostname, challenge });
-      const proofB64  = btoa(JSON.stringify(proof))
+      // Step 3 — claim the namespace on the MONAD first, via POST /claims
+      // (claimNamespace() + seedClaimNamespaceSemantics() — see that
+      // function's own comment in claim/claimSemantics.ts). The claim
+      // IS the genesis write: it verifies the proof, records the real
+      // claim, and seeds me.name/me.email.primary/me.phone.primary
+      // atomically as part of the SAME internal write. There is no
+      // separate profile-write step after this — writing name/email/
+      // phone by hand here (the old step 5b) was an unsigned write to an
+      // unclaimed namespace, exactly the bypass this replaces.
+      //
+      // A distinct proof per destination: this challenge is bound to
+      // path:"/claims" specifically (own nonce, own timestamp), never the
+      // same proof /me/claim below builds for its own path — one can't
+      // be replayed as the other.
+      const claimNonce     = genNonce();
+      const claimTimestamp = Date.now();
+      const claimChallenge = canonicalJson({ method: 'POST', nonce: claimNonce, path: '/claims', timestamp: claimTimestamp });
+      const claimProof     = await (node as any).prove({ rootNamespace: hostname, challenge: claimChallenge });
+
+      const monadClaimRes = await fetch(`https://${hostname}/claims`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          namespace: userNamespace,
+          // No secret and no privateKey: claimNamespace() authorizes purely
+          // from the signed proof now (its own signature over identityHash/
+          // namespace/rootNamespace, verified against the proof's own
+          // publicKey) — a shared secret used to also travel here, but it
+          // was the exact same material the signing key itself derives
+          // from, so sending it leaked key-deriving material for no
+          // security gain. See typedocs/Architecture/Identity-Namespace-
+          // Recovery-Audit.md §12 item 7 (modules/monad's typedocs).
+          proof: claimProof,
+          username: validated.value,
+          name: input.fullName || '',
+          email: input.email || '',
+          phone: input.phone || '',
+        }),
+      });
+      const monadClaimData = await monadClaimRes.json().catch(() => ({}));
+      if (!monadClaimRes.ok) {
+        const code = monadClaimData?.error ?? String(monadClaimRes.status);
+        throw new Error(`Namespace claim failed (${code})`);
+      }
+
+      // Step 4 — gateway-native claim (routing trust), only now that the
+      // monad claim above has actually succeeded. Own proof, own destination.
+      const gwNonce     = genNonce();
+      const gwTimestamp = Date.now();
+      const gwChallenge = canonicalJson({ method: 'POST', nonce: gwNonce, path: '/me/claim', timestamp: gwTimestamp });
+      const gwProof      = await (node as any).prove({ rootNamespace: hostname, challenge: gwChallenge });
+      const gwProofB64  = btoa(JSON.stringify(gwProof))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-      // Step 4 — POST /me/claim (include profile so monad can persist name/email/phone)
       const claimRes = await fetch('/me/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          proof: proofB64,
+          proof: gwProofB64,
           username: validated.value,
           name: input.fullName || '',
           email: input.email || '',
@@ -677,51 +729,19 @@ export function useCleakerAuth(options: UseCleakerAuthOptions): UseCleakerAuthRe
         if (code === 'GATEWAY_ALREADY_CLAIMED') {
           throw new Error('This gateway is still using the old owner-only claim policy. Reload or update NetGet, then try again.');
         }
-        throw new Error(claimData.message ?? `Claim failed (${code})`);
+        throw new Error(claimData.message ?? `Gateway claim failed (${code})`);
       }
 
       // Step 5 — store session, signal authenticated
       cleakerNodeRef.current     = node;
       gatewayHostnameRef.current = hostname;
 
-      // Step 5b — write to monad blockchain: claim event + profile fields.
-      // The blockchain is the source of truth. gateway-claims.json is just a fast nginx cache.
-      const wProofBase = await (node as any).prove({ rootNamespace: hostname, challenge: canonicalJson({ method: 'POST', nonce: genNonce(), path: '/', timestamp: Date.now() }) });
-      const identityHashBase = String(wProofBase.identityHash || '');
-
-      const profileWrites: Array<{ expression: string; value: unknown }> = [
-        // Claim event — record the identity anchoring in the blockchain
-        { expression: 'claim', value: { username: validated.value, identityHash: identityHashBase, claimedAt: Date.now() } },
-        // Profile fields — canonical NRP paths
-        ...(input.fullName ? [{ expression: 'me.name',          value: input.fullName }] : []),
-        ...(input.email    ? [{ expression: 'me.email.primary',  value: input.email }]    : []),
-        ...(input.phone    ? [{ expression: 'me.phone.primary',  value: input.phone }]    : []),
-      ];
-      // The user's namespace is username.hostname — this is the blockchain thread.
-      // mDNS only resolves the machine hostname, not subdomains, so we route through
-      // the machine endpoint and pass the user's namespace in the body.
-      const userNamespace = `${validated.value}.${hostname}`;
-      for (const write of profileWrites) {
-        try {
-          // POST to /@username/ — monad resolves namespace from URL path (NRP)
-          const writeRes = await fetch(`https://${hostname}/@${validated.value}/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...write, identityHash: identityHashBase }),
-          });
-          const writeBody = await writeRes.json().catch(() => ({}));
-          console.log('[blockchain write]', write.expression, writeRes.status, writeBody);
-        } catch (err) {
-          console.warn('[profile write failed]', write.expression, err);
-        }
-      }
-
       const claimedProfile: CleakerProfileSnapshot = {
         username:  validated.value,
         name:      input.fullName || activeProfile.name,
         email:     input.email    || activeProfile.email,
         phone:     input.phone    || activeProfile.phone,
-        namespace: `${validated.value}.${hostname}`,
+        namespace: userNamespace,
         claimedAt: Date.now(),
       };
       setUsernameState(validated.value);

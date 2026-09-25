@@ -1,4 +1,5 @@
 import ME from 'this.me';
+import { parseNamespaceExpression } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
 import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
 import type { MeLike } from '@/react/types';
@@ -7,6 +8,7 @@ import {
   createMonadClient,
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
   MonadClientError,
+  type MonadClaimProof,
   type MonadClaimResult,
   type MonadClient,
   type MonadClientOptions,
@@ -18,6 +20,43 @@ import {
   normalizeMonadTransportOrigin,
 } from './monadClient';
 
+// Well-known, globally-interned symbol (Symbol.for, not an export any
+// package needs to ship) -- this.me's own mechanism for setting a kernel's
+// active expression AFTER construction, for kernels built via the 1-arg
+// raw-seed form (new ME(seed)), which never sets one at construction time
+// the way the 2-arg (who, secret) form does. Needed here because prove()
+// throws ACTIVE_EXPRESSION_REQUIRED without it, and this session backend
+// is deliberately "already-derived seed, no username at construction" --
+// see SeedSessionProviderProps.sessionBackend's own doc comment.
+const ME_SET_ACTIVE_EXPRESSION = Symbol.for('me.internal.setActiveExpression');
+
+function randomNonce(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+// Builds a real this.me ClaimProof for `namespace`, reusing cleaker's own
+// namespace grammar (parseNamespaceExpression) to split it into the handle
+// (`prefix`, this kernel's active expression) and root (`constant`,
+// prove()'s own rootNamespace) -- never hand-split, per the same reasoning
+// SpaceStructure/cleaker's parser already encodes (a 2-label-or-fewer
+// namespace is a root with no handle, not a name to slice at the first dot).
+// `challenge: null` builds a CLAIM proof; a nonce string builds an OPEN
+// proof -- same shape, verified through the identical server-side pipeline
+// (see modules/monad's claim/records.ts openNamespace() for why).
+async function buildProof(me: MeLike, namespace: string, challenge: string | null): Promise<MonadClaimProof> {
+  const parsed = parseNamespaceExpression(namespace);
+  if (!parsed.prefix) {
+    throw new SeedSessionError('NAMESPACE_REQUIRED', `"${namespace}" has no handle to prove as -- it names a root, not a claimable identity.`);
+  }
+  (me as any)[ME_SET_ACTIVE_EXPRESSION](parsed.prefix);
+  const proof = await (me as any).prove({ rootNamespace: parsed.constant, challenge });
+  return proof as MonadClaimProof;
+}
+
 const THIS_ME_SEED_STORAGE_KEY = 'this.me.seed:v1';
 
 /**
@@ -27,7 +66,7 @@ const THIS_ME_SEED_STORAGE_KEY = 'this.me.seed:v1';
  * path). GUI is already the layer that legitimately reads window.location
  * everywhere; this hands that same read to the kernel instance too, instead
  * of only living in a local variable. Origin only, never the full href: a
- * query string can carry a one-time setup/claim token (CleakerLanding.tsx's
+ * query string can carry a one-time setup/claim token (Namespace.tsx's
  * own returnTo/setupToken handling) that has no business landing in a value
  * this kernel might later disclose.
  *
@@ -62,7 +101,7 @@ export function writeKernelWindowLocation(me: MeLike): void {
  * single "construction" moment for a theme choice, it can change any time
  * during a session. localStorage (this.gui's own Theme.tsx/persistence.ts)
  * stays the real, fast, always-available store; this is a local mirror
- * only -- see CleakerLanding.tsx's own ThemeKernelMirror for the one place
+ * only -- see Namespace.tsx's own ThemeKernelMirror for the one place
  * that actually calls this, gated on a session existing at all.
  */
 export function writeKernelThemeFacts(me: MeLike, themeId: string, mode: 'light' | 'dark'): void {
@@ -305,10 +344,10 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
       throw new SeedSessionError('NAMESPACE_REQUIRED', 'Namespace is required for claim.');
     }
 
+    const proof = await buildProof(me, semanticNamespace, null);
     const result = await claimNamespace({
       semanticNamespace,
-      seed,
-      identityHash,
+      proof,
       transportOrigin,
       fetchImpl: options.fetchImpl,
       headers: options.headers,
@@ -325,10 +364,12 @@ export function createSeedSession(options: SeedSessionOptions): SeedSession {
       throw new SeedSessionError('NAMESPACE_REQUIRED', 'Namespace is required for open.');
     }
 
+    // A fresh nonce every call -- this IS open's own anti-replay challenge
+    // (monad's openNamespace() rejects a repeated one). Never cached.
+    const proof = await buildProof(me, semanticNamespace, randomNonce());
     const result = await monad.openNamespace({
       semanticNamespace,
-      seed,
-      identityHash,
+      proof,
     });
 
     replayKernelMemories(me, result.memories);

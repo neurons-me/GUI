@@ -2,7 +2,6 @@ import ME from "this.me";
 import cleaker from "cleaker";
 import render from "@/runtime/run-me";
 import { normalizeEndpoint, readSessionUsername } from "./cleakerBridge";
-import { SESSION_SECRET_STORAGE_KEY } from "./runtimeUsername";
 import { writeKernelWindowLocation } from "@/core/session/createSeedSession";
 
 export type CleakerKernelContext = {
@@ -19,15 +18,6 @@ type CreateCleakerKernelOptions = {
   endpoint: string;
   rootNamespace: string;
 };
-
-function readStorageValue(key: string): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return String(localStorage.getItem(key) || "").trim();
-  } catch {
-    return "";
-  }
-}
 
 function createBrowserSemanticFetcher(): typeof fetch {
   return async (input, init) => {
@@ -70,10 +60,21 @@ export async function createCleakerKernelContext({
   const safeEndpoint = normalizeEndpoint(endpoint);
   const safeRootNamespace = String(rootNamespace || "").trim().toLowerCase();
   const sessionUsername = readSessionUsername();
-  const sessionSecret = readStorageValue(SESSION_SECRET_STORAGE_KEY);
   const sessionNamespace =
     sessionUsername && safeRootNamespace ? `${sessionUsername}.${safeRootNamespace}` : "";
 
+  // NOTE (this pass): `secret` used to be read from SESSION_SECRET_STORAGE_KEY
+  // here and passed to trigger cleaker's "Triad auto-open" -- that option no
+  // longer exists (the shared-secret wire protocol it fed is gone; see
+  // createCleakerSession.ts's own header comment). Removed rather than
+  // adapted: `me` here is `new ME()` with no arguments, so it has no active
+  // expression and could never have produced a real signed proof for
+  // auto-open anyway (same ACTIVE_EXPRESSION_REQUIRED gate as
+  // createSeedSession.ts) -- this call was already inert for that purpose.
+  // NOT independently investigated further this pass: whether
+  // SESSION_SECRET_STORAGE_KEY (also read in AccessRequestHandler.tsx and
+  // runtimeUsername.ts) is part of some other, still-live mechanism worth
+  // its own look.
   const me = new ME() as any;
   writeKernelWindowLocation(me);
   const fetcher = createBrowserSemanticFetcher();
@@ -82,7 +83,6 @@ export async function createCleakerKernelContext({
     space: safeEndpoint,
     fetcher,
     namespace: sessionNamespace || undefined,
-    secret: sessionNamespace && sessionSecret ? sessionSecret : undefined,
   }) as any;
 
   try {

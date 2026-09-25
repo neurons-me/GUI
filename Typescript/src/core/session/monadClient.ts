@@ -2,9 +2,13 @@ export const DEFAULT_MONAD_TRANSPORT_ORIGIN = 'http://localhost:8161';
 
 const CLAIM_ERROR_CODES = [
   'NAMESPACE_REQUIRED',
-  'SEED_REQUIRED',
-  'IDENTITY_HASH_REQUIRED',
+  'PROOF_REQUIRED',
+  'PROOF_INVALID',
+  'PROOF_MESSAGE_INVALID',
+  'PROOF_NAMESPACE_MISMATCH',
+  'PROOF_TIMESTAMP_INVALID',
   'CLAIM_KEY_INVALID',
+  'CLAIM_KEY_REQUIRED',
   'CLAIM_KEYPAIR_MISMATCH',
   'NAMESPACE_TAKEN',
   'CLAIM_PERSIST_FAILED',
@@ -13,12 +17,15 @@ const CLAIM_ERROR_CODES = [
 
 const OPEN_ERROR_CODES = [
   'NAMESPACE_REQUIRED',
-  'SEED_REQUIRED',
-  'IDENTITY_HASH_REQUIRED',
+  'PROOF_REQUIRED',
+  'PROOF_MESSAGE_INVALID',
+  'PROOF_NAMESPACE_MISMATCH',
+  'PROOF_TIMESTAMP_INVALID',
+  'NONCE_REQUIRED',
+  'NONCE_REUSED',
   'CLAIM_NOT_FOUND',
-  'IDENTITY_MISMATCH',
+  'CLAIM_KEY_UNAVAILABLE',
   'CLAIM_VERIFICATION_FAILED',
-  'NOISE_DECRYPT_FAILED',
   'FULL_NAMESPACE_REQUIRED',
 ] as const;
 
@@ -129,18 +136,30 @@ export type MonadRequestOptions = {
 
 export type MonadClientOptions = Omit<MonadRequestOptions, 'signal'>;
 
+// this.me's own ME.prove() result shape (see modules/monad's
+// claim/types.ts NamespaceClaimProof, which this mirrors exactly). Both
+// claim and open verify through the identical pipeline server-side,
+// distinguished only by `challenge` being present (open) or null (claim) --
+// see monad's claim/records.ts openNamespace() for the full reasoning.
+export type MonadClaimProof = {
+  message: string;
+  signature: string;
+  publicKey: string;
+  timestamp?: number | null;
+};
+
 export type MonadClaimInput = MonadRequestOptions & {
   semanticNamespace: string;
-  seed: string;
-  identityHash: string;
+  proof: MonadClaimProof;
+  identityHash?: string;
   publicKey?: string | null;
   privateKey?: string | null;
 };
 
 export type MonadOpenInput = MonadRequestOptions & {
   semanticNamespace: string;
-  seed: string;
-  identityHash: string;
+  proof: MonadClaimProof;
+  identityHash?: string;
 };
 
 export type MonadWriteInput<TValue = unknown> = MonadRequestOptions & {
@@ -186,7 +205,6 @@ export type MonadOpenResult = {
   target: MonadTarget;
   namespace: string;
   identityHash: string;
-  noise: string;
   memories: MonadReplayMemory[];
   openedAt: number;
   verified: boolean;
@@ -383,7 +401,6 @@ function readDetail(payload: RawEnvelope): string | null {
 }
 
 function mapWireErrorCode(raw: string): string {
-  if (raw === 'SECRET_REQUIRED') return 'SEED_REQUIRED';
   return raw;
 }
 
@@ -614,8 +631,6 @@ export async function claimNamespace(
 ): Promise<MonadClaimResult> {
   const semanticNamespace = normalizeMonadSemanticNamespace(input.semanticNamespace);
   const transportOrigin = normalizeMonadTransportOrigin(input.transportOrigin);
-  const seed = String(input.seed || '');
-  const identityHash = String(input.identityHash || '').trim();
 
   if (!semanticNamespace) {
     throw createClientError<MonadClaimErrorCode>({
@@ -627,24 +642,14 @@ export async function claimNamespace(
       message: 'Semantic namespace is required.',
     });
   }
-  if (!seed) {
+  if (!input.proof) {
     throw createClientError<MonadClaimErrorCode>({
-      code: 'SEED_REQUIRED',
-      status: 400,
+      code: 'PROOF_REQUIRED',
+      status: 403,
       operation: 'claim',
       semanticNamespace,
       transportOrigin,
-      message: 'Seed is required for claim.',
-    });
-  }
-  if (!identityHash) {
-    throw createClientError<MonadClaimErrorCode>({
-      code: 'IDENTITY_HASH_REQUIRED',
-      status: 400,
-      operation: 'claim',
-      semanticNamespace,
-      transportOrigin,
-      message: 'identityHash is required for claim.',
+      message: 'A real Ed25519 proof is required for claim — see this.me\'s prove().',
     });
   }
 
@@ -663,8 +668,8 @@ export async function claimNamespace(
     path: `/me/kernel:claim/${encodeURIComponent(semanticNamespace)}`,
     knownErrorCodes: CLAIM_ERROR_CODES,
     body: {
-      secret: seed,
-      identityHash,
+      proof: input.proof,
+      ...(input.identityHash ? { identityHash: String(input.identityHash).trim() } : {}),
       ...(input.publicKey ? { publicKey: String(input.publicKey).trim() } : {}),
       ...(input.privateKey ? { privateKey: String(input.privateKey).trim() } : {}),
     },
@@ -706,8 +711,6 @@ export async function openNamespace(
 ): Promise<MonadOpenResult> {
   const semanticNamespace = normalizeMonadSemanticNamespace(input.semanticNamespace);
   const transportOrigin = normalizeMonadTransportOrigin(input.transportOrigin);
-  const seed = String(input.seed || '');
-  const identityHash = String(input.identityHash || '').trim();
 
   if (!semanticNamespace) {
     throw createClientError<MonadOpenErrorCode>({
@@ -719,24 +722,14 @@ export async function openNamespace(
       message: 'Semantic namespace is required.',
     });
   }
-  if (!seed) {
+  if (!input.proof) {
     throw createClientError<MonadOpenErrorCode>({
-      code: 'SEED_REQUIRED',
-      status: 400,
+      code: 'PROOF_REQUIRED',
+      status: 403,
       operation: 'open',
       semanticNamespace,
       transportOrigin,
-      message: 'Seed is required for open.',
-    });
-  }
-  if (!identityHash) {
-    throw createClientError<MonadOpenErrorCode>({
-      code: 'IDENTITY_HASH_REQUIRED',
-      status: 400,
-      operation: 'open',
-      semanticNamespace,
-      transportOrigin,
-      message: 'identityHash is required for open.',
+      message: 'A real Ed25519 proof (with a fresh per-open nonce as its challenge) is required for open.',
     });
   }
 
@@ -749,8 +742,7 @@ export async function openNamespace(
     path: `/me/kernel:open/${encodeURIComponent(semanticNamespace)}`,
     knownErrorCodes: OPEN_ERROR_CODES,
     body: {
-      secret: seed,
-      identityHash,
+      proof: input.proof,
     },
     fetchImpl: input.fetchImpl,
     headers: input.headers,
@@ -768,11 +760,6 @@ export async function openNamespace(
     target,
     namespace: target.namespace.me,
     identityHash: requireStringField<MonadOpenErrorCode>(payload, 'identityHash', {
-      operation: 'open',
-      semanticNamespace,
-      transportOrigin,
-    }),
-    noise: requireStringField<MonadOpenErrorCode>(payload, 'noise', {
       operation: 'open',
       semanticNamespace,
       transportOrigin,

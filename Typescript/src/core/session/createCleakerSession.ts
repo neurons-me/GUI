@@ -2,14 +2,15 @@
 // bindKernel() (cleaker(me, {...})) instead of monadClient.ts's bare REST
 // calls. Exists ALONGSIDE createSeedSession.ts, not replacing it (see
 // SeedSessionProvider.tsx's pluggable backend) — this is what actually
-// "mounts you onto the .me kernel" rather than just validating a secret
-// against the server: it constructs a real kernel already bound to a
-// namespace (ME(username, secret, { namespace })), and lets cleaker's own
-// claim/signIn send a REAL signed proof (me['!'].prove()) alongside the
-// secret. monadClient.ts's claimNamespace()/openNamespace() send only
-// { secret, identityHash } — the server accepts an unverified, self-asserted
-// identityHash whenever no proof is present (confirmed live: claim/records.ts's
-// resolveClaimIdentity()). cleaker's claim path closes that gap.
+// "mounts you onto the .me kernel" rather than just validating a shared
+// secret against the server: it constructs a real kernel already bound to
+// a namespace (ME(username, secret, { namespace })), and lets cleaker's own
+// claim/signIn send a REAL signed proof (me['!'].prove()) — the ONLY thing
+// either call sends now, since a shared "secret" was removed from the wire
+// protocol entirely (it used to be the exact same material the signing key
+// itself derives from, so sending it leaked key-deriving material for no
+// security gain — see typedocs/Architecture/Identity-Namespace-Recovery-
+// Audit.md §12 item 7, modules/monad's typedocs).
 import ME, {
   deriveBranchProofSeed,
   importEd25519SigningKey,
@@ -21,7 +22,6 @@ import type { CleakerNode, MeKernel } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
 import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
-import { deriveWireSecretFromRootBytes, hexToBytes } from '@/core/identity/recoveryPhrase';
 import {
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
   MonadClientError,
@@ -72,31 +72,26 @@ export type CleakerSessionOptions = MonadClientOptions & {
    */
   live?: boolean;
   /**
-   * Overrides what BOTH the kernel's identity root (`#seed`) AND the wire
-   * `secret` are derived from. Default (omitted): `#seed` AND `secret`
-   * are both deriveCompoundSeed(username, password) — the identity IS the
-   * password, with no independent backup, exactly as before this field
-   * existed.
+   * Overrides what the kernel's identity root (`#seed`) is derived from.
+   * Default (omitted): `#seed` is deriveCompoundSeed(username, password) —
+   * the identity IS the password, with no independent backup.
    *
    * Pass a hex root (e.g. from recoveryPhrase.ts's
    * deriveIdentityRootHexFromPhrase, itself reconstructible from either a
-   * 12-word phrase or a password-unwrapped local vault) to make BOTH:
-   * - the signed proof (identityHash/publicKey — see prove()) derive from
-   *   this root instead of the password, and
-   * - `secretForWire` derive from this SAME root too (via
-   *   deriveWireSecretFromRootBytes), NOT from username+password anymore.
+   * 12-word phrase or a password-unwrapped local vault) to make the signed
+   * proof (identityHash/publicKey — see prove()) derive from this root
+   * instead of the password.
    *
-   * That second part is what makes recovery-with-data-access possible
-   * without any server change: `secret` is what the server (modules/
-   * monad's claim/records.ts) scrypt's into the key that encrypts/decrypts
-   * `noise` — fully independent of identityHash/publicKey validation
-   * (verified live). Re-deriving the same root from the phrase later
-   * reproduces the exact same `secret`, which reproduces the exact same
-   * `noise`-decryption key the original claim established — recovery
-   * becomes calling the ALREADY-EXISTING signIn/open endpoint with a
-   * re-derived secret, not a new server capability. The password itself
-   * never factors into anything sent to the server on this path at all;
-   * it only ever unlocks the local vault.
+   * This is also the whole recovery mechanism now, with no separate wire
+   * concept needed: re-deriving the same root from the phrase later
+   * reproduces the exact same signing key prove() used originally, so
+   * recovery is just calling the ALREADY-EXISTING claim/signIn endpoints
+   * with a proof signed by the recovered key — not a new server capability,
+   * and not a value ever sent over the wire on its own. The password itself
+   * never factors into anything sent to the server on this path at all; it
+   * only ever unlocks the local vault. (Previously this also swapped what
+   * a separate "wire secret" derived from, back when open() sent one —
+   * that mechanism is gone; see this file's own header comment for why.)
    */
   identityRootHex?: string;
 };
@@ -130,7 +125,7 @@ function toMonadClientError(
 // bind.test.ts). So `memories: []` here is a real, deliberate difference
 // from monadClient's shape, not a bug: nothing needs to replay them a
 // second time the way createSeedSession.ts's open() does for the REST path.
-function toMonadOpenResult(result: { namespace: string; identityHash: string; noise: string; openedAt: number }): MonadOpenResult {
+function toMonadOpenResult(result: { namespace: string; identityHash: string; openedAt: number }): MonadOpenResult {
   const target: MonadTarget = {
     namespace: { me: result.namespace, host: result.namespace },
     operation: 'open',
@@ -142,7 +137,6 @@ function toMonadOpenResult(result: { namespace: string; identityHash: string; no
     target,
     namespace: result.namespace,
     identityHash: result.identityHash,
-    noise: result.noise,
     memories: [],
     openedAt: result.openedAt,
     verified: true,
@@ -235,25 +229,6 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   // above, so unlike that file's own call site, no options.me guard needed.
   writeKernelWindowLocation(me);
 
-  // Lazy + memoized: deriveWireSecretFromRootBytes is WebCrypto-async, and
-  // this function itself stays synchronous (its existing contract — see
-  // SeedSessionProvider.tsx's callers, none of which await construction).
-  // Computed once, on first actual use (claim/open/sync), not at
-  // construction time.
-  let secretForWirePromise: Promise<string> | null = null;
-  const getSecretForWire = (): Promise<string> => {
-    if (!secretForWirePromise) {
-      secretForWirePromise = explicitIdentityRootHex
-        // See CleakerSessionOptions.identityRootHex's own doc comment for
-        // why this is derived from the ROOT, not from username+password —
-        // that's the entire mechanism that makes recovery-with-data
-        // possible without a server change.
-        ? deriveWireSecretFromRootBytes(hexToBytes(explicitIdentityRootHex))
-        : Promise.resolve(deriveCompoundSeed(username, password));
-    }
-    return secretForWirePromise;
-  };
-
   const monad = createMonadClient(options);
   const transportOrigin = normalizeMonadTransportOrigin(
     options.transportOrigin || DEFAULT_MONAD_TRANSPORT_ORIGIN,
@@ -273,16 +248,17 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   // kernel, and resolveSurfaceNamespaceConstant()'s new fallback (Stage 2)
   // reads it from there.
   //
-  // Also deliberately NOT passing `secret` here. bindKernel's "Triad
-  // auto-open" fires a background signIn() the instant options.secret is
-  // truthy (binder.ts: `if (options.secret) { _ready = signIn({namespace:
-  // explicitNamespace, ...}) }`) — and explicitNamespace resolves from the
-  // kernel's own bound root (Stage 2's fallback) even with no explicit
-  // `namespace` passed here, so this fires for real. That races the
-  // claim()/open() calls below, which already pass `secret` per-call
-  // (confirmed live: two concurrent claim attempts for the same brand-new
-  // namespace, one racing to NAMESPACE_TAKEN and cascading through every
-  // origin fallback down to a real CORS-blocked cleaker.me request).
+  // Note: `me` here always has a resolvable active expression (2-arg
+  // constructor, or the explicit `me['@'](username)` call above) --
+  // bindKernel's "Triad auto-open" (binder.ts) fires a background signIn()
+  // whenever that's true, regardless of anything passed here, so it fires
+  // for real. That races the claim()/open() calls below (confirmed live:
+  // two concurrent claim attempts for the same brand-new namespace, one
+  // racing to NAMESPACE_TAKEN and cascading through every origin fallback
+  // down to a real CORS-blocked cleaker.me request) -- unrelated to
+  // anything this session passes as options, so there is no option here to
+  // avoid it with; it's inherent to constructing `me` with an active
+  // expression at all.
   const node: CleakerNode = cleaker(me as unknown as MeKernel, {
     bootstrap: [transportOrigin],
     fetcher: options.fetchImpl,
@@ -322,8 +298,9 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     }
 
     try {
-      const secret = await getSecretForWire();
-      const result = await node.claim({ namespace: semanticNamespace, secret });
+      // node.claim() builds its own real proof internally (proveKernelNamespace,
+      // cleaker's binder.ts) -- no secret to pass on this path at all anymore.
+      const result = await node.claim({ namespace: semanticNamespace });
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
@@ -340,8 +317,9 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     }
 
     try {
-      const secret = await getSecretForWire();
-      const result = await node.signIn({ namespace: semanticNamespace, secret });
+      // node.signIn() builds its own real proof internally too, with a
+      // fresh per-open nonce as its challenge -- same as claim, no secret.
+      const result = await node.signIn({ namespace: semanticNamespace });
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
