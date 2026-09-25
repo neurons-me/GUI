@@ -2,7 +2,7 @@ import type { AccessConfirmationInput, PinVerificationInput } from '../types';
 
 type AccessUiBridge = {
   requestConfirmation: (input: AccessConfirmationInput) => Promise<boolean>;
-  requestPinVerification: (input: PinVerificationInput) => Promise<boolean>;
+  requestPinVerification?: (input: PinVerificationInput) => Promise<boolean>;
 };
 
 let activeBridge: AccessUiBridge | null = null;
@@ -26,6 +26,6 @@ export async function requestAccessConfirmationFromUi(
 export async function requestPinVerificationFromUi(
   input: PinVerificationInput
 ): Promise<boolean | null> {
-  if (!activeBridge) return null;
+  if (!activeBridge?.requestPinVerification) return null;
   return activeBridge.requestPinVerification(input);
 }
