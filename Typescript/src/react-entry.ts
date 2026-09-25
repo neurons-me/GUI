@@ -16,11 +16,11 @@ export type {
 } from '@/react/session/SessionSurface';
 export { default as MeLauncher, useMeLauncherView } from '@/react/session/MeLauncher';
 export type { MeLauncherProps, MeLauncherView } from '@/react/session/MeLauncher';
-export { default as CleakerLanding } from '@/react/session/CleakerLanding';
-export type { CleakerLandingProps } from '@/react/session/CleakerLanding';
+export { default as Namespace } from '@/react/session/Namespace';
+export type { NamespaceProps } from '@/react/session/Namespace';
 // The host's own hardware/activity dashboard — deliberately not Cleaker
 // (no claim, no identity, no namespace jargon), for a host that isn't
-// itself an app (e.g. local.host's own root). See CleakerLanding above for
+// itself an app (e.g. local.host's own root). See Namespace above for
 // the identity/claim landing (local.cleaker) — two separate surfaces.
 export { default as HostSurface } from '@/gui/All.This/Host/HostSurface';
 export type { HostSurfaceProps } from '@/gui/All.This/Host/HostSurface';

@@ -1,4 +1,4 @@
-// CleakerLanding.tsx — full-page ".me" landing, for a host whose entire job
+// Namespace.tsx — full-page ".me" landing, for a host whose entire job
 // is identity (e.g. local.cleaker) rather than an app dashboard. Same
 // session as MeLauncher.tsx (shares useMeLauncherView() — one source of
 // truth for "how do I get a seed"), different chrome: MeLauncher is a
@@ -63,7 +63,7 @@ interface DirectoryUser {
   profileImg?: string | null;
 }
 
-export interface CleakerLandingProps {
+export interface NamespaceProps {
   sx?: any;
   /**
    * The real namespace root this component binds to, e.g.
@@ -240,7 +240,7 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
   disconnected: '',
 };
 
-// Local extensions of CleakerLandingProps (like the removed `destination`
+// Local extensions of NamespaceProps (like the removed `destination`
 // prop before them), not a change to that shared, exported type -- only
 // GUI supplies these, wiring Beatle's own resolution into
 // the SAME shared context the sidebar and /netget read from, instead of
@@ -251,7 +251,7 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
 // the instant Beatle's own (weaker) mesh resolution does.
 // Handed in by the renderer (renderGuiDocumentPage): the document path a page
 // was declared at. Defaults keep each page usable on its own.
-type DocumentPageProps = CleakerLandingProps & {
+type DocumentPageProps = NamespaceProps & {
   'data-gui-node-id'?: string;
   'data-gui-component'?: string;
 };
@@ -2143,7 +2143,7 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 // /keychain/claim and /keychain/admin-sign are deliberately NOT nested
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
-const GUI: React.FC<CleakerLandingProps> = (props) => {
+const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
@@ -2412,7 +2412,7 @@ const StandalonePage: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 // The steps of the netget claim (claim, sign) are declared under
 // GUI.content.netget and served on their own routes, outside the shell.
-const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
+const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
   <Routes>
     <Route path="/*" element={<GUI {...props} />} />
     {flattenGuiDocument()
@@ -2427,24 +2427,24 @@ const CleakerRoutes: React.FC<CleakerLandingProps> = (props) => (
   </Routes>
 );
 
-// CleakerLanding is meant to be dropped in as an entire page (see the file
+// Namespace is meant to be dropped in as an entire page (see the file
 // header), so it owns its own routing rather than depending on a host app
 // to already have one — but it can't just always wrap itself in a fresh
 // router: react-router v6 throws if a <Router> renders inside another
 // Router's context, and this component IS rendered inside one already in
 // at least one real place — Storybook's own global decorator wraps every
-// story in <MemoryRouter> (.storybook/preview.tsx), and CleakerLanding is
+// story in <MemoryRouter> (.storybook/preview.tsx), and Namespace is
 // no exception. RouterProvider (Router/Router.tsx) is this exact guard,
 // already written once there — reused here instead of a second, hand-rolled
 // copy of the same useInRouterContext()+<BrowserRouter> check. It reuses
 // the ambient router (MemoryRouter in Storybook, or whatever a future host
 // provides) when already inside one; only a truly standalone render
-// (netget's real App.jsx today — CleakerLanding renders as a SIBLING of
+// (netget's real App.jsx today — Namespace renders as a SIBLING of
 // netget's own <Router>, not nested inside it) gets its own <BrowserRouter>.
-const CleakerLanding: React.FC<CleakerLandingProps> = (props) => (
+const Namespace: React.FC<NamespaceProps> = (props) => (
   <RouterProvider>
     <CleakerRoutes {...props} />
   </RouterProvider>
 );
 
-export default CleakerLanding;
+export default Namespace;
