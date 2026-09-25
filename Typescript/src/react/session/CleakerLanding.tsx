@@ -26,7 +26,13 @@ import BlocksTable from '@/gui/All.This/Cleaker/Namespace/Blocks/BlocksTable';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
-import { writeKernelThemeFacts, type SeedSession } from '@/core/session/createSeedSession';
+import {
+  writeKernelThemeFacts,
+  writeSyncedThemePreference,
+  readSyncedThemePreference,
+  type SeedSession,
+} from '@/core/session/createSeedSession';
+import { readMeValue } from '@/runtime/run-me';
 import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
@@ -337,16 +343,24 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
   );
 };
 
-// Local mirror only -- same "GUI.*" branch, same reasoning as
-// writeKernelWindowLocation (createSeedSession.ts): a plain instance fact,
-// not a synced/signed write. localStorage (this.gui's own Theme.tsx) stays
-// the real, always-available store, including with no session at all --
-// this only ever ADDS a reflection into the active `me`, on top of that,
-// whenever both a session and a theme choice exist. Renders nothing; pure
-// effect. Not the write-and-subscribe shape LiveOwnProfile uses (that's
-// for a namespace-scoped, signed, cross-device fact -- this is neither).
+// Two jobs, now genuinely different in kind:
+// 1. Local mirror -- same "GUI.*" branch, same reasoning as
+//    writeKernelWindowLocation (createSeedSession.ts): a plain instance
+//    fact, not a synced/signed write. localStorage (this.gui's own
+//    Theme.tsx) stays the real, always-available store pre-session.
+// 2. Real sync -- once a namespace is actually authenticated,
+//    writeSyncedThemePreference makes theme.id/theme.mode a namespace-
+//    scoped fact (LiveOwnProfile's "signed, cross-device" shape, matching
+//    profile.name/profile.avatar), and on the transition INTO
+//    authenticated, any theme already synced from a prior session (any
+//    device/origin) overrides whatever localStorage happened to have for
+//    THIS origin -- closing the exact bug where cleaker.me/netget.site/
+//    local.cleaker each kept their own independent theme choice forever,
+//    since localStorage can never cross origins no matter who writes it.
+// Renders nothing; pure effect.
 const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session }) => {
-  const { themeId, mode } = useThemeContext();
+  const { themeId, mode, setThemeId, setMode } = useThemeContext();
+  const wasAuthenticatedRef = useRef(false);
 
   // The tab's own kernel, where GUI.window.* and GUI.theme.* are written, is
   // what the Inspector's Explain asks first for GUI paths (read-only).
@@ -360,6 +374,32 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
   useEffect(() => {
     if (!session?.me || !themeId) return;
     writeKernelThemeFacts(session.me, themeId, mode);
+  }, [session, themeId, mode]);
+
+  // Hydrate on the anonymous -> authenticated transition only: a synced
+  // preference from a prior session (any origin) wins over this tab's own
+  // localStorage default. Never re-runs while already authenticated, so it
+  // can't fight the user's own live theme clicks during the session.
+  useEffect(() => {
+    const me = session?.me;
+    const authenticated = Boolean(me && readMeValue(me, 'identity.session.authenticated', { allowBarePath: true }));
+    const justAuthenticated = authenticated && !wasAuthenticatedRef.current;
+    wasAuthenticatedRef.current = authenticated;
+    if (!justAuthenticated || !me) return;
+
+    const synced = readSyncedThemePreference(me);
+    if (synced.themeId) setThemeId(synced.themeId);
+    if (synced.mode) setMode(synced.mode);
+  }, [session, setMode, setThemeId]);
+
+  // Push every live theme change into the synced, namespace-scoped fact --
+  // but only once authenticated (an anonymous kernel has no namespace to
+  // sync against yet, same timing claim.ts's own profile writes use).
+  useEffect(() => {
+    const me = session?.me;
+    if (!me || !themeId) return;
+    if (!readMeValue(me, 'identity.session.authenticated', { allowBarePath: true })) return;
+    writeSyncedThemePreference(me, themeId, mode);
   }, [session, themeId, mode]);
 
   return null;

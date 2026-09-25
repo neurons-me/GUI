@@ -122,10 +122,51 @@ export function writeKernelWindowLocation(me: MeLike): void {
  * stays the real, fast, always-available store; this is a local mirror
  * only -- see Namespace.tsx's own ThemeKernelMirror for the one place
  * that actually calls this, gated on a session existing at all.
+ *
+ * This is deliberately NOT the cross-device fix -- see
+ * writeSyncedThemePreference below for that. Kept as-is because the
+ * Inspector's Explain panel still reads GUI.theme.* for this tab's own
+ * instance facts, independent of whether a real namespace is signed in.
  */
 export function writeKernelThemeFacts(me: MeLike, themeId: string, mode: 'light' | 'dark'): void {
   (me as any).GUI.theme.id(themeId);
   (me as any).GUI.theme.mode(mode);
+}
+
+/**
+ * The real, cross-device counterpart to writeKernelThemeFacts's local-only
+ * GUI.theme.* mirror. Root-level theme.id/theme.mode -- same shape as
+ * profile.name/profile.avatar/etc (see modules/GUI's claim.ts) -- written
+ * through the same real, signed self:write path writeMeValue already uses
+ * for every other namespace-scoped fact. That means it hash-chains into
+ * this identity's own memory log and hydrates back out on the NEXT
+ * open() (replayKernelMemories below), on any device/origin -- unlike
+ * localStorage, which is stuck per browser-origin by construction and can
+ * never be the same across cleaker.me/netget.site/local.cleaker.
+ *
+ * Only call this once a namespace is actually claimed/authenticated --
+ * writing it against an anonymous, unclaimed kernel has no namespace to
+ * sync against, so it would just be local noise (matching claim.ts's own
+ * profile-write timing).
+ */
+export function writeSyncedThemePreference(me: MeLike, themeId: string, mode: 'light' | 'dark'): void {
+  writeMeValue(me, 'theme.id', themeId, { allowBarePath: true });
+  writeMeValue(me, 'theme.mode', mode, { allowBarePath: true });
+}
+
+/**
+ * The read-side counterpart to writeSyncedThemePreference -- what a caller
+ * asks right after a session opens/authenticates to find out whether THIS
+ * identity already has a synced theme preference from a prior session (on
+ * any device/origin). Returns null fields when nothing has been synced
+ * yet, so the caller can fall back to localStorage's existing value
+ * instead of stomping it with an empty choice.
+ */
+export function readSyncedThemePreference(me: MeLike): { themeId: string | null; mode: 'light' | 'dark' | null } {
+  const themeId = String(readMeValue(me, 'theme.id', { allowBarePath: true }) || '').trim() || null;
+  const rawMode = readMeValue(me, 'theme.mode', { allowBarePath: true });
+  const mode = rawMode === 'dark' ? 'dark' : rawMode === 'light' ? 'light' : null;
+  return { themeId, mode };
 }
 
 export type SeedSessionErrorCode =
