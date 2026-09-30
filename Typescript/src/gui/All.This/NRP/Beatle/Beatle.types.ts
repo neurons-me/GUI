@@ -214,7 +214,7 @@ export type BeatleProps = {
   /**
    * Show the resolver combobox (which server the channel connects to).
    * Default true — Beatle's own Storybook/standalone usage still wants it.
-   * A host that already shows this elsewhere (e.g. CleakerLanding's own
+   * A host that already shows this elsewhere (e.g. Namespace's own
    * "here" badge, which answers exactly the same question — which server
    * you're actually on) should pass false: showing the same thing twice,
    * under two different labels ("here" vs. a bare "namespace" placeholder
@@ -237,5 +237,13 @@ export type BeatleProps = {
    */
   onStateChange?: (state: ResolutionState) => void;
   variant?: 'bar' | 'bubble';
+  /**
+   * `variant="bubble"` only: id passed to `useLauncherPopover` so this
+   * Beatle's expanded popover shares the same "only one launcher open at a
+   * time" mutual exclusion as ThemeLauncher/DevToolsLauncher when several
+   * sit in the same rail/bar. Defaults to `'beatle'` -- override only if
+   * two independent Beatle bubbles are ever mounted on the same page.
+   */
+  launcherId?: string;
   sx?: any;
 };

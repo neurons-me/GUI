@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { SxProps, Theme } from '@mui/material/styles';
 import type { TopBarProps, TopBarElement } from './TopBar.types';
+import type { TopBarActionProps } from './components/TopBarAction/TopBarAction';
 import type { TopBarMenuItemProps } from './components/TopBarMenu/TopBarMenu.types';
 import TopBarLink from './components/TopBarLink/TopBarLink';
 import TopBarMenu from './components/TopBarMenu/TopBarMenu';
@@ -283,10 +284,28 @@ export default function TopBar(props: TopBarProps) {
         <Box sx={sxN({ display: 'flex', alignItems: 'center', flexShrink: 0, marginLeft: 'auto', gap: 1.25, pr: 1.5, color: theme.palette.text.secondary, transition: 'color 0.2s ease', '&:hover': { color: theme.palette.text.primary } }, linksSx)}>
           {isMobile ? (
             <>
-              {resolvedCenterElements.length > 0 && (
+              {/* 'action' elements were silently dropped here -- buildCollapsedItems
+                  only knows how to turn 'link'/'menu' into a TopBarMenuItemProps row
+                  (a plain label+href, see its own comment), so an arbitrary element
+                  (Beatle, or any future action) just vanished on mobile with no
+                  warning. Actions never belonged inside that link-only dropdown
+                  anyway (MUI's Menu closes on any inner click and traps focus --
+                  a bad host for a live input like Beatle's), so they render here
+                  as their own compact triggers, next to the hamburger rather than
+                  inside it. Each action is responsible for its own collapsed
+                  form (Beatle's `variant="bubble"` now expands its full bar in a
+                  Popper on click -- see Beatle.tsx) the same way TopBarMenu already
+                  is for links. */}
+              {resolvedCenterElements.filter(el => el.type === 'action').map((item, idx) => (
+                <TopBarAction key={`center-action-${idx}`} {...(item as { type: 'action'; props: TopBarActionProps }).props} />
+              ))}
+              {resolvedCenterElements.some(el => el.type !== 'action') && (
                 <TopBarMenu label="" icon={collapsedIconCenter} items={buildCollapsedItems(resolvedCenterElements)} showLabel={false} />
               )}
-              {resolvedRightElements.length > 0 && (
+              {resolvedRightElements.filter(el => el.type === 'action').map((item, idx) => (
+                <TopBarAction key={`right-action-${idx}`} {...(item as { type: 'action'; props: TopBarActionProps }).props} />
+              ))}
+              {resolvedRightElements.some(el => el.type !== 'action') && (
                 <TopBarMenu label="" icon={collapsedIconRight} items={buildCollapsedItems(resolvedRightElements)} showLabel={false} />
               )}
             </>
