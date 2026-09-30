@@ -26,7 +26,7 @@
     .prose pre { background: #111a1f; color: #e8eded; border-radius: 10px; padding: 20px 22px; margin: 20px 0; overflow-x: auto; }
     .prose pre code { background: none; color: inherit; padding: 0; font-size: 0.875rem; line-height: 1.65; }
     .prose hr { border: none; border-top: 1px solid rgba(15,23,32,0.10); margin: 36px 0; }
-    .prose table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.9rem; }
+    .prose table { display: block; overflow-x: auto; width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.9rem; }
     .prose th { text-align: left; font-weight: 700; padding: 10px 14px; background: rgba(15,106,120,0.06); border-bottom: 2px solid rgba(15,106,120,0.15); }
     .prose td { padding: 9px 14px; border-bottom: 1px solid rgba(15,23,32,0.08); vertical-align: top; line-height: 1.6; }
     .prose blockquote { border-left: 3px solid #0f6a78; padding-left: 18px; margin: 20px 0; color: #51606d; font-style: italic; }
@@ -65,7 +65,6 @@
     <a href="https://github.com/neurons-me/GUI" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> GitHub</a>
   </nav>
   <div class="page">
-    <a class="back" href="./index.html">.GUI Docs</a>
     <div id="error">Document not found.</div>
     <div class="prose" id="content"></div>
   </div>
@@ -80,14 +79,145 @@
     if (!file || !/^[\w\-]+\.md$/.test(file)) {
       document.getElementById('error').style.display = 'block';
     } else {
-      fetch('./' + file)
+      fetch('./' + file, { cache: 'no-store' })
         .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
         .then(md => {
           document.getElementById('content').innerHTML = marked.parse(md);
           const h1 = document.querySelector('.prose h1');
           document.title = (h1 ? h1.textContent + ' — ' : '') + '.GUI Docs';
+          makeTablesSortable();
+          if (file === 'GUI-Registry.md') renderTagsAsChips();
         })
         .catch(() => { document.getElementById('error').style.display = 'block'; });
+    }
+
+    // Every markdown table gets clickable column headers -- click once to sort ascending by
+    // that column's text, click again to reverse, click a different column to switch to it.
+    // This is instead of any fixed grouping baked into a doc's own generator (e.g.
+    // GUI-Registry.md's own script): the reader decides what to cluster by (Group, Path,
+    // Type, ...), not the file's row order.
+    function makeTablesSortable() {
+      document.querySelectorAll('.prose table').forEach((table) => {
+        const thead = table.querySelector('thead') || table.rows[0]?.parentElement;
+        const tbody = table.querySelector('tbody') || table;
+        const headerRow = thead ? thead.rows[0] : table.rows[0];
+        if (!headerRow) return;
+        [...headerRow.cells].forEach((th, colIndex) => {
+          th.style.cursor = 'pointer';
+          th.style.userSelect = 'none';
+          th.title = 'Click to sort';
+          let dir = 0; // 0 = unsorted, 1 = asc, -1 = desc
+          th.addEventListener('click', () => {
+            [...headerRow.cells].forEach((other) => { if (other !== th) other.removeAttribute('data-sort'); });
+            dir = dir === 1 ? -1 : 1;
+            th.setAttribute('data-sort', dir === 1 ? 'asc' : 'desc');
+            const rows = [...tbody.querySelectorAll('tr')].filter((r) => r.parentElement === tbody);
+            rows.sort((a, b) => {
+              const av = (a.cells[colIndex]?.textContent || '').trim();
+              const bv = (b.cells[colIndex]?.textContent || '').trim();
+              return dir * av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+            });
+            rows.forEach((r) => tbody.appendChild(r));
+          });
+        });
+      });
+    }
+
+    // Loads real React + this.gui as plain <script> globals (window.React/
+    // ReactDOM/GUI) -- the exact same UMD-consumption pattern netget's own
+    // static namespace-surface/index.html already uses in production (see
+    // AGENTS.md's "Two build outputs, one source"). Only fetched lazily, on
+    // pages that actually use it (GUI-Registry.md's Tags column below), so
+    // every other doc page stays a plain marked.js-only static page.
+    // Pinned to the version this doc was verified against (`npm view
+    // this.gui version` == 4.0.0 at the time) -- bump deliberately, not
+    // silently via `@latest`, so a breaking GUI release can't reformat this
+    // page's Tags without anyone noticing.
+    let guiRuntimePromise = null;
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load ' + src));
+        document.head.appendChild(s);
+      });
+    }
+    function loadGuiRuntime() {
+      if (!guiRuntimePromise) {
+        guiRuntimePromise = loadScript('https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js')
+          .then(() => loadScript('https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js'))
+          .then(() => loadScript('https://cdn.jsdelivr.net/npm/this.gui@4.0.0/dist/this.gui.umd.js'));
+      }
+      return guiRuntimePromise;
+    }
+
+    // `Chip` (this.gui/atoms) is not an individually named root export (the
+    // root barrel keeps that list small on purpose -- see index.ts's own
+    // header comment), but the root UMD build does re-export the whole
+    // atoms bundle, so it's reachable at window.GUI.Atoms.Chip -- verified
+    // against the actual published tarball, not assumed from source.
+    // Replaces each Tags cell's comma-separated plain text with real Chip
+    // pills once the runtime is loaded; falls back to leaving the plain
+    // text alone (never throws) if the CDN or the expected shape isn't
+    // there, since the table is already fully usable without this.
+    async function renderTagsAsChips() {
+      const tables = [...document.querySelectorAll('.prose table')];
+      let table = null, tagsIdx = -1;
+      for (const t of tables) {
+        const headers = [...t.querySelectorAll('th')].map((th) => th.textContent.trim());
+        const idx = headers.indexOf('Tags');
+        if (idx !== -1) { table = t; tagsIdx = idx; break; }
+      }
+      if (!table) return;
+
+      try {
+        await loadGuiRuntime();
+        const { React, ReactDOM, GUI } = window;
+        const Chip = GUI && GUI.Atoms && GUI.Atoms.Chip;
+        if (!React || !ReactDOM || !Chip) throw new Error('this.gui runtime missing expected exports');
+
+        const rows = [...table.querySelectorAll('tr')].filter((r) => r.parentElement.tagName !== 'THEAD');
+        rows.forEach((row) => {
+          const cell = row.cells[tagsIdx];
+          if (!cell || cell.dataset.chipified) return;
+          const text = cell.textContent.trim();
+          cell.dataset.chipified = '1';
+          if (!text || text === '—') return;
+          const tags = text.split(',').map((s) => s.trim()).filter(Boolean);
+          cell.innerHTML = '';
+          // No <GUI.Theme> wrapper here on purpose -- it renders MUI's
+          // <CssBaseline/>, a GLOBAL reset (body background/color/margin,
+          // confirmed live: it washed out this entire page's own
+          // typography, not just the cell). But with NO theme provider at
+          // all, MUI's outlined Chip falls back to ITS OWN default (light)
+          // theme colors -- confirmed live: illegible dark-on-dark text on
+          // this page's own dark mode. Passing explicit sx colors sidesteps
+          // both problems and matches this page's own existing accent
+          // palette (same pair `.prose code`/`.prose a` already use above),
+          // so the chips read as native to the doc instead of a dropped-in
+          // default MUI component.
+          const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const accent = isDark
+            ? { color: '#4fd1c5', border: 'rgba(79,209,197,0.35)', bg: 'rgba(79,209,197,0.08)' }
+            : { color: '#0f5a66', border: 'rgba(15,106,120,0.3)',  bg: 'rgba(15,106,120,0.06)' };
+          ReactDOM.createRoot(cell).render(
+            React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '4px' } },
+              tags.map((t, i) => React.createElement(Chip, {
+                key: i, label: t, size: 'small', variant: 'outlined',
+                sx: {
+                  color: accent.color, borderColor: accent.border, bgcolor: accent.bg,
+                  fontFamily: 'inherit', fontSize: '0.72rem', height: 22,
+                },
+              }))
+            )
+          );
+        });
+      } catch (err) {
+        // Plain comma-separated text (already rendered by marked.parse)
+        // stays as the fallback -- a CDN hiccup shouldn't break the doc.
+        console.warn('[GUI-Registry] Chip rendering skipped:', err);
+      }
     }
   </script>
 </body>
