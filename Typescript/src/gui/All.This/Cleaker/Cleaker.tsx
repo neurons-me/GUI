@@ -14,30 +14,43 @@
 // page). This file does none of that work itself — it is a thin
 // destination-derivation + wiring layer, nothing more.
 //
-// HOW `me` IS ACTUALLY USED (2026-10-01 decision, verified against the real
-// code before building this, not assumed): `me`'s entire job is a ONE-TIME,
-// SYNCHRONOUS read at render time, purely to derive configuration — namely
-// `profile.rootNamespace` (the bare root a `.me` kernel constructed with a
-// namespace option writes at construction time — see `me/Typescript/src/
-// me.ts`'s `rootProxy.profile.rootNamespace(...)` call, and `src/factory.ts`'s
-// identical write), which becomes `cleakerEndpoint`. That is the full extent
-// of what `me` does here. `me` is NEVER "logged in", never propagated
-// downstream as a live/ongoing identity channel, and never read again after
-// this one derivation — confirmed before writing this file that
-// `Namespace.tsx` has ZERO `useMe()`/`useMeValue`/`MeLike`-prop references
-// anywhere in its real code; every identity/session read inside it (and
-// everything it renders, including `CleakerIdentityCard`) goes exclusively
-// through `useOptionalSeedSessionContext()`. So there is no live consumer
-// anywhere that needs `me` to keep governing anything past this one read —
-// which is also exactly why an earlier pass's `CleakerBaseRuntimeContext`/
-// `useCleakerBaseRuntime()` experiment (a context built specifically to keep
-// a stable, ongoing reference to an injected `me` across login/logout) was
-// abandoned: there was never a real consumer to justify carrying `me` live
-// into the subtree at all, from either direction. Omitting `me` falls back
-// to the literal default destination (`'cleaker.me'`) directly — no kernel
-// gets self-minted just to read back its own (necessarily empty)
-// `profile.rootNamespace`, since that would reach the exact same default
-// through needless work.
+// HOW `me` IS ACTUALLY USED TODAY (2026-10-01, corrected 2026-10-02 after
+// review found this section overstated what was actually built): `me` is
+// read for CONFIGURATION ONLY — `profile.rootNamespace` (the bare root a
+// `.me` kernel constructed with a namespace option writes at construction
+// time — see `me/Typescript/src/me.ts`'s `rootProxy.profile.rootNamespace(...)`
+// call, and `src/factory.ts`'s identical write) becomes `cleakerEndpoint`.
+// That is the full extent of what `me` does here. It is NEVER "logged in",
+// and nothing below this derivation (`SeedSessionProvider`, `Namespace`,
+// `CleakerIdentityCard`) ever receives or operates on this `me` object —
+// confirmed by grep: zero `useMe()`/`useMeValue`/`MeLike`-prop references
+// anywhere in `Namespace.tsx`'s real code; every identity/session read in
+// the tree this component renders goes exclusively through
+// `useOptionalSeedSessionContext()`, which builds and owns its own,
+// entirely separate kernel the moment a real claim/open succeeds.
+//
+// THIS IS NOT YET "ONE SHARED RUNTIME CONSUMING GUI" — that is still an
+// OPEN, UNRESOLVED gap, not a closed decision. The earlier framing of this
+// comment described the one-time-read design as the deliberate, sufficient
+// answer to that goal; it is not. A caller who passes `me={me}` reasonably
+// expects the GUI tree to actually operate against that connection —
+// instead, `me` is read once for a string and then discarded, while
+// `SeedSessionProvider` mints its own, independent kernel on real
+// authentication. Closing this gap means changing `SeedSessionProvider`
+// itself to accept and operate on a caller-supplied `me` (or an equivalent
+// mechanism) — NOT adding a second context to carry `me` alongside the
+// session the way the earlier, abandoned `CleakerBaseRuntimeContext`/
+// `useCleakerBaseRuntime()` experiment tried to. That experiment was
+// correctly abandoned because nothing consumed it live; the fix for THIS
+// gap is to make something real consume `me` live, not to re-justify not
+// doing so. See this consolidation's own handoff notes for the next step:
+// mapping exactly which runtime each component in this tree operates on
+// before attempting any change here.
+//
+// Finished, not in question: retiring the old `Cleaker.tsx`/
+// `CleakerComposer.tsx` (below) and the single public `<Cleaker>` entry
+// point's composition shape. Open, not finished: making `me` a real,
+// shared runtime rather than a one-time config read.
 //
 // THIS REPLACES THE OLDER `Cleaker.tsx`/`CleakerComposer.tsx` THAT USED TO
 // LIVE IN THIS DIRECTORY (2026-10-01 retirement — both already independently
@@ -168,24 +181,41 @@ export default function Cleaker({
   pages,
   footerExtras,
 }: CleakerProps) {
-  // One-time, synchronous derivation — see `me`'s own doc comment above.
-  // Skipped entirely when the caller already supplies an explicit
-  // `cleakerEndpoint` (no kernel read needed, and none is self-minted when
-  // `me` is also omitted: an un-configured kernel has no
-  // `profile.rootNamespace` to read back out anyway, so "no `me`" and
-  // "default to 'cleaker.me'" are the same outcome without needing an
-  // object to exist for it).
-  const rootNamespace =
-    !explicitCleakerEndpoint && me
-      ? String(readMeValue(me, 'profile.rootNamespace', { allowBarePath: true }) || '').trim()
-      : '';
+  // Config-only derivation (see `me`'s own doc comment above for what this
+  // does NOT do). Memoized on `[me, explicitCleakerEndpoint]`, not a plain
+  // per-render read and not a true one-time-ever read either — it
+  // recomputes if the `me` reference or `cleakerEndpoint` prop actually
+  // changes between renders, and is a no-op otherwise. (A prior version of
+  // this comment claimed "one-time" while the code read on every render
+  // regardless of memoization; this corrects that mismatch.) Skipped
+  // entirely when the caller already supplies an explicit `cleakerEndpoint`
+  // (no kernel read needed, and none is self-minted when `me` is also
+  // omitted: an un-configured kernel has no `profile.rootNamespace` to read
+  // back out anyway, so "no `me`" and "default to 'cleaker.me'" are the
+  // same outcome without needing an object to exist for it).
+  const rootNamespace = React.useMemo(
+    () =>
+      !explicitCleakerEndpoint && me
+        ? String(readMeValue(me, 'profile.rootNamespace', { allowBarePath: true }) || '').trim()
+        : '',
+    [me, explicitCleakerEndpoint],
+  );
 
+  // No silent fallback: an EMPTY rootNamespace (omitted `me`, or a `me`
+  // with no namespace configured) is the one case where substituting the
+  // default is correct. A NON-EMPTY rootNamespace that fails to parse must
+  // throw for real, not be swallowed into the default -- same principle
+  // this package already enforces for an explicit, malformed `namespace`
+  // prop elsewhere (a caller/kernel with a genuinely broken root deserves a
+  // real error, not a silent redirect to 'cleaker.me' as if nothing were
+  // wrong). A prior version of this code wrapped BOTH cases in the same
+  // try/catch, which silently re-introduced exactly that bug for the `me`
+  // path -- confirmed and fixed, not assumed fine.
   const namespaceConfig = React.useMemo(() => {
-    try {
-      return parseCleakerNamespaceExpression(rootNamespace || DEFAULT_CLEAKER_NAMESPACE_EXPRESSION);
-    } catch {
+    if (!rootNamespace) {
       return parseCleakerNamespaceExpression(DEFAULT_CLEAKER_NAMESPACE_EXPRESSION);
     }
+    return parseCleakerNamespaceExpression(rootNamespace);
   }, [rootNamespace]);
   const cleakerEndpoint = String(explicitCleakerEndpoint || namespaceConfig.transport.origin).trim();
 
