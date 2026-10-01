@@ -14,8 +14,8 @@
 // page). This file does none of that work itself — it is a thin
 // destination-derivation + wiring layer, nothing more.
 //
-// HOW `me` IS ACTUALLY USED TODAY (2026-10-01, corrected 2026-10-02 after
-// review found this section overstated what was actually built): `me` is
+// HOW `me` IS ACTUALLY USED TODAY (2026-10-01, corrected 2026-10-02 twice —
+// see both corrections below, neither superseded by the other): `me` is
 // read for CONFIGURATION ONLY — `profile.rootNamespace` (the bare root a
 // `.me` kernel constructed with a namespace option writes at construction
 // time — see `me/Typescript/src/me.ts`'s `rootProxy.profile.rootNamespace(...)`
@@ -27,30 +27,69 @@
 // anywhere in `Namespace.tsx`'s real code; every identity/session read in
 // the tree this component renders goes exclusively through
 // `useOptionalSeedSessionContext()`, which builds and owns its own,
-// entirely separate kernel the moment a real claim/open succeeds.
+// entirely separate kernel on real claim/open — independently in each of
+// its own entry paths (username+password, vault-unlock, phrase recovery),
+// which is correct and does not need to change.
 //
-// THIS IS NOT YET "ONE SHARED RUNTIME CONSUMING GUI" — that is still an
-// OPEN, UNRESOLVED gap, not a closed decision. The earlier framing of this
-// comment described the one-time-read design as the deliberate, sufficient
-// answer to that goal; it is not. A caller who passes `me={me}` reasonably
-// expects the GUI tree to actually operate against that connection —
-// instead, `me` is read once for a string and then discarded, while
-// `SeedSessionProvider` mints its own, independent kernel on real
-// authentication. Closing this gap means changing `SeedSessionProvider`
-// itself to accept and operate on a caller-supplied `me` (or an equivalent
-// mechanism) — NOT adding a second context to carry `me` alongside the
-// session the way the earlier, abandoned `CleakerBaseRuntimeContext`/
-// `useCleakerBaseRuntime()` experiment tried to. That experiment was
-// correctly abandoned because nothing consumed it live; the fix for THIS
-// gap is to make something real consume `me` live, not to re-justify not
-// doing so. See this consolidation's own handoff notes for the next step:
-// mapping exactly which runtime each component in this tree operates on
-// before attempting any change here.
+// CORRECTION 1 (same day, same review): a first pass of this comment
+// proposed closing the gap below by having `SeedSessionProvider` RE-SEED
+// the caller's own `me` object in place on real authentication (`.me`
+// already exposes a real, public mechanism for this — calling a kernel as
+// `me(username, password)` re-derives its identity on the SAME object,
+// confirmed via `me/Typescript/src/handleCall.ts`'s `reseedIdentity` wiring
+// and a real precedent already in this monorepo,
+// `modules/netget/.../GatewayIdentity.ts`). That proposal was REJECTED,
+// correctly: re-seeding the connection's own identity on login conflates
+// connection and session again (the thing this whole consolidation was
+// supposed to keep separate), behaves inconsistently across entry paths
+// (username+password can reseed in place; vault-unlock and phrase recovery
+// construct a genuinely different kernel, so "the same object" would mean
+// different things depending on how someone signs in), and silently
+// mutates the identity of any OTHER code that happens to hold the same
+// `me` reference. Reference equality was never proof that caches, pending
+// operations, or derived reads stayed coherent through that mutation
+// either. This was NOT implemented. `.me` was NOT modified.
+//
+// CORRECTION 2 (same review): a second pass claimed the architectural goal
+// was satisfied anyway, because `cleakerEndpoint` (derived from `me` here)
+// ends up feeding BOTH `SeedSessionProvider`'s transport and `Namespace`'s
+// content resolution, and because the namespace a real claim/open actually
+// authenticates against is itself derived from this same `cleakerEndpoint`
+// (traced through `CleakerIdentityCard.tsx` -> `documentPages.ts`'s
+// `deriveNamespaceRootLabel`). That tracing is accurate, but the
+// conclusion drawn from it overstated what it proves: a shared
+// CONFIGURATION value (the destination string) is not the same claim as a
+// shared RUNTIME or a single connection object, and describing the former
+// as satisfying the latter was itself an overstatement, not a closed
+// architectural decision. What this file actually provides is destination
+// consistency — the same `cleakerEndpoint` reaches both the session and
+// the content layer — nothing more.
+//
+// WHERE THIS STANDS: "one shared runtime consuming GUI" (in whatever sense
+// goes beyond destination-config consistency) is NOT implemented here and
+// is NOT claimed to be. If that goal is still wanted, it remains a
+// SEPARATE, OPEN architectural question — this file does not prescribe
+// re-seeding `me`, does not prescribe changing `.me`, and does not
+// prescribe any other specific mechanism as "the" fix; none of those paths
+// were shown to be necessary, only one (re-seeding) was shown to be wrong.
+//
+// A related, separately-documented limit (not something this file's design
+// causes or could fix by itself): `SeedSessionProvider`'s own `logout()`
+// closes further operations THROUGH that session's own wrapper (its
+// `activeNamespace` closure clears, so `write()`/`signAndWrite()` on that
+// wrapper start failing) — it does not revoke cryptographic capability a
+// reference obtained before logout might still hold elsewhere (e.g. a
+// consumer that captured `useMe()`'s value while authenticated). Whether
+// that gap is worth closing, and how — which could plausibly be addressed
+// on the GUI side (how references/credentials are handed out and how long
+// they're retained) without necessarily touching `.me` at all — is not
+// investigated here and is not claimed to require any particular fix.
 //
 // Finished, not in question: retiring the old `Cleaker.tsx`/
 // `CleakerComposer.tsx` (below) and the single public `<Cleaker>` entry
-// point's composition shape. Open, not finished: making `me` a real,
-// shared runtime rather than a one-time config read.
+// point's composition shape, with destination configuration consistently
+// derived from `me` once. Open, separate, not attempted: whether a shared
+// RUNTIME (beyond shared configuration) is still wanted, and if so, how.
 //
 // THIS REPLACES THE OLDER `Cleaker.tsx`/`CleakerComposer.tsx` THAT USED TO
 // LIVE IN THIS DIRECTORY (2026-10-01 retirement — both already independently
