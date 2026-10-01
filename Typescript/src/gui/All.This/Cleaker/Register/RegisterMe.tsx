@@ -1,4 +1,4 @@
-// RegisterMe.tsx — the explicit, deliberate counterpart to CleakerLanding's
+// RegisterMe.tsx — the explicit, deliberate counterpart to Namespace's
 // "Hello, I am…" sign-in form. Claiming a namespace is a decision a person
 // makes on purpose, not a side effect of a mistyped or unrecognized
 // username in the sign-in box (see SeedSessionProvider.tsx's
@@ -19,12 +19,12 @@ import {
 } from '@/core/identity/recoveryPhrase';
 import { saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
 import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
-import { useOptionalSeedSessionContext } from './SeedSessionProvider';
+import { useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
 
-// Same bubble CleakerLanding's sign-in form shows — kept here too (not just
+// Same bubble Namespace's sign-in form shows — kept here too (not just
 // on the parent page) so RegisterMe reads as a complete page on its own
-// (its own Storybook story has no CleakerLanding chrome around it), and so
-// CleakerLanding can skip rendering a second one when it swaps in this
+// (its own Storybook story has no Namespace chrome around it), and so
+// Namespace can skip rendering a second one when it swaps in this
 // component for its "register" mode. Unlike the sign-in bubble (which
 // reflects whatever's typed in the OTHER form), this one previews the
 // identity actually being created here: <username-so-far>.<namespace>.
@@ -41,7 +41,7 @@ export interface RegisterMeProps {
   /**
    * Fires once the ENTIRE flow is done — claim accepted, backup confirmed,
    * local vault written — not just when the claim itself succeeds. A host
-   * page (e.g. CleakerLanding) that also renders its own authenticated view
+   * page (e.g. Namespace) that also renders its own authenticated view
    * needs this distinction: `session.authenticated` flips true as soon as
    * the claim is accepted, well before backup/vault are done, and switching
    * away at that point would unmount this component mid-flow and skip both.

@@ -3,10 +3,10 @@ import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
 import Box from "@/gui/Atoms/Box/Box";
 import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
-import RegisterMe from "@/react/session/RegisterMe";
-import { setActiveNamespaceRoot } from "./signedRequest";
+import RegisterMe from "./RegisterMe";
+import { setActiveNamespaceRoot } from "../signedRequest";
 
-// Same wiring as Cleaker.stories.tsx's Default (CleakerLanding) — real
+// Same wiring as Cleaker.stories.tsx's Default (Namespace) — real
 // signed-proof claim path against local.cleaker's actual running monad, not
 // mocked. See that file's comments for why sessionBackend="cleaker" +
 // setActiveNamespaceRoot() are both required for this to submit for real
