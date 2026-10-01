@@ -19,6 +19,17 @@ export type SearchFieldProps = {
   emptyLabel?: string;
   /** aria-label for the collapsed icon button. */
   ariaLabel?: string;
+  /**
+   * Fires whenever the collapsed/expanded state actually changes (click to
+   * open, Escape/close-button/blur-with-empty-query to collapse) — never on
+   * every render. For a caller that positions something ELSE next to this
+   * field's collapsed icon (a fixed-corner badge, another control): this
+   * field only ever reserves its own collapsed-icon width, so without this,
+   * the caller has no way to know the field is about to grow to
+   * `min(280px, 100vw - 32px)` and move out from under whatever sits beside
+   * it. Optional — omit if nothing else needs to react to this.
+   */
+  onExpandedChange?: (expanded: boolean) => void;
   maxResults?: number;
   className?: string;
   sx?: SxProps<Theme>;

@@ -251,7 +251,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 // through here, whichever root it was made under) and where a pick goes.
 // Filtered client-side -- the list is small enough that a real search
 // endpoint would be overbuilding it.
-const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string }> = ({ cleakerEndpoint, netgetMonadOrigin }) => {
+const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string; onExpandedChange?: (expanded: boolean) => void }> = ({ cleakerEndpoint, netgetMonadOrigin, onExpandedChange }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
@@ -297,6 +297,7 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
         onSelectResult={visitUser}
         placeholder="Search .me"
         ariaLabel="Search .me"
+        onExpandedChange={onExpandedChange}
         data-gui-node-id="GUI.bars.top.search"
       />
     </Box>
@@ -1327,6 +1328,23 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const resolvedEndpoint = requireCleakerEndpoint(props.cleakerEndpoint);
   const namespaceRootLabel = deriveNamespaceRootLabel(resolvedEndpoint);
 
+  // CleakerTopSearch (fixed, right: 12/20) and the position QRme badge
+  // (fixed, right: 56/64, zIndex above the search) are independent,
+  // fixed-position siblings with no shared layout box -- when the search
+  // field expands to `min(280px, 100vw-32px)`, it grows well past the
+  // badge's position, and since the badge sits at a higher zIndex, it
+  // renders ON TOP of the expanded search pill instead of being pushed
+  // aside -- flagged live (2026-10-02) as the badge looking "cropped" and
+  // the search bar looking like it goes "under" it. It's neither a cropped
+  // asset nor the wrong QR component (confirmed: already QRme, same as
+  // everywhere else) -- it's two fixed-position elements overlapping.
+  // Fixed here by fading the badge out while search is actually expanded
+  // (not resizing/repositioning either element, which would need ongoing
+  // width math for a value SearchField already computes internally) --
+  // the badge is a passive "where am I" indicator, not needed while
+  // actively searching.
+  const [topSearchExpanded, setTopSearchExpanded] = useState(false);
+
   // A real, verified transport for the sidebar's public read -- seeded
   // ONCE from window.location, not re-derived on every render (this isn't
   // a user-facing switcher; Beatle above the credentials form already
@@ -1484,14 +1502,30 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
-      <CleakerTopSearch cleakerEndpoint={props.cleakerEndpoint} netgetMonadOrigin={props.netgetMonadOrigin} />
+      <CleakerTopSearch
+        cleakerEndpoint={props.cleakerEndpoint}
+        netgetMonadOrigin={props.netgetMonadOrigin}
+        onExpandedChange={setTopSearchExpanded}
+      />
       {/* The persistent position badge (see positionExpression/positionQrValue above) — visible on every
           route this shell renders, including /netget, not only the Landing page's own bigger QR. Bubble
           variant (small, click-to-toggle avatar/QR, no edit affordance): this is a read-only "where am I"
           indicator, not the sign-in surface. */}
       {/* top-right, left of the search icon (CleakerTopSearch sits at right: 12/20) -- top-LEFT was tried
-          first and collided with the sidebar's own toggle button occupying that exact corner. */}
-      <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 56, sm: 64 }, zIndex: 21 }}>
+          first and collided with the sidebar's own toggle button occupying that exact corner. Faded out
+          (not unmounted — avoids losing QRme's own hover/flip local state) while the search field is
+          expanded, so the two never visually overlap (see topSearchExpanded's own doc comment above). */}
+      <Box
+        sx={{
+          position: 'fixed',
+          top: { xs: 12, sm: 20 },
+          right: { xs: 56, sm: 64 },
+          zIndex: 21,
+          opacity: topSearchExpanded ? 0 : 1,
+          pointerEvents: topSearchExpanded ? 'none' : 'auto',
+          transition: 'opacity 150ms ease',
+        }}
+      >
         <QRme
           variant="topbar"
           value={positionQrValue}
