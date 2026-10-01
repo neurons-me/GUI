@@ -17,6 +17,13 @@ export type AccessConfirmationModalProps = {
   onDeny: () => void;
 };
 
+/**
+ * @deprecated (2026-10-01) Only ever mounted via `<AccessRequestHandler/>`,
+ * which the real `Cleaker` entry point no longer mounts (its only caller,
+ * `requestAccess()`, has zero callers of its own anywhere in this
+ * monorepo). Kept exported, not removed, because it's part of this
+ * package's published root (`index.ts`). Do not wire this into new code.
+ */
 export default function AccessConfirmationModal(props: AccessConfirmationModalProps) {
   const {
     open,

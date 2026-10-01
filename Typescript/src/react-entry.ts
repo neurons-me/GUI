@@ -18,6 +18,12 @@ export { default as MeLauncher, useMeLauncherView } from '@/react/session/MeLaun
 export type { MeLauncherProps, MeLauncherView } from '@/react/session/MeLauncher';
 export { default as Namespace } from '@/react/session/Namespace';
 export type { NamespaceProps } from '@/react/session/Namespace';
+// The one public identity entry point -- composes SeedSessionProvider +
+// Namespace internally (both already exported above individually, for a
+// caller that still wants to assemble them by hand) so a real app doesn't
+// have to. See its own header comment for the full `me` contract.
+export { default as Cleaker } from '@/gui/All.This/Cleaker/Cleaker';
+export type { CleakerProps } from '@/gui/All.This/Cleaker/Cleaker';
 // The host's own hardware/activity dashboard — deliberately not Cleaker
 // (no claim, no identity, no namespace jargon), for a host that isn't
 // itself an app (e.g. local.host's own root). See Namespace above for

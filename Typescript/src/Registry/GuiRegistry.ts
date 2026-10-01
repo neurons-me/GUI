@@ -53,7 +53,6 @@ import TabViewsResolver, { meta as TabViewsMeta } from "@/gui/Layout/Stage/TabVi
 
 // All.This
 import CleakerResolver, { meta as CleakerMeta } from "@/gui/All.This/Cleaker/Cleaker.resolver";
-import CleakerComposerResolver, { meta as CleakerComposerMeta } from "@/gui/All.This/Cleaker/CleakerComposer.resolver";
 import CleakerQRResolver, { meta as CleakerQRMeta } from "@/gui/All.This/Cleaker/QR/CleakerQR.resolver";
 import CleakerGroupResolver, { meta as CleakerGroupMeta } from "@/gui/All.This/Cleaker/Group/CleakerGroup.resolver";
 import CleakerUserResolver, { meta as CleakerUserMeta } from "@/gui/All.This/Cleaker/User/CleakerUser.resolver";
@@ -180,7 +179,6 @@ export const GuiRegistry = createRegistry([
   withMeta(SessionQRResolver, SessionQRMeta),
   withMeta(QRmeResolver, QRmeMeta),
   withMeta(CleakerQRResolver, CleakerQRMeta),
-  withMeta(CleakerComposerResolver, CleakerComposerMeta),
   withMeta(CleakerResolver, CleakerMeta),
   withMeta(NamespaceResolver, NamespaceMeta),
   // NamespaceUsers/NamespaceSurface/SearchBar: also never authored.

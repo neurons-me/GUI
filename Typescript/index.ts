@@ -76,7 +76,6 @@ export { default as ModuleRow } from '@/gui/All.This/src/ModuleRow/ModuleRow';
 export { default as ModulesGrid } from '@/gui/All.This/src/ModulesGrid/ModulesGrid';
 export { default as ModulesList } from '@/gui/All.This/src/ModulesList/ModulesList';
 export { default as Cleaker } from '@/gui/All.This/Cleaker/Cleaker';
-export { default as CleakerComposer } from '@/gui/All.This/Cleaker/CleakerComposer';
 export { default as CleakerQR } from '@/gui/All.This/Cleaker/QR/CleakerQR';
 export { default as Namespace } from '@/gui/All.This/Cleaker/Namespace/namespace';
 export {

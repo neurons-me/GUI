@@ -12,17 +12,17 @@
 // wiring. See this file's own inline comments (carried over unchanged) for
 // why each of those exists.
 //
-// NAMING NOTE: `@/gui/All.This/Cleaker/Cleaker.tsx` already exists in this
-// directory and is an OLDER, independent, NOT-equivalent component (its own
-// register modal, its own `useCleakerMeshPairing`/8-hook stack) — this file
-// is deliberately named differently (`CleakerIdentityCard`, not `Cleaker`)
-// to avoid colliding with it. This IS meant to become the canonical "Cleaker
-// identity" component going forward; `Cleaker.tsx` is legacy pending a
-// follow-up migration that retires it (its remaining real consumer is
-// `CleakerComposer.tsx`, already separately marked legacy/to-be-deleted —
-// see this extraction's own handoff report for the full consumer list).
-// That retirement is NOT done in this pass — `Cleaker.tsx`, its resolver,
-// and its `compounds.ts` export are untouched here.
+// NAMING NOTE (updated 2026-10-01): this file was originally named
+// differently from `Cleaker` to avoid colliding with the OLDER, independent,
+// NOT-equivalent `Cleaker.tsx` that used to live in this directory (its own
+// register modal, its own `useCleakerMeshPairing`/8-hook stack). That old
+// file (and `CleakerComposer.tsx`, its only remaining consumer) has since
+// been retired — `Cleaker.tsx` now names a DIFFERENT, new public component
+// (a thin `me` → destination → `SeedSessionProvider` → `Namespace` wrapper;
+// see its own header comment) that composes THIS file as `Namespace.tsx`'s
+// Landing page, same as before. This file stays named
+// `CleakerIdentityCard` on purpose — it is not itself the public `Cleaker`
+// entry point, it's the identity-flow UI `Cleaker` reaches via `Namespace`.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@/gui/Atoms/Box/Box';

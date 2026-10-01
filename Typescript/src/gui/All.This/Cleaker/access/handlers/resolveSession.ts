@@ -1,6 +1,15 @@
 import type { ResolveSessionInput, ResolvedCleakerSession } from '../types';
 import { readKernelBoolean, readKernelNumber, readKernelString } from '../internal';
 
+/**
+ * @deprecated (2026-10-01) Independently-implemented session-status read,
+ * used internally only by this same `access/` subsystem's other
+ * (also-deprecated) handlers — the real `Cleaker` identity flow reads
+ * session status via `useOptionalSeedSessionContext()`/`useSeedSession()`
+ * instead. Kept exported, not removed, because it's part of this package's
+ * published root (`index.ts`, as `resolveCleakerSession`). Do not wire this
+ * into new code.
+ */
 export function resolveSession(input: ResolveSessionInput): ResolvedCleakerSession {
   const profileUsername = readKernelString(input, 'username');
   const sessionUsername = readKernelString(input, 'identity.session.username');
