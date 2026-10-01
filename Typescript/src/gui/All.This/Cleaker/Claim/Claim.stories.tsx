@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
 import Box from "@/gui/Atoms/Box/Box";
 import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
-import RegisterMe from "./RegisterMe";
+import Claim from "./Claim";
 import { setActiveNamespaceRoot } from "../signedRequest";
 
 // Same wiring as Cleaker.stories.tsx's Default (Namespace) — real
@@ -13,16 +13,16 @@ import { setActiveNamespaceRoot } from "../signedRequest";
 // instead of hitting "No credential resolver was provided".
 setActiveNamespaceRoot('local.cleaker');
 
-const meta: Meta<typeof RegisterMe> = {
-  title: "All.This/Cleaker/Register",
-  component: RegisterMe,
+const meta: Meta<typeof Claim> = {
+  title: "All.This/Cleaker/Claim",
+  component: Claim,
   parameters: {
     layout: "fullscreen",
   },
 };
 
 export default meta;
-type Story = StoryObj<typeof RegisterMe>;
+type Story = StoryObj<typeof Claim>;
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -45,7 +45,7 @@ export const Default: Story = {
     <Theme>
       <SeedSessionProvider transportOrigin="http://local.cleaker/apps/netget" sessionBackend="cleaker">
         <Centered>
-          <RegisterMe namespace="local.cleaker" onSwitchToSignIn={() => alert('Would switch to the Sign In form.')} />
+          <Claim namespace="local.cleaker" onSwitchToSignIn={() => alert('Would switch to the Sign In form.')} />
         </Centered>
       </SeedSessionProvider>
     </Theme>
@@ -57,7 +57,7 @@ export const NoSwitchLink: Story = {
     <Theme>
       <SeedSessionProvider transportOrigin="http://local.cleaker/apps/netget" sessionBackend="cleaker">
         <Centered>
-          <RegisterMe namespace="local.cleaker" />
+          <Claim namespace="local.cleaker" />
         </Centered>
       </SeedSessionProvider>
     </Theme>

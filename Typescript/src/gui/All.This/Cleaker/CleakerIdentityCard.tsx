@@ -36,7 +36,7 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
-import RegisterMe from '@/gui/All.This/Cleaker/Register/RegisterMe';
+import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import RecoverAccount from '@/react/session/RecoverAccount';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -173,13 +173,13 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // Sign in / Register are two distinct, explicit forms now (see
   // SeedSessionProvider.tsx's openExistingNamespace — signing in no longer
   // silently claims an unrecognized username). This just toggles which one
-  // renders; RegisterMe itself calls the real registerWithCredentials().
+  // renders; Claim itself calls the real registerWithCredentials().
   const [mode, setMode] = useState<'signin' | 'register' | 'recover'>('signin');
   // Claiming a namespace flips `authenticated` true the instant the claim
   // succeeds (SeedSessionProvider's registerWithCredentials commits the
-  // session before RegisterMe gets to run its own post-claim backup step)
+  // session before Claim gets to run its own post-claim backup step)
   // — without this flag, the `authenticated` branch below would take over
-  // immediately and unmount RegisterMe mid-flow, skipping the recovery
+  // immediately and unmount Claim mid-flow, skipping the recovery
   // phrase backup and its local encrypted vault write entirely. Reset
   // whenever register mode is (re-)entered, so a second registration later
   // in the same session isn't short-circuited by a stale true from the
@@ -374,12 +374,12 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   const navigate = useNavigate();
   useEffect(() => {
     // Same gate the render logic below already uses to decide when the
-    // authenticated view is safe to show instead of RegisterMe/
+    // authenticated view is safe to show instead of Claim/
     // RecoverAccount -- `authenticated` alone flips true the instant a
-    // claim/recovery is ACCEPTED, well before RegisterMe's own backup step
+    // claim/recovery is ACCEPTED, well before Claim's own backup step
     // writes the local encrypted vault (registrationComplete, set via its
     // onRegistered prop). Navigating on `authenticated` alone would unmount
-    // RegisterMe mid-flow the same way the render logic already guards
+    // Claim mid-flow the same way the render logic already guards
     // against, silently skipping the vault write -- exactly the gap that
     // later makes Sign in fail for this identity (it has no vault to open).
     const registrationSettled = mode !== 'register' || registrationComplete;
@@ -503,7 +503,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           this bubble has no avatar image to flip to on a page nobody's
           signed into yet, and the click gesture is worth more spent on
           "make it scannable" than a flip animation). Skipped in register
-          mode — RegisterMe renders its own (previewing the username being
+          mode — Claim renders its own (previewing the username being
           typed THERE, not this form's, which stays empty while it's not
           the active one) so a person doesn't see two bubbles stacked.
           Same reasoning covers recover mode — RecoverAccount has no
@@ -625,11 +625,11 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           </Box>
         </Box>
       ) : mode === 'register' ? (
-        // Register has its own heading/copy (RegisterMe.tsx) — showing
+        // Register has its own heading/copy (Claim.tsx) — showing
         // "Hello, I am…" above it too would repeat the same question this
         // form already answers ("who are you HERE"), just with a different
         // action attached.
-        <RegisterMe
+        <Claim
           namespace={namespaceRootLabel}
           onSwitchToSignIn={() => setMode('signin')}
           onRegistered={() => setRegistrationComplete(true)}

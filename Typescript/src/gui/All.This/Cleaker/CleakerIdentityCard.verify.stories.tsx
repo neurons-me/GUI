@@ -98,7 +98,7 @@ function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: s
   // The actual regression this component's registrationComplete/
   // recoveryComplete guards exist for (see CleakerIdentityCard's own doc
   // comments): `authenticated` flips true the INSTANT claim()/open()
-  // succeeds, before RegisterMe/RecoverAccount's own post-claim step has
+  // succeeds, before Claim/RecoverAccount's own post-claim step has
   // run. If that guard ever regresses, the authenticated branch (Sign out
   // button) takes over immediately and the backup/recovery screen never
   // renders, or is torn down the instant it would have. Asserting its

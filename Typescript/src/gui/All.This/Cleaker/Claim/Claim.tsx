@@ -1,4 +1,4 @@
-// RegisterMe.tsx — the explicit, deliberate counterpart to Namespace's
+// Claim.tsx — the explicit, deliberate counterpart to Namespace's
 // "Hello, I am…" sign-in form. Claiming a namespace is a decision a person
 // makes on purpose, not a side effect of a mistyped or unrecognized
 // username in the sign-in box (see SeedSessionProvider.tsx's
@@ -22,7 +22,7 @@ import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest'
 import { useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
 
 // Same bubble Namespace's sign-in form shows — kept here too (not just
-// on the parent page) so RegisterMe reads as a complete page on its own
+// on the parent page) so Claim reads as a complete page on its own
 // (its own Storybook story has no Namespace chrome around it), and so
 // Namespace can skip rendering a second one when it swaps in this
 // component for its "register" mode. Unlike the sign-in bubble (which
@@ -31,7 +31,7 @@ import { useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvid
 const QR_DIAMETER_DEFAULT = 125;
 const QR_DIAMETER_EXPANDED = 214;
 
-export interface RegisterMeProps {
+export interface ClaimProps {
   /** Root namespace to register into, e.g. "local.cleaker". Omit to let
    *  the session provider resolve one (active root switch, then gateway). */
   namespace?: string;
@@ -50,9 +50,9 @@ export interface RegisterMeProps {
   sx?: any;
 }
 
-type RegisterStep = 'form' | 'backup' | 'done';
+type ClaimStep = 'form' | 'backup' | 'done';
 
-export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, sx }: RegisterMeProps) {
+export default function Claim({ namespace, onSwitchToSignIn, onRegistered, sx }: ClaimProps) {
   const session = useOptionalSeedSessionContext();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -66,7 +66,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
   // step below: the phrase only stops being "the" phrase for this identity
   // once backup is confirmed and it's wrapped into the local vault).
   const [words, setWords] = useState<string[]>(() => generateRecoveryPhrase());
-  const [step, setStep] = useState<RegisterStep>('form');
+  const [step, setStep] = useState<ClaimStep>('form');
   const [backupConfirmed, setBackupConfirmed] = useState(false);
   const [derivationError, setDerivationError] = useState<Error | null>(null);
   const [vaultPending, setVaultPending] = useState(false);
@@ -156,7 +156,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
     return (
       <Box sx={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
         <Box sx={{ textAlign: 'center', mb: -1 }}>
-          <Typography variant="h4" data-gui-node-id="RegisterMe.backupHeading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+          <Typography variant="h4" data-gui-node-id="Claim.backupHeading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
             Back Up Your Identity
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -177,7 +177,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
           type="button"
           onClick={handleConfirmBackup}
           disabled={!backupConfirmed || vaultPending}
-          data-gui-node-id="RegisterMe.confirmBackup"
+          data-gui-node-id="Claim.confirmBackup"
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -216,7 +216,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       <Box
         role="button"
         tabIndex={0}
-        data-gui-node-id="RegisterMe.qr"
+        data-gui-node-id="Claim.qr"
         aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
         onClick={() => setExpanded((value) => !value)}
         onKeyDown={(event) => {
@@ -233,13 +233,13 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
           diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
           hoverFlip={false}
           clickFlip={false}
-          data-gui-node-id="RegisterMe.qr.code"
+          data-gui-node-id="Claim.qr.code"
           style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
         />
       </Box>
 
       <Box sx={{ textAlign: 'center', mb: -1 }}>
-        <Typography variant="h4" data-gui-node-id="RegisterMe.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
+        <Typography variant="h4" data-gui-node-id="Claim.heading" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
           Register
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
@@ -253,7 +253,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
 
       <TextField
         label="Username"
-        data-gui-node-id="RegisterMe.username"
+        data-gui-node-id="Claim.username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
         disabled={pending}
@@ -262,7 +262,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       />
       <TextField
         label="Secret"
-        data-gui-node-id="RegisterMe.secret"
+        data-gui-node-id="Claim.secret"
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -271,7 +271,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
       />
       <TextField
         label="Confirm Secret"
-        data-gui-node-id="RegisterMe.confirmSecret"
+        data-gui-node-id="Claim.confirmSecret"
         type="password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -292,7 +292,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
         type="button"
         onClick={handleRegister}
         disabled={pending || !canSubmit}
-        data-gui-node-id="RegisterMe.submit"
+        data-gui-node-id="Claim.submit"
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -318,7 +318,7 @@ export default function RegisterMe({ namespace, onSwitchToSignIn, onRegistered, 
           component="button"
           type="button"
           onClick={onSwitchToSignIn}
-          data-gui-node-id="RegisterMe.switchToSignIn"
+          data-gui-node-id="Claim.switchToSignIn"
           sx={{
             background: 'transparent',
             border: 0,
