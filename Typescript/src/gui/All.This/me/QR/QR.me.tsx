@@ -694,7 +694,13 @@ export default function QRme({
             border: '1px solid',
             borderColor: `${ringAccent}55`,
             boxShadow: isTopbar
-              ? `0 0 0 1px ${theme.palette.primary.main}22, 0 3px 8px rgba(0,0,0,0.14)`
+              // Same glow TREATMENT as the default QR face below (ring +
+              // blurred glow + drop shadow, same ringAccent status color),
+              // just scaled down to this variant's own ~40px size -- a
+              // flat, non-glowing 1px outline here read as a visibly
+              // DIFFERENT component next to the default's glow, not a
+              // small version of the same one. Flagged live (2026-10-02).
+              ? `0 0 0 1px ${ringAccent}, 0 0 5px 1px ${ringAccent}40, 0 3px 8px rgba(0,0,0,0.14)`
               : showingAvatar
                 ? `0 0 0 1px ${theme.palette.primary.main}22, 0 12px 22px rgba(0,0,0,0.18)`
                 // Dialed way back from the earlier "stronger" pass, which
@@ -715,9 +721,22 @@ export default function QRme({
           <Box
             sx={{
               position: 'absolute',
+              // `inset: qrInset` ALONE determines this box's size (it
+              // stretches to effectiveDiameter - 2*qrInset on each axis,
+              // which is exactly what qrSize already equals by
+              // construction) -- deliberately NOT also setting an explicit
+              // `width`/`height` here. Both together are over-constrained:
+              // confirmed live (2026-10-02) that a browser resolves that
+              // conflict by keeping `top`/`left` (from `inset`) and the
+              // explicit size, silently DROPPING `inset`'s `right`/`bottom`
+              // components -- the box ends up flush at the top-left with
+              // zero gap on the right/bottom instead of symmetric qrInset
+              // on all four sides. Invisible at the ~124px default size (a
+              // 1-2px discrepancy is under 2% of the total), glaring at
+              // the topbar variant's ~40px (the same 1-2px is 5%+) --
+              // flagged live as "no quedó simétrico al marco", confirmed
+              // by measuring this exact box's rendered rect before/after.
               inset: qrInset,
-              width: qrSize,
-              height: qrSize,
               borderRadius: faceRadius,
               overflow: 'hidden',
               bgcolor: 'background.paper',
