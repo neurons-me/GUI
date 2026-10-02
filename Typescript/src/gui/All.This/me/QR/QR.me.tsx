@@ -1046,7 +1046,17 @@ export default function QRme({
             }}
             data-gui-node-id={`${qrBase}.namespace.edit`}
           >
-            <Icon name="edit" fontSize="0.9rem" />
+            {/* `iconColor` explicit -- without it, Icon falls back to
+                inherited `color` (IconRegistry.tsx's own `color: iconColor`
+                style, undefined here means CSS inheritance), which this
+                button's own sx never sets either. Happened to read fine
+                against whatever this inherited in dark mode; invisible
+                against this button's own `background.paper` in light mode
+                -- flagged live (2026-10-02) as "en light mode no se ve".
+                Reuses the exact same color the inline edit INPUT already
+                uses a few lines below (theme.palette.text.primary), so
+                both pieces of this same editor agree. */}
+            <Icon name="edit" fontSize="0.9rem" iconColor={theme.palette.text.primary} />
           </Box>
         )
       )}
