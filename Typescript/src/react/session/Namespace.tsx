@@ -1497,14 +1497,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
-  // `currentPath` lets leftBarSlots() mark whichever link matches the
-  // route we're actually on as `active` -- flagged live (2026-10-02): the
-  // Home link (and every other LeftBar link, same root cause) rendered as
-  // a plain, always-clickable link with no indication you're already
-  // there, "no hace sentido". LeftSidebarLink.tsx already supports a real
-  // `active` prop (highlights border/color, confirmed in its own source)
-  // -- nothing was ever computing or passing it from here.
-  const barSlots = leftBarSlots(doc, { authenticated, currentPath: location.pathname });
+  const barSlots = leftBarSlots(doc, { authenticated });
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
@@ -1612,7 +1605,26 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         TopBar={{ elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
-          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
+          // `active` applied ONCE, HERE, uniformly across every element
+          // regardless of which of the two sources below it came from --
+          // not inside `leftBarSlots()` itself (see that function's own
+          // comment for why: its output feeds both `barSlots.start`/`.end`
+          // -- recomputed fresh every render -- AND, via
+          // `cleakerNavigationComposition.ts`'s `builtinScopeOf()`, a
+          // MODULE-LEVEL CONSTANT frozen at import time, which would never
+          // reflect a later navigation for anything resolved through that
+          // second path). Flagged live (2026-10-02): Home/Netget (reached
+          // via `barSlots.start`/`.end`) highlighted correctly on their
+          // own first attempt; Users/Blockchain/URL (reached via
+          // `resolved`, `useCleakerRootSidebar`'s cached composition)
+          // never did, for exactly that reason.
+          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end].map((el) =>
+            el.type === 'link' && el.props.to === location.pathname
+              ? { ...el, props: { ...el.props, active: true } }
+              : el.type === 'link'
+                ? { ...el, props: { ...el.props, active: false } }
+                : el
+          ),
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
           // of these exact components -- ThemeLauncher and DevToolsLauncher
           // are real, already-built launchers (this.gui's own ThemeContext/

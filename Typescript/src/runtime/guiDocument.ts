@@ -181,7 +181,7 @@ export type LeftBarSlots = {
  */
 export function leftBarSlots(
   doc: GuiDocument = GUI_DOCUMENT,
-  options: { authenticated?: boolean; currentPath?: string } = {}
+  options: { authenticated?: boolean } = {}
 ): LeftBarSlots {
   const slots: LeftBarSlots = { start: [], defaults: [], end: [] };
   const prefix = 'GUI.bars.left.';
@@ -190,18 +190,24 @@ export function leftBarSlots(
     .forEach((e) => {
       if (e.requires === 'session' && !options.authenticated) return;
       const key = e.id.slice(prefix.length);
-      // `active` -- LeftSidebarLink.tsx already has real styling for this
-      // (a highlighted border/color), nothing ever computed or passed it
-      // before. Exact-path match only (not a prefix match): this
-      // document's own routes (/, /users, /blockchain, /url, /keychain,
-      // /netget) never nest one under another, so there's no case here
-      // where a prefix match would matter and an exact match wouldn't --
-      // confirmed by reading GUI.document.json's own route list, not
-      // assumed.
-      const active = Boolean(options.currentPath) && e.to === options.currentPath;
+      // `active` is NOT computed here on purpose (a 2026-10-02 attempt to
+      // do exactly that was reverted) -- this function's own output feeds
+      // TWO different paths downstream: `GUI`'s own `barSlots.start`/
+      // `.end` (recomputed every render, so a `currentPath` option would
+      // have worked there), AND `cleakerNavigationComposition.ts`'s
+      // `builtinScopeOf()`, which freezes its result into a MODULE-LEVEL
+      // CONSTANT (`BUILTIN_SCOPE`) computed once at import time -- any
+      // `active` value baked in here would never update on navigation for
+      // every item routed through that second path (confirmed live: Home/
+      // Netget, which reach the page via `barSlots.start`/`.end`, updated
+      // correctly; Users/Blockchain/URL, which reach it via
+      // `useCleakerRootSidebar`'s cached `resolved` array, never did).
+      // `active` is applied once, uniformly, AFTER both paths are merged
+      // back together -- see `GUI`'s own `topBarRightElements`-adjacent
+      // composition in Namespace.tsx (`withActiveLeftBarState`).
       const element = {
         type: 'link' as const,
-        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, active, 'data-gui-node-id': e.id },
+        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id },
       } as LeftBarElement;
       (e.placement === 'start' ? slots.start : e.placement === 'end' ? slots.end : slots.defaults).push(element);
     });
