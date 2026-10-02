@@ -21,7 +21,7 @@ export type GuiDocumentNode = {
   note?: string;
   /**
    * Name of the component that implements this part -- content.landing
-   * (CleakerLanding). Resolved through the registry the app hands to
+   * (Namespace). Resolved through the registry the app hands to
    * renderGuiDocumentPage; the document never holds the component itself.
    */
   component?: string;
@@ -181,7 +181,7 @@ export type LeftBarSlots = {
  */
 export function leftBarSlots(
   doc: GuiDocument = GUI_DOCUMENT,
-  options: { authenticated?: boolean } = {}
+  options: { authenticated?: boolean; currentPath?: string } = {}
 ): LeftBarSlots {
   const slots: LeftBarSlots = { start: [], defaults: [], end: [] };
   const prefix = 'GUI.bars.left.';
@@ -190,9 +190,18 @@ export function leftBarSlots(
     .forEach((e) => {
       if (e.requires === 'session' && !options.authenticated) return;
       const key = e.id.slice(prefix.length);
+      // `active` -- LeftSidebarLink.tsx already has real styling for this
+      // (a highlighted border/color), nothing ever computed or passed it
+      // before. Exact-path match only (not a prefix match): this
+      // document's own routes (/, /users, /blockchain, /url, /keychain,
+      // /netget) never nest one under another, so there's no case here
+      // where a prefix match would matter and an exact match wouldn't --
+      // confirmed by reading GUI.document.json's own route list, not
+      // assumed.
+      const active = Boolean(options.currentPath) && e.to === options.currentPath;
       const element = {
         type: 'link' as const,
-        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id },
+        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, active, 'data-gui-node-id': e.id },
       } as LeftBarElement;
       (e.placement === 'start' ? slots.start : e.placement === 'end' ? slots.end : slots.defaults).push(element);
     });

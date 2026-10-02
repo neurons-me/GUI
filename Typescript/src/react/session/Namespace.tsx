@@ -1497,7 +1497,14 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
-  const barSlots = leftBarSlots(doc, { authenticated });
+  // `currentPath` lets leftBarSlots() mark whichever link matches the
+  // route we're actually on as `active` -- flagged live (2026-10-02): the
+  // Home link (and every other LeftBar link, same root cause) rendered as
+  // a plain, always-clickable link with no indication you're already
+  // there, "no hace sentido". LeftSidebarLink.tsx already supports a real
+  // `active` prop (highlights border/color, confirmed in its own source)
+  // -- nothing was ever computing or passing it from here.
+  const barSlots = leftBarSlots(doc, { authenticated, currentPath: location.pathname });
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
