@@ -34,6 +34,7 @@ const meta: Meta<typeof Hero> = {
 - \`backgroundColor\`: Color when backgroundType = 'color'.
 - \`overlayColor\`: Color of overlay.
 - \`blur\`: Theme-based blur intensity (\`light\`, \`medium\`, \`heavy\`, \`all\`).
+- \`accent\`: Optional \`theme.visuals.accents\` key (\`aurora\` | \`ember\` | \`monolith\` | \`neutral\`) for overlay/background.
         `,
       },
     },
@@ -166,5 +167,24 @@ export const CustomColorExample: Story = {
         Example: Custom Color Overlay
       </div>
     ),
+  },
+};
+
+
+export const AccentPresets: Story = {
+  args: {
+    backgroundType: 'color',
+    accent: 'aurora',
+    layout: 'flow',
+    height: '40vh',
+    mode: 'center',
+    header: 'Accent: aurora',
+    typography: 'Hero maps accent → theme.visuals.accents[accent] (soft overlay / strong color bg).',
+  },
+  argTypes: {
+    accent: {
+      control: 'select',
+      options: ['aurora', 'ember', 'monolith', 'neutral'],
+    },
   },
 };

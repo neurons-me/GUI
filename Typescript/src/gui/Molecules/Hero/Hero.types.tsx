@@ -17,6 +17,13 @@ export interface HeroProps {
   blur?: 'none' | 'light' | 'medium' | 'heavy' | 'all';
   /** Color personalizado del overlay (anula overlayColor si se define) */
   customColor?: string;
+  /**
+   * Theme accent preset from `theme.visuals.accents` (aurora | ember | monolith | neutral).
+   * When set, maps to overlay (soft) and optional color-background (strong) unless
+   * `overlayColor` / `customColor` / `backgroundColor` already override.
+   * Safe no-op when accents are missing from the active theme.
+   */
+  accent?: 'aurora' | 'ember' | 'monolith' | 'neutral';
   /** Imagen de marca (logo / brand) */
   brand?: {
     src: string;
