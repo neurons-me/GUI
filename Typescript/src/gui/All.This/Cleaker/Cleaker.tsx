@@ -165,13 +165,17 @@ export type CleakerProps = {
   me?: MeLike;
   /**
    * Transport origin `SeedSessionProvider`/`Namespace` actually send
-   * requests to. Defaults to `${window.location.origin}/apps/netget` when
-   * omitted — the exact fallback `Namespace.tsx`'s own (private)
-   * `getNetgetMonadOrigin()` already uses, mirrored here by formula (that
-   * function isn't exported, and this file deliberately doesn't touch
-   * `Namespace.tsx` to change that) — NOT `SeedSessionProvider`'s own
-   * internal default (`http://localhost:8161`), which is only ever correct
-   * for a bare local dev kernel, never a real deployment.
+   * requests to. Defaults to this Cleaker's own resolved `cleakerEndpoint`
+   * when omitted (2026-10-02, corrected after the previous default --
+   * `${window.location.origin}/apps/netget`, assuming this page IS a
+   * netget gateway -- 404'd everywhere that assumption doesn't hold, e.g.
+   * Storybook) — NOT `SeedSessionProvider`'s own internal default
+   * (`http://localhost:8161`), which is only ever correct for a bare local
+   * dev kernel, never a real deployment. A caller whose session transport
+   * genuinely differs from its destination (netget's own App.jsx, served
+   * FROM a gateway whose `/apps/netget` proxy IS the correct session
+   * transport, different from whatever foreign namespace a `cleaker`-role
+   * door is displaying) still passes this explicitly, same as always.
    */
   transportOrigin?: string;
   /**
@@ -258,10 +262,23 @@ export default function Cleaker({
   }, [rootNamespace]);
   const cleakerEndpoint = String(explicitCleakerEndpoint || namespaceConfig.transport.origin).trim();
 
-  const resolvedTransportOrigin = String(
-    transportOrigin ||
-      (typeof window !== 'undefined' ? `${window.location.origin}/apps/netget` : ''),
-  ).trim();
+  // Falls back to `cleakerEndpoint` itself (the destination this Cleaker
+  // already resolved), NOT `window.location.origin + /apps/netget` --
+  // flagged live (2026-10-02): a caller giving zero props at all
+  // (`<Cleaker />`) got a destination that correctly resolved to a real
+  // namespace (`cleakerEndpoint`, e.g. 'cleaker.me') while the SESSION
+  // transport silently defaulted to wherever THIS PAGE happened to be
+  // served from instead -- correct for netget's real App.jsx (it IS
+  // served from a netget gateway with a real `/apps/netget` proxy) but
+  // wrong anywhere else, confirmed live in Storybook: login/Users/
+  // Blockchain all 404'd against `http://localhost:6006/apps/netget`
+  // (Storybook's own origin, no such route) while Netget's own view
+  // worked, because THAT one already read `cleakerEndpoint`, never this.
+  // Assuming "this page is a netget gateway" was never something this
+  // component should guess at all -- a caller that actually needs that
+  // specific assumption (netget's App.jsx) already passes `transportOrigin`
+  // explicitly, so it's unaffected by removing the guess as the default.
+  const resolvedTransportOrigin = String(transportOrigin || cleakerEndpoint || '').trim();
   const resolvedNetgetMonadOrigin = String(explicitNetgetMonadOrigin || resolvedTransportOrigin).trim();
 
   return (
