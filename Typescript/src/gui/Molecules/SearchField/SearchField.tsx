@@ -74,7 +74,13 @@ export default function SearchField({
             height: 40,
             border: '1px solid',
             borderColor: 'divider',
-            borderRadius: '50%',
+            // Square (soft corners), not circular -- matches the position
+            // QRme badge this sits next to in Namespace.tsx's shared
+            // topbar row (same 5px radius QR.me.tsx's own topbar variant
+            // uses), flagged live (2026-10-02) as wanting one consistent
+            // shape language between the two, not a circle next to a
+            // square.
+            borderRadius: '5px',
             bgcolor: 'background.paper',
             color: 'text.secondary',
             '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
