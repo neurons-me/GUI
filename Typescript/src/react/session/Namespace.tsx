@@ -1603,7 +1603,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
-        TopBar={{ elementsRight: topBarRightElements }}
+        TopBar={{ elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both

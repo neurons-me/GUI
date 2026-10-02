@@ -86,6 +86,8 @@ export default function TopBar(props: TopBarProps) {
     collectionsCenter = [],
     collectionsRight = [],
     homeTo,
+    noBorder = false,
+    hideBrand = false,
     position = 'fixed',
     sx,
     appBarSx,
@@ -165,8 +167,7 @@ export default function TopBar(props: TopBarProps) {
   const baseAppBarSx = {
     minHeight: 48,
     backgroundColor: theme.palette.background.nav,
-    borderBottom: '1px solid',
-    borderColor: theme.palette.divider,
+    ...(noBorder ? {} : { borderBottom: '1px solid', borderColor: theme.palette.divider }),
     // Keep AppBar *below* the Drawer so the Drawer edge sits flush over it.
     zIndex: (theme as any)?.zIndex?.appBar ?? 1100,
     ...(isFixed && {
@@ -232,41 +233,43 @@ export default function TopBar(props: TopBarProps) {
           toolbarSx
         )}
       >
-        <Box
-          sx={sxN(
-            {
-              display: 'flex',
-              alignItems: 'center',
-              flexShrink: 0,
-              textDecoration: 'none',
-              ml: 0,
-              pl: 1.5,
-              gap: showBrandLabel ? 1.25 : 0.75,
-              '&:hover': { textDecoration: 'none' },
-              cursor: hasBrandLink ? 'pointer' : 'default',
-            },
-            brandSx
-          )}
-          component={
-            hasBrandLink
+        {!hideBrand && (
+          <Box
+            sx={sxN(
+              {
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
+                textDecoration: 'none',
+                ml: 0,
+                pl: 1.5,
+                gap: showBrandLabel ? 1.25 : 0.75,
+                '&:hover': { textDecoration: 'none' },
+                cursor: hasBrandLink ? 'pointer' : 'default',
+              },
+              brandSx
+            )}
+            component={
+              hasBrandLink
+                ? typeof resolvedHomeTo === 'string' && /^(https?:)?\/\//.test(resolvedHomeTo)
+                  ? 'a'
+                  : (RouterLink as any)
+                : 'div'
+            }
+            {...(hasBrandLink && resolvedHomeTo
               ? typeof resolvedHomeTo === 'string' && /^(https?:)?\/\//.test(resolvedHomeTo)
-                ? 'a'
-                : (RouterLink as any)
-              : 'div'
-          }
-          {...(hasBrandLink && resolvedHomeTo
-            ? typeof resolvedHomeTo === 'string' && /^(https?:)?\/\//.test(resolvedHomeTo)
-              ? { href: resolvedHomeTo }
-              : { to: resolvedHomeTo }
-            : {})}
-        >
-          {brandVisual}
-          {showBrandLabel && title && (
-            <Typography variant="h6" noWrap component="div" sx={sxN({ color: theme.palette.text.secondary, fontWeight: 500 }, titleSx)}>
-              {title}
-            </Typography>
-          )}
-        </Box>
+                ? { href: resolvedHomeTo }
+                : { to: resolvedHomeTo }
+              : {})}
+          >
+            {brandVisual}
+            {showBrandLabel && title && (
+              <Typography variant="h6" noWrap component="div" sx={sxN({ color: theme.palette.text.secondary, fontWeight: 500 }, titleSx)}>
+                {title}
+              </Typography>
+            )}
+          </Box>
+        )}
         {/* Center Elements */}
         {!isMobile && (
           <Box sx={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', color: theme.palette.text.secondary }}>
