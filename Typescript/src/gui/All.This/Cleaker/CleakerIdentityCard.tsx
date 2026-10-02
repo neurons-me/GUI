@@ -422,7 +422,20 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // spot instead of a fixed icon that never actually reflected
   // connection state -- see its own perimeterLabel/perimeterRootLabel
   // doc comments.
-  const perimeterLabel = beatleExpression;
+  // Deliberately NOT just `beatleExpression` pre-auth, even though that's
+  // what this was before -- `beatleExpression` also drives Beatle's own
+  // real headless auto-connect (see the effect below, keyed on it
+  // changing), so making IT follow every keystroke would re-trigger a
+  // real mesh connection attempt on every character typed. Kept that
+  // stable (root-only pre-auth, unchanged) and derived the LABEL
+  // separately, for display only -- same reasoning already applied to
+  // `defaultQrValue` above (the QR's own ENCODED value already follows
+  // `username` live; this was the one remaining piece still frozen,
+  // flagged live 2026-10-02: "cuando empecemos a typear el username
+  // empiece a aparecer junto al namespace... j.cleaker.me ja.cleaker.me").
+  const perimeterLabel = authenticated
+    ? beatleExpression
+    : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
   // real pointer to that identity's own surface, not just decoration.
