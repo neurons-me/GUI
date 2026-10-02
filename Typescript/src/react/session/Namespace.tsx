@@ -1524,71 +1524,86 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         : <Route key={entry.id} path={route.path} element={element} />;
     });
 
+  // The position badge + search field, as real TopBar right-side actions
+  // (`Layout`'s own `TopBar.elementsRight`) -- NOT hand-rolled
+  // `position: fixed` elements living outside the Layout/TopBar system
+  // entirely, which is what they were before (confirmed live 2026-10-02,
+  // after chasing several rounds of alignment/sizing bugs that kept
+  // recurring precisely because they weren't going through the same,
+  // already-correct flex-row chrome TopBar already provides for exactly
+  // this -- `Right Elements`, `display:flex, alignItems:center, gap:1.25`
+  // -- the same lane Beatle and other real TopBar actions already use).
+  // `Namespace.tsx`'s `<Layout>` never configured a `TopBar` prop at all
+  // before this -- only `LeftBar` -- so TopBar's own chrome (AppBar,
+  // brand/logo) is now enabled for the first time, left at its own
+  // defaults (no `logo`/`title` override) rather than customized, per
+  // explicit instruction to adopt it "en modo default" first and tune
+  // from there once it's visibly working.
+  const topBarRightElements = [
+    {
+      type: 'action' as const,
+      props: {
+        // Faded AND collapsed (not unmounted — avoids losing QRme's own
+        // hover/flip local state) while the search field is expanded, so
+        // the two never visually overlap and the row doesn't reserve dead
+        // space for a hidden badge (see topSearchExpanded's own doc
+        // comment above).
+        element: (
+          <Box
+            sx={{
+              // `display: flex` here, not the Box default (block) --
+              // without it, QRme's own `inline-flex` root sits in this
+              // div's inline formatting context and picks up the classic
+              // CSS "phantom descender gap" (a few extra px below an
+              // inline-level child, reserved for text-baseline descenders
+              // that never render) -- confirmed live (2026-10-02): this
+              // wrapper measured 38px tall around a 31px QRme, throwing
+              // off `alignItems: center` in the shared TopBar row next to
+              // the (not similarly wrapped) search icon. `display: flex`
+              // makes this wrapper a block-level flex formatting context
+              // instead, sized to its child's real height with no
+              // baseline reservation.
+              display: 'flex',
+              opacity: topSearchExpanded ? 0 : 1,
+              width: topSearchExpanded ? 0 : 'auto',
+              overflow: 'hidden',
+              pointerEvents: topSearchExpanded ? 'none' : 'auto',
+              transition: 'opacity 150ms ease, width 150ms ease',
+            }}
+          >
+            <QRme
+              variant="topbar"
+              value={positionQrValue}
+              username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
+              status={positionStatus}
+              statusLabel={positionStatusLabel}
+              perimeterLabel={positionExpression}
+              perimeterRootLabel={namespaceRootLabel}
+              data-gui-node-id="GUI.bars.top.position"
+            />
+          </Box>
+        ),
+      },
+    },
+    {
+      type: 'action' as const,
+      props: {
+        element: (
+          <CleakerTopSearch
+            cleakerEndpoint={props.cleakerEndpoint}
+            netgetMonadOrigin={props.netgetMonadOrigin}
+            onExpandedChange={setTopSearchExpanded}
+            collapsedSize={positionBadgeSize}
+          />
+        ),
+      },
+    },
+  ];
+
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
-      {/* The position badge (see positionExpression/positionQrValue above)
-          and the search field, side by side in ONE fixed flex row --
-          top-LEFT of the screen was tried first for the badge and
-          collided with the sidebar's own toggle button occupying that
-          exact corner, so both live top-right instead. Previously two
-          INDEPENDENT `position: fixed` boxes matched by a shared `top`
-          offset, which only actually aligned them when they happened to
-          be the same height -- broke the moment the badge started sizing
-          itself to its own QR's real achievable size (see QR.me.tsx's own
-          "sizes itself to the real achievable size" fix) instead of a
-          fixed 40px guess, flagged live (2026-10-02) as "quedó
-          desalineado". A shared flex row with `alignItems: center`
-          aligns them by their actual rendered height, automatically,
-          regardless of either one's size -- no coordinate math to keep in
-          sync between them. */}
-      <Box
-        sx={{
-          position: 'fixed',
-          top: { xs: 12, sm: 20 },
-          right: { xs: 12, sm: 20 },
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-        }}
-      >
-        {/* The persistent position badge, visible on every route this
-            shell renders, including /netget, not only the Landing page's
-            own bigger QR -- a read-only "where am I" indicator, not the
-            sign-in surface. Faded AND collapsed out of this row's flex
-            flow (not unmounted — avoids losing QRme's own hover/flip
-            local state) while the search field is expanded, so the two
-            never visually overlap and the row doesn't reserve dead space
-            for a hidden badge (see topSearchExpanded's own doc comment
-            above). */}
-        <Box
-          sx={{
-            opacity: topSearchExpanded ? 0 : 1,
-            width: topSearchExpanded ? 0 : 'auto',
-            overflow: 'hidden',
-            pointerEvents: topSearchExpanded ? 'none' : 'auto',
-            transition: 'opacity 150ms ease, width 150ms ease',
-          }}
-        >
-          <QRme
-            variant="topbar"
-            value={positionQrValue}
-            username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
-            status={positionStatus}
-            statusLabel={positionStatusLabel}
-            perimeterLabel={positionExpression}
-            perimeterRootLabel={namespaceRootLabel}
-            data-gui-node-id="GUI.bars.top.position"
-          />
-        </Box>
-        <CleakerTopSearch
-          cleakerEndpoint={props.cleakerEndpoint}
-          netgetMonadOrigin={props.netgetMonadOrigin}
-          onExpandedChange={setTopSearchExpanded}
-          collapsedSize={positionBadgeSize}
-        />
-      </Box>
       <Layout
+        TopBar={{ elementsRight: topBarRightElements }}
         LeftBar={{
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
