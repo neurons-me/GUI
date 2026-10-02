@@ -472,7 +472,23 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
       sx={{
-        minHeight: '100vh',
+        // `flex: 1, minHeight: 0` -- NOT `minHeight: '100vh'` (what this
+        // was before) -- matches the exact idiom Content.tsx's own two
+        // nested flex boxes already use to fill whatever space is left
+        // after ITS OWN `paddingTop` (the TopBar's real measured height,
+        // via the insets system). `100vh` ignored that entirely: it
+        // measured against the RAW viewport, so the moment Namespace.tsx
+        // adopted a real TopBar (2026-10-02, a prior commit) and
+        // Content.tsx started reserving real space for it above this
+        // component, a separate "centered within the full 100vh" box
+        // starting BELOW that reserved space pushed its own visual center
+        // down by roughly half the TopBar's height -- flagged live as
+        // "se empujó mucho para abajo... no me parece centrado". `flex: 1`
+        // instead makes this box fill exactly the space Content.tsx
+        // already allocated (post-TopBar), so centering within it lines
+        // up with the actually-visible content area, not the whole page.
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
