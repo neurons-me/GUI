@@ -276,24 +276,35 @@ export default function QRme({
   // comment in QR.tsx for the confirmed real decode failure this caused).
   const { qrSize, effectiveDiameter, qrInset } = React.useMemo(() => {
     if (isTopbar) {
-      const diameter = Math.min(resolvedDiameter, 40);
-      // 0, not the inherited 2px floor (tuned for the much bigger
-      // non-topbar sizes below) -- a first attempt at 1px here still left
-      // visible "air" ("mucho aire", flagged live 2026-10-02) because this
-      // JS-level inset isn't the only gap: the ring Box this sits inside
-      // has its own 1px CSS border, and since this child is positioned via
-      // `inset: qrInset` relative to that ring's PADDING box (border-box
-      // minus the border, per the CSS absolute-positioning spec), the
-      // ring's border is an ADDITIONAL, invisible-in-this-math 1px that
-      // stacks with qrInset for the total visible gap -- confirmed by
-      // measuring the actual rendered containing-block size (38px, not
-      // the naive 40px effectiveDiameter) before concluding this. At 0,
-      // the ring's own 1px border is the only remaining separation
-      // between the QR pattern and the ring -- no scannability
-      // requirement applies here (this variant is never meant to be
-      // scanned) to argue for keeping any more than that.
+      // The real remaining source of "air" (flagged live 2026-10-02, after
+      // the inset fixes above stopped helping): this branch used to just
+      // set `qrSize = diameter - inset*2` directly, as a flat guess
+      // disconnected from how many modules `value` actually needs. But
+      // <QR> (below) ALWAYS re-derives its own rendered size internally
+      // via `snapQrCellSize(totalModules, size)` (QR.tsx's own
+      // `renderedSize`, a whole-pixel-per-module snap) regardless of what
+      // `size` it's given -- with its default `cellFloor` of 1, that snap
+      // can come out SMALLER than requested whenever `totalModules`
+      // doesn't divide evenly into cells that reach the requested size
+      // (confirmed live: asked for 40, a real position-badge URL's module
+      // count snapped it down to 31). The crop box and ring around it
+      // still sized themselves to the ORIGINAL 40, so the actual QR
+      // pattern sat in the middle of a visibly bigger frame than it
+      // needed. Fixed by computing the SAME snap here, up front, with the
+      // SAME inputs <QR> will use internally -- `effectiveDiameter` (the
+      // whole badge, ring included) now adapts to whatever size is
+      // actually achievable for this value, instead of pinning the frame
+      // to 40 and hoping the inner QR happens to fill it.
+      const cappedDiameter = Math.min(resolvedDiameter, 40);
+      const moduleCount = getQrModuleCount(value, QR_ECC);
+      const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+      // Ring's own 1px border is the only separation needed between it
+      // and the QR pattern -- no scannability requirement applies here
+      // (this variant is never meant to be scanned), so no extra JS-level
+      // inset on top of that.
       const inset = 0;
-      return { qrSize: diameter - inset * 2, effectiveDiameter: diameter, qrInset: inset };
+      const { size } = snapQrCellSize(totalModules, cappedDiameter - inset * 2);
+      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
     }
     const moduleCount = getQrModuleCount(value, QR_ECC);
     const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
