@@ -17,7 +17,7 @@ import IconButton from '@/gui/Atoms/IconButton/IconButton';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
-import QRme from '@/gui/All.This/me/QR/QR.me';
+import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
 import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
@@ -251,7 +251,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 // through here, whichever root it was made under) and where a pick goes.
 // Filtered client-side -- the list is small enough that a real search
 // endpoint would be overbuilding it.
-const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string; onExpandedChange?: (expanded: boolean) => void }> = ({ cleakerEndpoint, netgetMonadOrigin, onExpandedChange }) => {
+const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string; onExpandedChange?: (expanded: boolean) => void; collapsedSize?: number }> = ({ cleakerEndpoint, netgetMonadOrigin, onExpandedChange, collapsedSize }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
@@ -305,6 +305,7 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
       placeholder="Search .me"
       ariaLabel="Search .me"
       onExpandedChange={onExpandedChange}
+      collapsedSize={collapsedSize}
       data-gui-node-id="GUI.bars.top.search"
     />
   );
@@ -1407,6 +1408,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       return resolvedEndpoint;
     }
   }, [resolvedEndpoint, authenticated, session?.semanticNamespace, currentNodePath]);
+  // The exact size the position QRme badge will render at for
+  // `positionQrValue` -- read via `resolveTopbarQrSize()` (QR.me.tsx's own
+  // exported single source of truth, see its doc comment) so the search
+  // icon sitting next to it in the same flex row (below) can be sized to
+  // match exactly, instead of a hardcoded 40 that drifts from whatever
+  // the badge actually renders at (flagged live 2026-10-02: "no están a
+  // la par, no están cuadrados").
+  const positionBadgeSize = useMemo(
+    () => resolveTopbarQrSize(positionQrValue),
+    [positionQrValue],
+  );
   // One effective connection state for the position badge, from verifiedRoot ALONE — never from Beatle's
   // own separate channel state. This is deliberate, not an oversight: mixing two independently-updating
   // signals into one ring+label pair is exactly the bug found on the Landing page's own QR (the ring
@@ -1573,6 +1585,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           cleakerEndpoint={props.cleakerEndpoint}
           netgetMonadOrigin={props.netgetMonadOrigin}
           onExpandedChange={setTopSearchExpanded}
+          collapsedSize={positionBadgeSize}
         />
       </Box>
       <Layout

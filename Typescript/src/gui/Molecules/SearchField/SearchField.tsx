@@ -33,6 +33,7 @@ export default function SearchField({
   emptyLabel,
   ariaLabel = 'Search',
   onExpandedChange,
+  collapsedSize = 40,
   maxResults = 6,
   className,
   sx,
@@ -70,8 +71,8 @@ export default function SearchField({
           aria-label={ariaLabel}
           data-gui-node-id={`${dataGuiNodeId}.toggle`}
           sx={{
-            width: 40,
-            height: 40,
+            width: collapsedSize,
+            height: collapsedSize,
             border: '1px solid',
             borderColor: 'divider',
             // Square (soft corners), not circular -- matches the position

@@ -40,6 +40,27 @@ const QR_INSET_RATIO = 0.015;
 // reads as one deliberate unit instead of an icon dropped in afterward.
 const GOLDEN_RATIO = 1.618;
 
+/**
+ * The exact size `<QRme variant="topbar">` will actually render at for a
+ * given `value`, capped at `maxDiameter` (default 40, matching
+ * `DIAMETER_BY_VARIANT.topbar` below) -- exported so a caller that places
+ * something else NEXT TO this badge (Namespace.tsx's search icon, sharing
+ * one flex row) can size that other thing to match exactly, instead of
+ * guessing a fixed number that drifts from whatever this badge actually
+ * renders at. Flagged live (2026-10-02): the badge sizing itself to its
+ * real achievable size (rather than a flat 40px guess) fixed the "air"
+ * inside the badge, but left the search icon's own fixed 40px visibly
+ * mismatched next to it ("no están a la par, no están cuadrados [iguales
+ * de tamaño]") -- this function is the single source of truth both sides
+ * now read from, so they can never drift apart again.
+ */
+export function resolveTopbarQrSize(value: string, maxDiameter: number = 40): number {
+  const moduleCount = getQrModuleCount(value, QR_ECC);
+  const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+  const { size } = snapQrCellSize(totalModules, maxDiameter);
+  return size;
+}
+
 export type QRmeProps = {
   value: string;
   username?: string;
@@ -296,14 +317,17 @@ export default function QRme({
       // actually achievable for this value, instead of pinning the frame
       // to 40 and hoping the inner QR happens to fill it.
       const cappedDiameter = Math.min(resolvedDiameter, 40);
-      const moduleCount = getQrModuleCount(value, QR_ECC);
-      const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
       // Ring's own 1px border is the only separation needed between it
       // and the QR pattern -- no scannability requirement applies here
       // (this variant is never meant to be scanned), so no extra JS-level
       // inset on top of that.
       const inset = 0;
-      const { size } = snapQrCellSize(totalModules, cappedDiameter - inset * 2);
+      // `resolveTopbarQrSize()` (exported above) is the single source of
+      // truth for this calculation now -- a caller placing something else
+      // next to this badge (Namespace.tsx's search icon) reads the exact
+      // same function to size that other thing to match, instead of two
+      // independently-maintained copies of this math drifting apart.
+      const size = resolveTopbarQrSize(value, cappedDiameter - inset * 2);
       return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
     }
     const moduleCount = getQrModuleCount(value, QR_ECC);

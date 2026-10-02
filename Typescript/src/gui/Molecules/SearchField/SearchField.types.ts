@@ -30,6 +30,18 @@ export type SearchFieldProps = {
    * it. Optional — omit if nothing else needs to react to this.
    */
   onExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Width/height of the COLLAPSED icon button, in px. Defaults to 40.
+   * Exists so a caller placing a differently-sized element next to this
+   * field's collapsed icon (Namespace.tsx's position QRme badge, which
+   * sizes itself to its own QR's real achievable size rather than a fixed
+   * 40px — see QR.me.tsx's `resolveTopbarQrSize()`) can match the two
+   * exactly instead of leaving a visible size mismatch between them
+   * (flagged live 2026-10-02: "no están a la par, no están cuadrados").
+   * Has no effect once expanded (the expanded field's own
+   * `min(280px, 100vw - 32px)` width is unrelated to this).
+   */
+  collapsedSize?: number;
   maxResults?: number;
   className?: string;
   sx?: SxProps<Theme>;
