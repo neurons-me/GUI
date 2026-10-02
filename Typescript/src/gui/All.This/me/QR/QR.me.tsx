@@ -277,7 +277,22 @@ export default function QRme({
   const { qrSize, effectiveDiameter, qrInset } = React.useMemo(() => {
     if (isTopbar) {
       const diameter = Math.min(resolvedDiameter, 40);
-      const inset = Math.max(2, Math.round(diameter * 0.02));
+      // 0, not the inherited 2px floor (tuned for the much bigger
+      // non-topbar sizes below) -- a first attempt at 1px here still left
+      // visible "air" ("mucho aire", flagged live 2026-10-02) because this
+      // JS-level inset isn't the only gap: the ring Box this sits inside
+      // has its own 1px CSS border, and since this child is positioned via
+      // `inset: qrInset` relative to that ring's PADDING box (border-box
+      // minus the border, per the CSS absolute-positioning spec), the
+      // ring's border is an ADDITIONAL, invisible-in-this-math 1px that
+      // stacks with qrInset for the total visible gap -- confirmed by
+      // measuring the actual rendered containing-block size (38px, not
+      // the naive 40px effectiveDiameter) before concluding this. At 0,
+      // the ring's own 1px border is the only remaining separation
+      // between the QR pattern and the ring -- no scannability
+      // requirement applies here (this variant is never meant to be
+      // scanned) to argue for keeping any more than that.
+      const inset = 0;
       return { qrSize: diameter - inset * 2, effectiveDiameter: diameter, qrInset: inset };
     }
     const moduleCount = getQrModuleCount(value, QR_ECC);
