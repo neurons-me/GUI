@@ -22,6 +22,42 @@ export function canonicalJson(obj: Record<string, unknown>): string {
   );
 }
 
+// Canonical form of a request's query string — binds the signature to WHICH
+// resource/operation the query selects (e.g. "/logs?type=access" vs
+// "?type=error"), not just the path. Without this, a proof signed for a bare
+// path is valid for any query string on that same path (confirmed live:
+// gateway-logs-capability.test.ts's [2b] case — one proof signed for "/logs"
+// successfully read two different real log files by varying ?type= alone).
+//
+// Decoded key/value pairs (not re-encoded query text) so percent-encoding
+// differences between this client and the Lua verifier's own decoder can
+// never cause a false mismatch — only the semantic content is compared.
+// Serialized as a JSON array of [key, value] pairs, in EXACT appearance
+// order — reusing JSON encoding (already the mechanism canonicalJson relies
+// on) instead of hand-rolling a delimiter-joined string, which would be
+// ambiguous the moment a key or value itself contains "=" or "&".
+//
+// Deliberately NOT sorted. A handler reading a repeated query key may take
+// the first or last value (e.g. netget's logs.lua takes the first), so
+// "?type=access&type=error" and "?type=error&type=access" select opposite
+// values under first-wins semantics — two operationally DIFFERENT requests.
+// Sorting the pairs would canonicalize both to the same form and let one
+// signed proof cover either ordering; keeping URLSearchParams.entries()'s
+// own parse order (which already matches the one real input string
+// byte-for-byte on both this client and the Lua verifier's own
+// lib/query_canon.lua) means no sort was ever needed to be deterministic —
+// only to avoid accidentally being wrong. See
+// gateway-query-canonicalization.test.ts for the shared vectors proving
+// this and the Lua implementation agree (repeated-key order, Unicode, "+",
+// "%20", empty values, malformed escapes).
+//
+// No query string at all (searchParams has zero entries) canonicalizes to
+// "[]", matching a route that was never signed with a query component —
+// this is what lets no-query routes keep working unchanged.
+export function canonicalizeQuery(searchParams: URLSearchParams): string {
+  return JSON.stringify(Array.from(searchParams.entries()));
+}
+
 // Random hex nonce — client-generated, marks each request uniquely.
 export function genNonce(): string {
   const arr = new Uint8Array(16);
@@ -56,7 +92,7 @@ export async function fetchGatewayHostname(): Promise<string> {
 
 // The identity root a person has explicitly picked when a UI offers a
 // choice between reachable roots for the same physical gateway (e.g.
-// CleakerLanding's local.cleaker/cleaker.me switch) — read by
+// Namespace's local.cleaker/cleaker.me switch) — read by
 // resolveNetgetSeedFromCredentials-style resolvers at claim/open time so the
 // namespace actually claimed matches what was shown, instead of always
 // falling back to fetchGatewayHostname()'s single physical answer. A
@@ -78,14 +114,14 @@ export function getActiveNamespaceRoot(): string | null {
 // The one formula for "this browser's own guess at a full namespace" --
 // every caller that needs it (SeedSessionProvider.tsx's loginWithCleaker/
 // registerWithCredentials, and the local identity vault's own save key in
-// RegisterMe.tsx/RecoverAccount.tsx) MUST use this exact function, not its
+// Claim.tsx/RecoverAccount.tsx) MUST use this exact function, not its
 // own inline copy. Root cause of a real, live-confirmed bug otherwise: the
 // server can canonicalize a root string differently than this browser
 // guessed it (e.g. "localhost" -> this monad's real configured root,
 // confirmed live against a disposable monad) -- claimNamespace()/
 // openNamespace() on the server already normalize consistently between
 // claim and open, so THAT part is never the mismatch. What broke was the
-// LOCAL vault's own storage key: RegisterMe.tsx used to save it under the
+// LOCAL vault's own storage key: Claim.tsx used to save it under the
 // server-CONFIRMED semanticNamespace (post-canonicalization), while
 // loginWithCleaker looked it up under this same guessed (pre-
 // canonicalization) key -- two independently-computed strings that only
@@ -192,13 +228,15 @@ export async function signedRequest(
   const url       = typeof input === 'string' ? input
                   : input instanceof URL       ? input.pathname
                   : (input as Request).url;
-  const path      = new URL(url, window.location.origin).pathname;
+  const fullUrl   = new URL(url, window.location.origin);
+  const path      = fullUrl.pathname;
+  const query     = canonicalizeQuery(fullUrl.searchParams);
   const nonce     = genNonce();
   const timestamp = Date.now();
   const bodyStr   = typeof init?.body === 'string' ? init.body : '';
   const bodyHash  = await sha256Hex(bodyStr);
 
-  const challenge = canonicalJson({ method, path, bodyHash, nonce, timestamp });
+  const challenge = canonicalJson({ method, path, query, bodyHash, nonce, timestamp });
 
   try {
     const proof    = await (node as any).prove({ rootNamespace: hostname, challenge });
