@@ -2,6 +2,8 @@ import * as React from 'react';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import { useOpenStreetMap } from './context';
 import { useBoundValue } from './bindings';
+import { useRegisterGuiNode } from '@/runtime/selection';
+import type { GuiNodeProvenance } from '@/types/gui.types';
 
 export type OsmMarkerShape = 'circle' | 'square' | 'triangle' | 'rect' | 'icon';
 export type OsmMarkerLabelPlacement = 'right' | 'left' | 'top' | 'bottom';
@@ -46,6 +48,19 @@ export type OsmMarkerProps = {
    * runtime.notify(), or an explicit subscribe bridge.
    */
   bind?: Partial<Record<OsmMarkerBindableProp, string>>;
+  /**
+   * Makes the marker a GUI node: renders `data-gui-node-id` and registers it
+   * with useRegisterGuiNode (type "OpenStreetMap.Marker"), so the Semantic
+   * Inspector can select it and Layout Grid outlines it. Registration is a
+   * no-op outside a SelectionProvider (i.e. without mount()'s devtools).
+   */
+  nodeId?: string;
+  /**
+   * Opt-in kernel provenance for the node (`semanticPath` / `explainPath`),
+   * the same contract any GUI node uses: it lights up the Inspector's Explain
+   * for that path. Compared by content, so an inline object literal is fine.
+   */
+  provenance?: GuiNodeProvenance;
   id?: string;
   className?: string;
   style?: React.CSSProperties;
@@ -95,9 +110,19 @@ function MarkerCore({ shape, size, width, height, color, fill, strokeWidth }: {
   return <rect {...common} x={-w / 2} y={-h / 2} width={w} height={h} rx={Math.min(3, w / 6)} />;
 }
 
+function useStableProvenance(provenance: GuiNodeProvenance | undefined): GuiNodeProvenance | undefined {
+  // useRegisterGuiNode re-registers whenever the provenance reference changes;
+  // key it by content so a parent re-render does not churn the registry.
+  const key = provenance ? JSON.stringify(provenance) : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return React.useMemo(() => provenance, [key]);
+}
+
 export default function OpenStreetMapMarker(props: OsmMarkerProps) {
   const map = useOpenStreetMap();
   const v = useBoundProps(props);
+  const provenance = useStableProvenance(props.provenance);
+  useRegisterGuiNode(props.nodeId, 'OpenStreetMap.Marker', undefined, provenance);
   const lat = toNumber(v.lat);
   const lon = toNumber(v.lon);
   if (v.visible === false || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
@@ -129,6 +154,7 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
       style={props.style}
       onClick={props.onClick}
       data-gui-component="OpenStreetMap.Marker"
+      data-gui-node-id={props.nodeId || undefined}
       data-testid={props['data-testid']}
       data-lat={lat}
       data-lon={lon}

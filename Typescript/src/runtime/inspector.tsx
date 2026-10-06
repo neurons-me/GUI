@@ -1952,6 +1952,15 @@ export function RuntimeInspector({
       [aria-label="Move from the focus"] button:not(:disabled):active {
         background: color-mix(in srgb, currentColor 30%, transparent) !important;
       }
+      /* outline / box-shadow do not paint on SVG children (e.g. a map
+         marker's <g>): stroke the selected node's own shapes instead. */
+      svg .${highlightClass} > :is(circle, ellipse, rect, polygon, path) {
+        stroke: var(--gui-inspector-accent, #3b82f6) !important;
+        stroke-width: 3px !important;
+      }
+      .gui-grid-overlay-active svg [data-gui-node-id] > :is(circle, ellipse, rect, polygon, path) {
+        stroke-dasharray: 3 2;
+      }
       .gui-grid-overlay-active [data-gui-node-id] {
         outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
         outline-offset: -1px;

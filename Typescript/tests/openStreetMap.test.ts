@@ -218,9 +218,25 @@ function boundMarkerFollowsTheRuntime() {
   assert.equal(createBoundValueSource(runtime, me, undefined).getSnapshot(), undefined);
 }
 
+// nodeId makes a marker a GUI node (data-gui-node-id, for the Semantic
+// Inspector / Layout Grid); without it the markup is unchanged. Registration
+// itself (useRegisterGuiNode, an effect) needs a browser; the Veracruz page's
+// headless check covers it.
+function markerAsGuiNode() {
+  const html = renderToString(
+    h(OpenStreetMap, { ...FRAME },
+      h(OpenStreetMap.Marker, { id: 'm-node', nodeId: 'map.node.port', provenance: { semanticPath: 'port.busy' }, lat: 19.2, lon: -96.132 }),
+      h(OpenStreetMap.Marker, { id: 'm-plain', lat: 19.2, lon: -96.13 })),
+  );
+  assert.match(html, /<g id="m-node"[^>]*data-gui-component="OpenStreetMap.Marker"[^>]*data-gui-node-id="map.node.port"/);
+  const plain = html.match(/<g id="m-plain"[^>]*>/);
+  assert.ok(plain && !plain[0].includes('data-gui-node-id'), 'no nodeId -> no data-gui-node-id');
+}
+
 function main() {
   projectionMapsKnownPoints();
   fixedMarkersAndAttribution();
+  markerAsGuiNode();
   canvasLayerUsesTheSameTransform();
   boundMarkerFollowsTheRuntime();
   console.log('openStreetMap.test.ts: all assertions passed');
