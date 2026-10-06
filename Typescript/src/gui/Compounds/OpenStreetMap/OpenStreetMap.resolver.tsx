@@ -67,7 +67,9 @@ const OpenStreetMapResolver: RegistryEntry = {
   type: 'OpenStreetMap',
   meta,
   resolve(spec: OpenStreetMapSpec, _ctx?: ResolveCtx) {
-    const { id, children, ...rest } = (spec.props ?? {}) as NonNullable<OpenStreetMapSpec['props']>;
+    // `data-gui-node-id` (injected by the spec renderer) passes through in `rest`
+    // and lands on the map root; React keys never travel in spread props.
+    const { id, children, key: _key, ...rest } = (spec.props ?? {}) as NonNullable<OpenStreetMapSpec['props']>;
     const kids = children ?? spec.children;
     return (
       <OpenStreetMap id={ensureNodeId('openstreetmap', id)} {...(rest as OpenStreetMapProps)}>
@@ -81,7 +83,11 @@ export const OpenStreetMapMarkerResolver: RegistryEntry = {
   type: 'OpenStreetMapMarker',
   meta: markerMeta,
   resolve(spec: OpenStreetMapMarkerSpec, _ctx?: ResolveCtx) {
-    return <OpenStreetMapMarker {...((spec.props ?? {}) as OsmMarkerProps)} />;
+    // The renderer injects `data-gui-node-id` and records the node with the
+    // spec's provenance, so the marker only tags its element (no second
+    // registration that would replace the recorded spec). `bind` passes through.
+    const { key: _key, ...props } = (spec.props ?? {}) as OsmMarkerProps & { key?: unknown };
+    return <OpenStreetMapMarker {...(props as OsmMarkerProps)} />;
   },
 };
 

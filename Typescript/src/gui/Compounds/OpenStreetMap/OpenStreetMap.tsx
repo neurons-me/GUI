@@ -83,6 +83,8 @@ export type OpenStreetMapProps = {
   className?: string;
   style?: React.CSSProperties;
   'data-testid'?: string;
+  /** GUI node id (set by the spec renderer, or by hand) for the Semantic Inspector / Layout Grid. */
+  'data-gui-node-id'?: string;
   /** Markers / SVG overlays (map-pixel space) and Canvas layers. */
   children?: React.ReactNode;
 };
@@ -122,6 +124,29 @@ const ATTRIBUTION_POS: Record<OsmAttributionPosition, React.CSSProperties> = {
   'top-left': { left: 0, top: 0 },
 };
 
+/**
+ * Split children into SVG overlay content and Canvas layers. Fragments are
+ * looked through: a spec renderer (mount / renderNode) wraps every child in a
+ * keyed React.Fragment, and a page may group layers in one itself. Keys are
+ * prefixed with the fragment's key so siblings from different groups stay unique.
+ */
+function partitionLayers(children: React.ReactNode, svg: React.ReactNode[], canvas: React.ReactNode[], prefix = '') {
+  React.Children.toArray(children).forEach((child) => {
+    if (!React.isValidElement(child)) {
+      svg.push(child);
+      return;
+    }
+    const keyed = prefix ? React.cloneElement(child, { key: `${prefix}/${child.key ?? ''}` }) : child;
+    if (child.type === React.Fragment) {
+      partitionLayers((child.props as { children?: React.ReactNode }).children, svg, canvas, `${prefix}${child.key ?? ''}`);
+    } else if (child.type === OpenStreetMapCanvas) {
+      canvas.push(keyed);
+    } else {
+      svg.push(keyed);
+    }
+  });
+}
+
 function readDpr(maxDpr: number) {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   return Math.min(maxDpr, dpr);
@@ -144,6 +169,7 @@ function OpenStreetMapRoot({
   className,
   style,
   'data-testid': dataTestId,
+  'data-gui-node-id': guiNodeId,
   children,
 }: OpenStreetMapProps) {
   const projection = React.useMemo(
@@ -182,10 +208,7 @@ function OpenStreetMapRoot({
 
   const svgChildren: React.ReactNode[] = [];
   const canvasLayers: React.ReactNode[] = [];
-  React.Children.toArray(children).forEach((child) => {
-    if (React.isValidElement(child) && child.type === OpenStreetMapCanvas) canvasLayers.push(child);
-    else svgChildren.push(child);
-  });
+  partitionLayers(children, svgChildren, canvasLayers);
 
   const license = source?.license ?? OSM_ATTRIBUTION.license;
   const metadata = {
@@ -213,6 +236,7 @@ function OpenStreetMapRoot({
         id={id}
         className={['gui-osm', className].filter(Boolean).join(' ')}
         data-gui-component="OpenStreetMap"
+        data-gui-node-id={guiNodeId || undefined}
         data-testid={dataTestId}
         data-osm-bbox={`${projection.bbox.west},${projection.bbox.south},${projection.bbox.east},${projection.bbox.north}`}
         data-osm-projection={projection.kind}

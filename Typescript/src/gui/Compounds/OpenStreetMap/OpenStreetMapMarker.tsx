@@ -61,6 +61,12 @@ export type OsmMarkerProps = {
    * for that path. Compared by content, so an inline object literal is fine.
    */
   provenance?: GuiNodeProvenance;
+  /**
+   * Node id put on the element WITHOUT registering it here: the spec renderer
+   * (mount / renderNode) injects it and has already recorded the node with the
+   * spec's provenance. `nodeId` wins when both are given.
+   */
+  'data-gui-node-id'?: string;
   id?: string;
   className?: string;
   style?: React.CSSProperties;
@@ -154,7 +160,7 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
       style={props.style}
       onClick={props.onClick}
       data-gui-component="OpenStreetMap.Marker"
-      data-gui-node-id={props.nodeId || undefined}
+      data-gui-node-id={props.nodeId || props['data-gui-node-id'] || undefined}
       data-testid={props['data-testid']}
       data-lat={lat}
       data-lon={lon}

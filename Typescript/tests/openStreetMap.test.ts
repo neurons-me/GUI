@@ -14,6 +14,8 @@ import {
 } from '../src/gui/Compounds/OpenStreetMap/projection';
 import { createBoundValueSource } from '../src/gui/Compounds/OpenStreetMap/bindings';
 import { drawOsmCanvasFrame } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMapCanvas';
+import OpenStreetMapResolver, { OpenStreetMapMarkerResolver } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap.resolver';
+import { renderNode } from '../src/runtime/renderer';
 
 // GUI.OpenStreetMap: one transform contract (projection + view) shared by the
 // basemap, markers and canvas layers; markers bound to kernel paths update
@@ -233,12 +235,85 @@ function markerAsGuiNode() {
   assert.ok(plain && !plain[0].includes('data-gui-node-id'), 'no nodeId -> no data-gui-node-id');
 }
 
-function main() {
+// From a spec (mount / renderNode) every child arrives wrapped in a keyed
+// React.Fragment (renderer.ts renderResolvedSpecNode). The map must still put
+// a Canvas layer next to the <svg>, not inside it (a <canvas> inside <svg> is
+// an SVG element with no getContext), and keep markers inside the overlay.
+const SPEC_REGISTRY = { OpenStreetMap: OpenStreetMapResolver, OpenStreetMapMarker: OpenStreetMapMarkerResolver };
+
+function renderSpec(spec: any, extra: Record<string, any> = {}) {
+  return renderToString(h(() => renderNode(spec, { React, registry: SPEC_REGISTRY, ...extra } as any)));
+}
+
+function specCanvasStaysOutsideSvg() {
+  const html = renderSpec({
+    type: 'OpenStreetMap',
+    props: { id: 'map', ...FRAME },
+    children: [
+      { type: 'OpenStreetMapMarker', props: { id: 'm1', lat: 19.2, lon: -96.132 } },
+      { type: OpenStreetMap.Canvas, props: { id: 'trucks', onFrame: () => {} } },
+      // a Fragment the page wraps itself: nested layers are found too
+      h(React.Fragment, null, h(OpenStreetMap.Canvas, { id: 'trucks2', onFrame: () => {} }), h('g', { id: 'edges' })),
+    ],
+  });
+  const svg = html.slice(html.indexOf('<svg'), html.indexOf('</svg>') + 6);
+  assert.ok(svg.length > 10, 'svg rendered');
+  assert.ok(!svg.includes('<canvas'), 'no <canvas> inside <svg>');
+  assert.equal((html.match(/<canvas/g) || []).length, 2, 'both canvas layers rendered');
+  assert.match(html, /<\/svg><canvas[^>]*id="trucks"/, 'canvas layer is the svg\'s sibling');
+  assert.match(svg, /<g class="gui-osm__overlay">.*id="m1".*id="edges"/, 'markers and svg overlays stay in the overlay');
+}
+
+// The renderer injects data-gui-node-id into every spec node's props and
+// records the node (with its spec provenance) for the Semantic Inspector;
+// the map root, markers and canvas must put that id on their element so the
+// inspector can select them and Layout Grid can outline them. Spec bindings
+// (marker `bind`) pass through the resolver unchanged.
+function specNodeIdsAndProvenance() {
+  const me = newKernel();
+  me.ships[1].lat(19.2);
+  const runtime = createMeRuntime(me, { subscribe: makeBridge().subscribe });
+  const records: any[] = [];
+  const spec = {
+    type: 'OpenStreetMap',
+    props: { id: 'port-map', ...FRAME },
+    children: [
+      {
+        type: 'OpenStreetMapMarker',
+        props: { id: 'n-ship1', 'data-gui-node-id': 'map.n-ship1', bind: { lat: 'ships.1.lat' }, lon: -96.132 },
+        provenance: { semanticPath: 'ships.1.hasWork' },
+      },
+      { type: OpenStreetMap.Canvas, props: { 'data-gui-node-id': 'map.trucks', onFrame: () => {} } },
+    ],
+  };
+  const html = renderToString(
+    h(MeRuntimeProvider, { me, runtime },
+      h(() => renderNode(spec as any, { React, registry: SPEC_REGISTRY, onNodeResolved: (r: any) => records.push(r) } as any))),
+  );
+  assert.match(html, /<div[^>]*class="gui-osm"[^>]*data-gui-node-id="port-map"/, 'map root carries its node id');
+  assert.match(html, /<g id="n-ship1"[^>]*data-gui-node-id="map.n-ship1"/, 'marker carries its spec node id');
+  assert.match(html, /<canvas[^>]*data-gui-node-id="map.trucks"/, 'canvas layer carries its node id');
+  assert.deepEqual(translateOf(html, 'n-ship1'), (() => {
+    const q = createOsmProjection(FRAME).project(19.2, -96.132);
+    return [Math.round(q.x * 100) / 100, Math.round(q.y * 100) / 100];
+  })(), 'bind passes through the resolver');
+  return Promise.resolve().then(() => {
+    const byId = Object.fromEntries(records.map((r) => [r.id, r]));
+    assert.equal(byId['port-map']?.type, 'OpenStreetMap');
+    assert.equal(byId['map.n-ship1']?.type, 'OpenStreetMapMarker');
+    assert.deepEqual(byId['map.n-ship1']?.provenance, { semanticPath: 'ships.1.hasWork' }, 'spec provenance recorded');
+    assert.ok(byId['map.trucks'], 'canvas recorded');
+  });
+}
+
+async function main() {
   projectionMapsKnownPoints();
   fixedMarkersAndAttribution();
   markerAsGuiNode();
   canvasLayerUsesTheSameTransform();
   boundMarkerFollowsTheRuntime();
+  specCanvasStaysOutsideSvg();
+  await specNodeIdsAndProvenance();
   console.log('openStreetMap.test.ts: all assertions passed');
 }
 

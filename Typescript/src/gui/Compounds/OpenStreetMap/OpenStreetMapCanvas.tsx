@@ -25,6 +25,8 @@ export type OsmCanvasProps = {
   redrawKey?: unknown;
   /** Clip drawing to the map frame (default true). */
   clip?: boolean;
+  /** GUI node id (set by the spec renderer, or by hand) for the Semantic Inspector / Layout Grid. */
+  'data-gui-node-id'?: string;
   id?: string;
   className?: string;
   style?: React.CSSProperties;
@@ -61,7 +63,7 @@ export function drawOsmCanvasFrame(
   }
 }
 
-export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey, clip = true, id, className, style }: OsmCanvasProps) {
+export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey, clip = true, id, className, style, 'data-gui-node-id': guiNodeId }: OsmCanvasProps) {
   const { transform, transformRef } = useOpenStreetMapContext();
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const onFrameRef = React.useRef(onFrame);
@@ -102,6 +104,7 @@ export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey
       className={['gui-osm__canvas', className].filter(Boolean).join(' ')}
       aria-hidden="true"
       data-gui-component="OpenStreetMap.Canvas"
+      data-gui-node-id={guiNodeId || undefined}
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', pointerEvents: 'none', ...style }}
     />
   );
