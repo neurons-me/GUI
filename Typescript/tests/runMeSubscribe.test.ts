@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import * as React from 'react';
+import { renderToString } from 'react-dom/server';
 import ME from 'this.me';
 import { createMeRuntime } from '../src/runtime/run-me';
+import { MeRuntimeProvider } from '../src/react/MeRuntimeProvider';
+import { useMe } from '../src/react/useMe';
+import { useMeValue } from '../src/react/useMeValue';
+import type { RuntimeAdapter } from '../src/runtime/adapter';
 
 // Regression for duck-typed native subscribe detection in createMeRuntime.
 //
@@ -176,9 +182,74 @@ function explicitBridgeIsUsed() {
   assert.ok(!memoryPaths(me).includes('subscribe'));
 }
 
+function assertKernelUntouched(me: any, before: { snapshot: string; memories: number }, label: string) {
+  assert.equal(snapshotJson(me), before.snapshot, `${label}: exportSnapshot byte-identical`);
+  assert.equal(me.memories.length, before.memories, `${label}: memories count unchanged`);
+  assert.equal(me('subscribe'), undefined, `${label}: me('subscribe') stays undefined`);
+}
+
+// useMeValue subscribes with exactly this call shape (src/react/useMeValue.ts).
+function subscribeLikeUseMeValue(runtime: RuntimeAdapter, path: string, cb: () => void) {
+  return runtime.subscribe!(path, cb, undefined, { propKey: path }) || (() => {});
+}
+
+function mountAndSubscribeDoNotAlterKernel() {
+  // React mount: MeRuntimeProvider + a useMeValue consumer, rendered with
+  // react-dom/server (the repo has no DOM test environment). Server rendering
+  // does not run useSyncExternalStore's subscribe, so the subscription itself
+  // is then exercised on the very runtime the provider created, using
+  // useMeValue's call shape.
+  const me = newKernel();
+  me.count(1);
+  const before = { snapshot: snapshotJson(me), memories: me.memories.length };
+
+  let mountedRuntime: RuntimeAdapter | null = null;
+  function Consumer() {
+    const { runtime } = useMe();
+    mountedRuntime = runtime;
+    const value = useMeValue<number>('count');
+    return React.createElement('span', null, `count=${String(value)}`);
+  }
+  const html = renderToString(
+    React.createElement(MeRuntimeProvider, { me, children: React.createElement(Consumer) }),
+  );
+  assert.match(html, /count=1/, 'useMeValue consumer reads the kernel value');
+  assert.ok(mountedRuntime, 'MeRuntimeProvider created a runtime');
+  assertKernelUntouched(me, before, 'after mount');
+
+  let calls = 0;
+  const unsubscribe = subscribeLikeUseMeValue(mountedRuntime!, 'count', () => {
+    calls += 1;
+  });
+  assertKernelUntouched(me, before, 'after mount + subscribe');
+
+  // Same at the bare runtime level (createMeRuntime without provider).
+  const runtime = createMeRuntime(me as any);
+  const unsubscribe2 = subscribeLikeUseMeValue(runtime, 'count', () => {});
+  assertKernelUntouched(me, before, 'after createMeRuntime + subscribe');
+
+  // Writes after mount + subscribe: exportSnapshot must keep working.
+  mountedRuntime!.action('me/count')(2);
+  assert.equal(calls, 1, 'adapter write notifies the mounted subscriber');
+  me.count(3);
+  assert.equal(calls, 1, 'direct kernel write does not notify without a bridge');
+  unsubscribe();
+  unsubscribe2();
+
+  let snapshot: any;
+  assert.doesNotThrow(() => {
+    snapshot = me.exportSnapshot();
+  }, 'exportSnapshot works after mount + subscribe + writes');
+  assert.ok(snapshot);
+  assert.equal(me('count'), 3);
+  assert.equal(me('subscribe'), undefined);
+  assert.ok(!memoryPaths(me).includes('subscribe'), 'no subscribe memory anywhere in the log');
+}
+
 function main() {
   kernelCharacterisation();
   runtimeDoesNotWriteWithoutBridge();
+  mountAndSubscribeDoNotAlterKernel();
   writePathThroughAdapterNotifies();
   directKernelWriteIsNotObserved();
   explicitBridgeIsUsed();
