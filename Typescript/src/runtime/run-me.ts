@@ -116,6 +116,10 @@ export function createInternalStore() {
       version += 1;
       listeners.forEach((listener) => listener());
     },
+    /** Move the snapshot without calling every listener (one path changed). */
+    bump() {
+      version += 1;
+    },
     getSnapshot() {
       return version;
     },
@@ -220,7 +224,13 @@ export function createMeRuntime(me: MeLike, opts: RenderMeOptions = {}): Runtime
       const notify = () => callback(undefined);
       const unsubs: UnsubscribeFn[] = [store.subscribe(path, notify)];
       if (nativeSubscribe) {
-        const nativeUnsub = nativeSubscribe(path, notify);
+        // The kernel changed outside action(): the snapshot must move too, or
+        // useSyncExternalStore (RuntimeResolvedNode) sees the same version and
+        // keeps the stale value.
+        const nativeUnsub = nativeSubscribe(path, () => {
+          store.bump();
+          notify();
+        });
         if (typeof nativeUnsub === 'function') unsubs.push(nativeUnsub);
       }
       return combineUnsubscribers(unsubs);
