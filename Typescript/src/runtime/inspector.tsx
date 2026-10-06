@@ -828,6 +828,8 @@ type ExplainPanelSummary = {
 type TruthMetric = {
   label: string;
   value: string;
+  /** Second line under the value (what it was measured against). */
+  detail?: string;
 };
 
 type TruthDependency = {
@@ -1217,20 +1219,46 @@ function buildTruthDependencies(payload: any): TruthDependency[] {
   }));
 }
 
-function buildTruthMetrics(payload: any, inspectPayload: any, explainPath: string | null): TruthMetric[] {
-  const dependencies = Array.isArray(payload?.derivation?.inputs) ? payload.derivation.inputs.length : 0;
-  const masked = Array.isArray(payload?.derivation?.inputs)
-    ? payload.derivation.inputs.filter((input: any) => Boolean(input?.masked)).length
-    : 0;
+// Two different numbers that used to share one "Dependencies (k)" tile:
+//  - inputs: how many paths this derivation READS (derivation.inputs) -- a
+//    property of the formula, the same on every wave;
+//  - the last wave's work (meta.k, meta.recomputed, meta.changed): what the
+//    kernel actually recomputed when a write to meta.sourcePath last reached
+//    this path. this.me's `k` is that wave's count, not a dependency count.
+// They are shown as separate tiles so neither is read as the other.
+export function buildTruthMetrics(payload: any, inspectPayload: any, explainPath: string | null): TruthMetric[] {
+  const inputs = Array.isArray(payload?.derivation?.inputs) ? payload.derivation.inputs : null;
+  const masked = inputs ? inputs.filter((input: any) => Boolean(input?.masked)).length : 0;
   const memories = getRelevantMemoryPool(payload, inspectPayload, explainPath).length;
   const mode = inspectPayload?.recomputeMode ?? 'unknown';
+  const meta = payload?.meta ?? {};
+  const k = typeof meta.k === 'number' && Number.isFinite(meta.k) ? meta.k : null;
+  const recomputed = Array.isArray(meta.recomputed) ? meta.recomputed.map(String) : null;
+  const changed = Array.isArray(meta.changed) ? meta.changed.map(String) : null;
+  const sourcePath = typeof meta.sourcePath === 'string' && meta.sourcePath ? meta.sourcePath : null;
+  const listed = (paths: string[]) => (paths.length > 6 ? `${paths.slice(0, 6).join(', ')}, +${paths.length - 6}` : paths.join(', '));
 
-  return [
-    { label: 'Dependencies (k)', value: String(dependencies) },
-    { label: 'Masked', value: String(masked) },
+  const metrics: TruthMetric[] = [
+    {
+      label: 'Inputs (derivation)',
+      value: inputs ? String(inputs.length) : '—',
+      detail: inputs ? 'paths the formula reads' : 'not derived (a fact)',
+    },
+    { label: 'Masked inputs', value: String(masked) },
+    {
+      label: 'Last wave · k',
+      value: k === null ? '—' : String(k),
+      detail: sourcePath ? `wave from the write to ${sourcePath}` : 'no wave has reached this path yet',
+    },
+    {
+      label: 'Last wave · recomputed / changed',
+      value: recomputed || changed ? `${recomputed ? recomputed.length : '—'} / ${changed ? changed.length : '—'}` : '—',
+      detail: recomputed && recomputed.length ? listed(recomputed) : undefined,
+    },
     { label: 'Memories', value: String(memories) },
     { label: 'Mode', value: String(mode) },
   ];
+  return metrics;
 }
 
 function buildShieldMessage(payload: any, inspectPayload: any, explainPath: string | null): string | null {
@@ -3089,6 +3117,20 @@ export function RuntimeInspector({
                     <div>{shieldMessage}</div>
                   </div>
                 )}
+                {explainState.status === 'ready' && explainState.payload && (
+                  <>
+                    {(explainState.payload?.derivation?.expression ?? explainState.payload?.expr) != null && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ opacity: 0.75 }}>expression</div>
+                        <code>{String(explainState.payload?.derivation?.expression ?? explainState.payload?.expr)}</code>
+                      </div>
+                    )}
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ opacity: 0.75 }}>value</div>
+                      <code>{formatValueLabel(explainState.payload?.value)}</code>
+                    </div>
+                  </>
+                )}
                 {truthMetrics.length > 0 && (
                   <div
                     style={{
@@ -3110,6 +3152,9 @@ export function RuntimeInspector({
                       >
                         <div style={{ opacity: 0.7, fontSize: 10, marginBottom: 4 }}>{metric.label}</div>
                         <div style={{ fontWeight: 700, fontSize: 13 }}>{metric.value}</div>
+                        {metric.detail && (
+                          <div style={{ opacity: 0.7, fontSize: 10, marginTop: 2, overflowWrap: 'anywhere' }}>{metric.detail}</div>
+                        )}
                       </div>
                     ))}
                   </div>
