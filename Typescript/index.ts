@@ -67,6 +67,31 @@ export { default as StickyOptionsTop } from '@/gui/Layout/StickyOptions/StickyOp
 export { default as StickyOptions } from '@/gui/Layout/StickyOptions/StickyOptionsTop';
 export { default as Icon } from '@/gui/Atoms/Icon/Icon';
 export { default as DomIcon } from '@/gui/Atoms/Icon/DomIcon';
+export {
+  default as OpenStreetMap,
+  OpenStreetMapMarker,
+  OpenStreetMapCanvas,
+  useOpenStreetMap,
+  createOsmProjection,
+  fitOsmView,
+  createOsmTransform,
+  osmCanvasMatrix,
+  OSM_ATTRIBUTION,
+} from '@/gui/Compounds/OpenStreetMap';
+export type {
+  OpenStreetMapProps,
+  OsmBasemap,
+  OsmBasemapLayer,
+  OsmSourceMeta,
+  OsmMarkerProps,
+  OsmMarkerShape,
+  OsmCanvasProps,
+  OsmFrameInfo,
+  OsmBBox,
+  OsmProjection,
+  OsmView,
+  OsmTransform,
+} from '@/gui/Compounds/OpenStreetMap';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';
 export { default as InspectorToggle } from '@/gui/Molecules/InspectorToggle/InspectorToggle';
