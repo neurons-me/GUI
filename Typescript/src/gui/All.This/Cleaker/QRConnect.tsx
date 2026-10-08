@@ -200,6 +200,18 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // guess itself smarter. Session-only (not persisted): a stale override
   // surviving a reload/different device would be its own, worse kind of
   // silent mismatch.
+  //
+  // WHAT HAPPENS ON RELOAD (so nobody has to guess, and so changing it is a decision, not a side effect):
+  //   * the typed root (this state) is NOT kept: after a reload the root is derived again from the page's own address
+  //     (deriveNamespaceRootLabel(resolvedEndpoint)). The same goes for the failure card and the trace.
+  //   * the "active namespace root" the sign-in code reads (signedRequest's setActiveNamespaceRoot) is a global in
+  //     memory: not kept either, and it is set from this root on every render.
+  //   * what IS kept across a reload: the identity vault in localStorage (`this.me.identity-vault:v1:<handle>.<root>`),
+  //     the theme, and the session if the provider persists one. A vault is per full namespace, so typing another
+  //     root never reaches a different identity's vault.
+  // Persisting the typed root is a possible choice, not an impossible one: ./hooks/useCleakerNamespace stores it
+  // (localStorage + a kernel path) and is not wired in. It would trade the mismatch described above (a stale
+  // override outliving the server's own idea of the root) for not retyping it. That trade is the owner's to make.
   const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
   const namespaceRootLabel = useMemo(
     () => namespaceOverride || deriveNamespaceRootLabel(resolvedEndpoint),

@@ -1,3 +1,7 @@
+// NOTE: there is ONE identity flow. This file mounts <SeedSessionProvider> + <Namespace>, exactly the two things the
+// public <Cleaker> composes (see Cleaker.tsx), whose Landing page is QRConnect; Cleaker.verify.stories.tsx mounts
+// <Cleaker> itself. Same implementation, two entry heights; neither is a second flow.
+//
 // Verification artifact for the QRConnect extraction
 // (src/gui/All.This/Cleaker/QRConnect.tsx, extracted from the
 // inline `CleakerLandingHome` that used to live in
