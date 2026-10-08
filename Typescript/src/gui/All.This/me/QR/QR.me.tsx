@@ -97,7 +97,7 @@ export type QRmeProps = {
    * the QR's own normal color. Purely additive: every existing caller that
    * doesn't pass `status` renders exactly as before.
    */
-  status?: 'idle' | 'checking' | 'confirmed' | 'error';
+  status?: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
   /** Accessible text describing `status` (e.g. "Verificando local.cleaker…"). */
   statusLabel?: string;
   /**
@@ -388,11 +388,16 @@ export default function QRme({
   // normal color -- only 'checking'/'error' recolor anything. Kept as one
   // value (not two separate ring/ink colors) so the ink and the ring
   // around it always agree on what they're signaling.
+  // 'off' is grey: nothing answers here (no .me behind this address). Distinct from 'error' (red), where
+  // something answered and refused -- the same ring colour for both would say "broken" about a thing that is
+  // simply not running.
   const statusColor = status === 'checking'
     ? theme.palette.warning.main
     : status === 'error'
       ? theme.palette.error.main
-      : undefined;
+      : status === 'off'
+        ? theme.palette.text.disabled
+        : undefined;
   const qrBg = bg ?? theme.palette.background.paper;
   const qrFg = fg ?? statusColor ?? theme.palette.primary.main;
   const ringAccent = statusColor ?? theme.palette.primary.main;

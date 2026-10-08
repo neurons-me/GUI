@@ -42,6 +42,8 @@ import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
+import type { DoorLayers } from '@/react/session/doorLayers';
+import DoorLayersPanel from '../netget/Door/DoorLayersPanel';
 import {
   requireCleakerEndpoint,
   deriveNamespaceRootLabel,
@@ -152,9 +154,15 @@ const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
 export type CleakerIdentityCardProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
+  /**
+   * What is behind this door, layer by layer, and whether nothing answers (`doorOff`): then the QR is grey, the
+   * sign-in form is not offered (it could not work) and the layers panel takes its place.
+   */
+  doorLayers?: DoorLayers;
+  doorOff?: boolean;
 };
 
-const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -287,8 +295,9 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // a beat before the sidebar/netget context that's supposed to match it
   // actually does, exactly the drift this was corrected to close.
   const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
-  const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' =
-    beatleState === 'error' || beatleState === 'invalid' ? 'error'
+  const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' =
+    doorOff ? 'off'
+    : beatleState === 'error' || beatleState === 'invalid' ? 'error'
     : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
     : beatleState === 'connected' || beatleState === 'streaming'
       ? (sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
@@ -300,6 +309,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // both; Beatle's own finer-grained labels (Parsing…/Connecting…/Resolving…) still show during the
   // 'checking' bucket, since qrStatus collapses several beatleStates into it.
   const qrStatusLabel = qrStatus === 'idle' ? ''
+    : qrStatus === 'off' ? 'No .me here'
     : qrStatus === 'error' ? 'Could not connect'
     : qrStatus === 'confirmed' ? 'Connected'
     : (BEATLE_STATE_LABEL[beatleState] || 'Checking…');
@@ -472,7 +482,8 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // register/recover mode -- see that Box's own doc comment) -- nothing
   // on screen would reflect this channel's status there, so there's no
   // reason to open one.
-  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk;
+  // Nothing answers here (doorOff): there is no channel to open until something does.
+  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && !doorOff;
   useEffect(() => {
     if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
     // openBeatleChannel is stable (useBeatle's own useCallback) except
@@ -613,7 +624,14 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           to do it -- it connects on its own the moment there's an
           expression to open. */}
 
-      {authenticated
+      {doorOff && doorLayers ? (
+        <DoorLayersPanel
+          layers={doorLayers}
+          namespace={namespaceRootLabel}
+          location={typeof window !== 'undefined' ? window.location.origin : undefined}
+          data-gui-node-id={`${nodeId}.off`}
+        />
+      ) : authenticated
       && (mode !== 'register' || registrationComplete)
       && (mode !== 'recover' || recoveryComplete) ? (
         /* Authenticated — "Hello, I am…" and the root-switch badge were

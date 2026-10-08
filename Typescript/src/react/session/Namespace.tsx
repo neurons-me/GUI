@@ -41,6 +41,8 @@ import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
+import { useDoorLayers } from './doorLayers';
+import DoorLayersPanel, { doorBlocks } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
@@ -1383,6 +1385,15 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   }, []);
   const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
 
+  // What is behind this door, layer by layer. Distinct from verifiedRoot: that one answers "is the root confirmed",
+  // this one answers WHICH layer (nginx / backend / monad) is missing when it is not, and tells "nothing there"
+  // (off, grey) from "something answered and refused" (error, red) by who produced the response.
+  const doorLayers = useDoorLayers({
+    origin: typeof window !== 'undefined' ? window.location.origin : '',
+    monadTransport: verifiedRoot.transportOrigin,
+  });
+  const monadOff = doorLayers.monad === 'off';
+
   // The persistent "where am I" position — namespace/identity + the CURRENT route's path — shown at the
   // shell level (below) so it survives navigation instead of only existing on the Landing page's own QR.
   // Three things kept separate, per the review that asked for this: WHICH namespace is queried
@@ -1426,8 +1437,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // real disconnect). verifiedRoot.status is already the one signal both the sidebar and /netget treat as
   // authoritative — reusing it here, rather than adding a second source, is what keeps the ring and the
   // label unable to disagree by construction.
-  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' = verifiedRoot.status;
-  const positionStatusLabel = verifiedRoot.status === 'checking' ? 'Checking…'
+  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' = monadOff ? 'off' : verifiedRoot.status;
+  const positionStatusLabel = monadOff ? 'No .me here'
+    : verifiedRoot.status === 'checking' ? 'Checking…'
     : verifiedRoot.status === 'error' ? 'Could not connect'
     : verifiedRoot.status === 'confirmed' ? 'Connected'
     : '';
@@ -1499,19 +1511,35 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // element is shown.
   const barSlots = leftBarSlots(doc, { authenticated });
 
+  // Routes whose page needs a layer that is off right now: their sidebar link is dimmed (still a link; the page it
+  // opens says which layer is missing).
+  const offRoutes = new Set(
+    flattenGuiDocument(doc)
+      .filter((entry) => entry.parentId === 'GUI.content' && entry.route && entry.needs && doorBlocks(doorLayers, entry.needs))
+      .map((entry) => entry.route as string),
+  );
+
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
   const documentPageRoutes = flattenGuiDocument(doc)
     .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
     .map((entry) => {
       const route = documentRoute(entry.route);
-      const element = renderGuiDocumentPage(entry.id, {
+      // A page whose layer is off is replaced, here, by the one panel that says which layer is missing -- the
+      // same on every route -- instead of each page printing its own error for the same missing thing. The
+      // landing is exempt: it is the way in, and shows the panel itself next to the QR.
+      const blocked = entry.id !== LANDING_ID && entry.needs && doorBlocks(doorLayers, entry.needs);
+      const element = blocked ? (
+        <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
+          <DoorLayersPanel layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} data-gui-node-id={`${entry.id}.off`} />
+        </Box>
+      ) : renderGuiDocumentPage(entry.id, {
         React,
         registry: pageRegistry,
         doc,
         props:
           entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status }
+            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff }
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,
@@ -1619,11 +1647,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           // `resolved`, `useCleakerRootSidebar`'s cached composition)
           // never did, for exactly that reason.
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end].map((el) =>
-            el.type === 'link' && el.props.to === location.pathname
-              ? { ...el, props: { ...el.props, active: true } }
-              : el.type === 'link'
-                ? { ...el, props: { ...el.props, active: false } }
-                : el
+            el.type === 'link'
+              ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
+              : el
           ),
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
           // of these exact components -- ThemeLauncher and DevToolsLauncher

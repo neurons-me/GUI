@@ -8,6 +8,8 @@ export type LeftSidebarItemProps = {
   /** react-router path */
   to?: string;
   active?: boolean;
+  /** Dimmed: what this link opens has nothing behind it right now (the page it opens says what is missing). */
+  off?: boolean;
   external?: boolean;
   onClick?: () => void;
   view?: LeftSidebarView;

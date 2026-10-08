@@ -28,6 +28,12 @@ export type GuiDocumentNode = {
   /** Where a page is served, e.g. "/" (index) or "/users". */
   route?: string;
   /**
+   * The layer behind this door that a page cannot work without: `monad` (the .me), `backend` (netget's gateway
+   * API) or `both`. A page whose layer is off is replaced, in the shell, by the one panel that says which layer is
+   * missing, and its sidebar link is dimmed. A page with no `needs` works on its own.
+   */
+  needs?: 'monad' | 'backend' | 'both';
+  /**
    * An element of a bar (children of `GUI.bars.left`): where it navigates and its icon. A part with `to`
    * under a bar is an element of that bar; the bar's own composition (what the namespace adds) layers
    * around these.
@@ -56,6 +62,7 @@ export type GuiDocumentEntry = {
   note?: string;
   component?: string;
   route?: string;
+  needs?: 'monad' | 'backend' | 'both';
   to?: string;
   icon?: string;
   requires?: 'session';
@@ -79,6 +86,7 @@ export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocument
       note: node.note,
       component: node.component,
       route: node.route,
+      needs: node.needs,
       to: node.to,
       icon: node.icon,
       requires: node.requires,

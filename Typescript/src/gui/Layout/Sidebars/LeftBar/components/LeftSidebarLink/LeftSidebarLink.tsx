@@ -14,6 +14,7 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
   href,
   to,
   active,
+  off,
   onClick,
   children,
   view: viewProp,
@@ -69,6 +70,9 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
         border: '1px solid',
         borderColor: active ? 'primary.main' : 'transparent',
         color: active ? 'primary.main' : 'text.primary',
+        // `off`: what this link leads to has nothing behind it right now. Dimmed, still a link: the page it
+        // opens says what is missing.
+        opacity: off ? 0.45 : 1,
         cursor: 'pointer',
         borderRadius: 1,
         textDecoration: 'none',
