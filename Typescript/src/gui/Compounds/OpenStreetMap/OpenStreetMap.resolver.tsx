@@ -67,16 +67,34 @@ export const markerMeta = {
   },
 };
 
+/**
+ * Spec-driven maps call `onSelectionChange` with the ids array only. In a
+ * spec the handler is a `{ write: "me/..." }` token, which the renderer turns
+ * into `runtime.action(expr)`, and an action stores every argument it gets (two
+ * arguments become an array). Passing only the ids makes the kernel hold the
+ * selection itself. The JSX API keeps `(ids, info)`.
+ */
+function specSelectionCallback(
+  handler: unknown,
+): ((ids: string[]) => void) | undefined {
+  if (typeof handler !== 'function') return undefined;
+  return (ids: string[]) => (handler as (ids: string[]) => void)(ids);
+}
+
 const OpenStreetMapResolver: RegistryEntry = {
   type: 'OpenStreetMap',
   meta,
   resolve(spec: OpenStreetMapSpec, _ctx?: ResolveCtx) {
     // `data-gui-node-id` (injected by the spec renderer) passes through in `rest`
     // and lands on the map root; React keys never travel in spread props.
-    const { id, children, key: _key, ...rest } = (spec.props ?? {}) as NonNullable<OpenStreetMapSpec['props']>;
+    const { id, children, key: _key, onSelectionChange, ...rest } = (spec.props ?? {}) as NonNullable<OpenStreetMapSpec['props']>;
     const kids = children ?? spec.children;
     return (
-      <OpenStreetMap id={ensureNodeId('openstreetmap', id)} {...(rest as OpenStreetMapProps)}>
+      <OpenStreetMap
+        id={ensureNodeId('openstreetmap', id)}
+        {...(rest as OpenStreetMapProps)}
+        onSelectionChange={specSelectionCallback(onSelectionChange)}
+      >
         {kids}
       </OpenStreetMap>
     );

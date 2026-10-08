@@ -171,23 +171,6 @@ export function createKernelBridge(): KernelBridge {
   };
 }
 
-/**
- * The spec renderer calls a `{ write }` handler with all of the prop's
- * arguments, and run-me stores more than one argument as an array.
- * `onSelectionChange(ids, info)` would write `[ids, info]`. This story-only
- * wrapper writes the first argument (the value). See plan §6, S6 open (a).
- */
-export function writeFirstArgument<R extends RuntimeAdapter>(runtime: R): R {
-  const action = runtime.action;
-  if (typeof action !== 'function') return runtime;
-  const wrapped = Object.create(runtime) as R;
-  (wrapped as any).action = (expression: string, ctx?: any, meta?: any) => {
-    const fn = action.call(runtime, expression, ctx, meta);
-    return (...args: any[]) => fn(args[0]);
-  };
-  return wrapped;
-}
-
 export function createVeracruzKernel() {
   const me: any = new (ME as any)();
   const t0 = truckAt(0);
@@ -207,7 +190,7 @@ export function createVeracruzKernel() {
   }
   for (const [scope, name, expression] of ME_RULES) me[scope]['='](name, expression);
   const bridge = createKernelBridge();
-  const runtime = writeFirstArgument(createMeRuntime(me, { subscribe: bridge.subscribe }));
+  const runtime = createMeRuntime(me, { subscribe: bridge.subscribe });
   return { me, runtime, bridge };
 }
 

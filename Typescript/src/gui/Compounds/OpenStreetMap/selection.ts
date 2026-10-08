@@ -20,6 +20,10 @@ export type OsmSelectionProps = {
   selected?: string[];
   /** Uncontrolled initial selection. Passing either prop turns selection mode on. */
   defaultSelected?: string[];
+  /**
+   * Called with `(ids, info)` from JSX. A JSON spec's `{ write: "me/..." }`
+   * handler is called with the ids only, so the kernel stores the array.
+   */
   onSelectionChange?: (ids: string[], info: OsmSelectionChangeInfo) => void;
 };
 

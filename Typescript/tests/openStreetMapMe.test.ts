@@ -15,6 +15,8 @@ import OpenStreetMapResolver, {
   OpenStreetMapMarkerResolver,
 } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap.resolver';
 import { readMeValue } from '../src/runtime/run-me';
+import OpenStreetMap from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap';
+import { useOpenStreetMapContext, type OpenStreetMapContextValue } from '../src/gui/Compounds/OpenStreetMap/context';
 import {
   DEFAULT_SELECTION,
   ME_LAYERS_PATH,
@@ -118,9 +120,8 @@ function mountingDoesNotWrite() {
 
 function writesAndNotifications() {
   const { me, runtime } = createVeracruzKernel();
-  // {write} on onSelectionChange arrives as (ids, info); only the ids are stored
-  runtime.action!('me/ui.map.selected')(['n-yard'], { id: 'n-port', selected: false, source: 'map' });
-  assert.deepEqual(me('ui.map.selected'), ['n-yard'], 'the info argument is not stored');
+  runtime.action!('me/ui.map.selected')(['n-yard']);
+  assert.deepEqual(me('ui.map.selected'), ['n-yard']);
   runtime.action!('me/ui.map.hiddenLayers')(['water']);
   assert.deepEqual(me('ui.map.hiddenLayers'), ['water'], 'one-argument writes pass through');
   const again = renderToString(h(ThemeProvider, { theme }, h(MeRuntimeProvider, { me, runtime },
@@ -140,6 +141,46 @@ function writesAndNotifications() {
   unsub();
   runtime.action!('me/pins.port')('after unmount');
   assert.equal(notices, 1, 'unsubscribing releases the subscription');
+}
+
+// Part A (plan §6): a spec's `{ write }` on onSelectionChange stores just the
+// ids array. The path is the real one: renderer token -> runtime.action ->
+// OpenStreetMap resolver -> map selection. A probe node in the spec reads the
+// map's selection from context and toggles pins as a click / the list would.
+function specSelectionWritesIdsOnly() {
+  const { me, runtime } = createVeracruzKernel();
+  let ctx: OpenStreetMapContextValue | null = null;
+  const Probe = () => { ctx = useOpenStreetMapContext(); return null; };
+  const spec = veracruzMeSpec();
+  spec.children = [...spec.children, { type: 'SelectionProbe' }];
+  const registry = { ...REGISTRY, SelectionProbe: { type: 'SelectionProbe', resolve: () => h(Probe) } };
+  renderToString(h(ThemeProvider, { theme }, h(MeRuntimeProvider, { me, runtime },
+    renderNode(spec, { React, registry, runtime }))));
+  assert.ok(ctx, 'the probe rendered inside the spec map');
+  const sel = ctx!.selection;
+  assert.deepEqual(sel.ids, DEFAULT_SELECTION, 'selection is read from the kernel');
+  sel.toggle('n-ship3', 'map');
+  assert.deepEqual(me(ME_SELECTION_PATH), [...DEFAULT_SELECTION, 'n-ship3'], 'click: the kernel holds the ids array only');
+  sel.toggle('n-port', 'keyboard');
+  assert.deepEqual(me(ME_SELECTION_PATH), ['n-ship1', 'n-ship2', 'n-yard', 'n-ship3'], 'keyboard toggle off: ids only');
+  sel.set([], 'list');
+  assert.deepEqual(me(ME_SELECTION_PATH), [], 'clear from the list stores []');
+  const stored = me(ME_SELECTION_PATH);
+  assert.ok(Array.isArray(stored) && stored.every((x: unknown) => typeof x === 'string'), 'never [ids, info]');
+}
+
+// The JSX API is unchanged: onSelectionChange still gets (ids, info).
+function jsxStillGetsInfo() {
+  let ctx: OpenStreetMapContextValue | null = null;
+  const Probe = () => { ctx = useOpenStreetMapContext(); return null; };
+  const calls: unknown[][] = [];
+  renderToString(h(ThemeProvider, { theme }, h(OpenStreetMap as any, {
+    bbox: { south: 19.192, west: -96.142, north: 19.205, east: -96.122 }, width: 600, height: 400,
+    selected: ['a'], onSelectionChange: (...args: unknown[]) => calls.push(args),
+  }, h(Probe))));
+  ctx!.selection.toggle('b', 'map');
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], [['a', 'b'], { id: 'b', selected: true, source: 'map' }], 'JSX: (ids, info)');
 }
 
 function bridgeAnnounceAndRelease() {
@@ -188,6 +229,8 @@ specIsPlainJson();
 kernelRules();
 mountingDoesNotWrite();
 writesAndNotifications();
+specSelectionWritesIdsOnly();
+jsxStillGetsInfo();
 bridgeAnnounceAndRelease();
 tickMovesTheTruckAndTheCounts();
 console.log('openStreetMapMe.test.ts: all assertions passed');
