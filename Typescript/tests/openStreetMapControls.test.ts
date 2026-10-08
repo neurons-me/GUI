@@ -107,7 +107,8 @@ function rootView() {
   assert.equal(viewBoxOf(zoomed), '300 200 600 400', 'defaultView zoom 2 about the frame centre');
   assert.match(zoomed, /data-osm-zoom="2"/, 'zoom exposed on the root');
   const tr = (html: string) => (html.match(/id="m1"[^>]*transform="([^"]+)"|transform="([^"]+)"[^>]*id="m1"/) || []).slice(1).find(Boolean);
-  assert.equal(tr(zoomed), tr(fitHtml), 'markers stay in map px; the viewBox does the zoom');
+  // the position stays in map px (the viewBox does the zoom); S5b.1 adds a scale that keeps the marker's on-screen size
+  assert.equal(tr(zoomed), `${tr(fitHtml)} scale(0.5)`, 'markers stay in map px; the viewBox does the zoom');
 
   const p = createOsmProjection(FRAME);
   const geo = p.unproject(900, 200);
@@ -146,13 +147,14 @@ function viewportActions() {
   assert.equal(calls[2].source, 'reset');
   const c = p.unproject(600, 400);
   near(calls[2].view.center.lat, c.lat, 'reset centre lat', 1e-9);
+  vp.setView({ zoom: 3 }, 'api');
+  near(calls[3].view.zoom, 3, 'setView zoom');
+  // (at the fit the whole frame is visible, so the view stays centred; zoomed in it can move)
   vp.panTo(19.2, -96.13, 'api');
   const target = p.project(19.2, -96.13);
-  const got = p.project(calls[3].view.center.lat, calls[3].view.center.lon);
+  const got = p.project(calls[4].view.center.lat, calls[4].view.center.lon);
   near(got.x, target.x, 'panTo x', 1e-6);
   near(got.y, target.y, 'panTo y', 1e-6);
-  vp.setView({ zoom: 3 }, 'api');
-  near(calls[4].view.zoom, 3, 'setView zoom');
   vp.setView({ zoom: 0.1 }, 'api');
   near(calls[5].view.zoom, 1, 'setView clamped to minZoom');
 }
