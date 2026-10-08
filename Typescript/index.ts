@@ -67,6 +67,60 @@ export { default as StickyOptionsTop } from '@/gui/Layout/StickyOptions/StickyOp
 export { default as StickyOptions } from '@/gui/Layout/StickyOptions/StickyOptionsTop';
 export { default as Icon } from '@/gui/Atoms/Icon/Icon';
 export { default as DomIcon } from '@/gui/Atoms/Icon/DomIcon';
+export {
+  default as OpenStreetMap,
+  OpenStreetMapMarker,
+  OpenStreetMapCanvas,
+  OpenStreetMapOverlay,
+  OpenStreetMapLegend,
+  OpenStreetMapChip,
+  OpenStreetMapControls,
+  OpenStreetMapMarkerList,
+  useOpenStreetMapLink,
+  useOpenStreetMap,
+  useOpenStreetMapContext,
+  useOpenStreetMapPalette,
+  buildOsmPalette,
+  createOsmProjection,
+  fitOsmView,
+  createOsmTransform,
+  osmCanvasMatrix,
+  OSM_ATTRIBUTION,
+} from '@/gui/Compounds/OpenStreetMap';
+export type {
+  OpenStreetMapProps,
+  OsmBasemap,
+  OsmBasemapLayer,
+  OsmSourceMeta,
+  OsmMarkerProps,
+  OsmMarkerShape,
+  OsmCanvasProps,
+  OsmFrameInfo,
+  OsmBBox,
+  OsmProjection,
+  OsmView,
+  OsmTransform,
+  OsmPalette,
+  OsmMarkerTone,
+  OsmMarkerState,
+  OsmLayerKind,
+  OsmOverlayProps,
+  OsmOverlayPosition,
+  OsmLegendProps,
+  OsmLegendItem,
+  OsmChipProps,
+  OsmControlsProps,
+  OsmUserView,
+  OsmViewport,
+  OsmViewChangeInfo,
+  OsmMarkerDefaults,
+  OsmMarkerScaleMode,
+  OsmGestureOptions,
+  OsmMarkerListProps,
+  OsmSelectionProps,
+  OsmSelectionChangeInfo,
+  OsmLink,
+} from '@/gui/Compounds/OpenStreetMap';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';
 export { default as InspectorToggle } from '@/gui/Molecules/InspectorToggle/InspectorToggle';
@@ -168,6 +222,8 @@ export type {
   SideBarsCollectionSlot,
 } from '@/gui/Layout/Sidebars/Collections';
 export { ThemesCatalog, Catalog } from '@/gui/Theme';
+export { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
+export { GuiThemes } from '@/gui/Theme/utils/catalog';
 export { default as ThemeLauncher } from '@/gui/Theme/Launcher/ThemeLauncher';
 export {
   default as GUITools,
