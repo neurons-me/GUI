@@ -151,7 +151,7 @@ export default function ThemesCatalog({
                 border: '1px solid',
                 borderColor: selected ? (activePrimary || 'primary.main') : 'transparent',
                 borderRadius: 1.5,
-                background: selected ? 'action.selected' : 'transparent',
+                bgcolor: selected ? 'action.selected' : 'transparent',
                 color: 'inherit',
                 display: 'flex',
                 alignItems: 'center',
