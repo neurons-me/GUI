@@ -6,6 +6,7 @@ import OpenStreetMapMarker, { type OsmMarkerProps } from './OpenStreetMapMarker'
 import OpenStreetMapOverlay, { type OsmOverlayProps } from './OpenStreetMapOverlay';
 import OpenStreetMapLegend, { type OsmLegendProps } from './OpenStreetMapLegend';
 import OpenStreetMapChip, { type OsmChipProps } from './OpenStreetMapChip';
+import OpenStreetMapControls, { type OsmControlsProps } from './OpenStreetMapControls';
 
 // Kernel bindings in declarative specs use the renderer's existing read
 // expressions (e.g. `lat: "me/ships.1.lat"`), resolved and subscribed by the
@@ -155,6 +156,20 @@ export const chipMeta = {
   },
 };
 
+export const controlsMeta = {
+  id: 'compounds.openstreetmap.controls',
+  label: 'OpenStreetMap.Controls',
+  kind: 'molecule' as const,
+  path: ['Maps', 'OpenStreetMap'],
+  tags: ['map', 'zoom', 'controls', 'layers', 'openstreetmap'],
+  story: { title: 'Compounds/OpenStreetMap/Controls' },
+  demoSpec: {
+    type: 'OpenStreetMap',
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, style: { height: 200 } },
+    children: [{ type: 'OpenStreetMapControls', props: { layers: true } }],
+  },
+};
+
 const strip = <T,>(props: T & { key?: unknown }): T => {
   const { key: _key, ...rest } = props as any;
   return rest as T;
@@ -184,6 +199,15 @@ export const OpenStreetMapChipResolver: RegistryEntry = {
   resolve(spec: { props?: OsmChipProps & { [key: string]: any }; children?: any }) {
     const { children, ...props } = strip(spec.props ?? ({} as OsmChipProps));
     return <OpenStreetMapChip {...props}>{children ?? spec.children}</OpenStreetMapChip>;
+  },
+};
+
+export const OpenStreetMapControlsResolver: RegistryEntry = {
+  type: 'OpenStreetMapControls',
+  meta: controlsMeta,
+  resolve(spec: { props?: OsmControlsProps & { [key: string]: any } }) {
+    const props = strip(spec.props ?? {}) as OsmControlsProps;
+    return <OpenStreetMapControls {...props} />;
   },
 };
 
