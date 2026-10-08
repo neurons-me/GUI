@@ -222,6 +222,8 @@ export type {
   SideBarsCollectionSlot,
 } from '@/gui/Layout/Sidebars/Collections';
 export { ThemesCatalog, Catalog } from '@/gui/Theme';
+export { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
+export { GuiThemes } from '@/gui/Theme/utils/catalog';
 export { default as ThemeLauncher } from '@/gui/Theme/Launcher/ThemeLauncher';
 export {
   default as GUITools,
