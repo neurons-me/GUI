@@ -41,7 +41,10 @@ const same = (a: OsmViewState, b: OsmViewState) =>
 export function useOsmViewState(projection: OsmProjection, fit: OsmView, props: OsmViewProps): { state: OsmViewState; viewport: OsmViewport } {
   const minZoom = props.minZoom ?? OSM_DEFAULT_MIN_ZOOM;
   const maxZoom = Math.max(minZoom, props.maxZoom ?? OSM_DEFAULT_MAX_ZOOM);
-  const clamp = React.useCallback((s: OsmViewState) => clampOsmViewState(projection, s, minZoom, maxZoom), [projection, minZoom, maxZoom]);
+  const fitKey = `${fit.width}x${fit.height}@${fit.scale}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fitForClamp = React.useMemo(() => fit, [fitKey]);
+  const clamp = React.useCallback((s: OsmViewState) => clampOsmViewState(projection, s, minZoom, maxZoom, fitForClamp), [projection, minZoom, maxZoom, fitForClamp]);
   const toState = React.useCallback(
     (v: Partial<OsmUserView> | undefined, base: OsmViewState): OsmViewState => {
       const c = v?.center && Number.isFinite(v.center.lat) && Number.isFinite(v.center.lon) ? projection.project(v.center.lat, v.center.lon) : { x: base.cx, y: base.cy };
@@ -52,6 +55,7 @@ export function useOsmViewState(projection: OsmProjection, fit: OsmView, props: 
   const toUser = React.useCallback((s: OsmViewState): OsmUserView => ({ zoom: s.zoom, center: projection.unproject(s.cx, s.cy) }), [projection]);
 
   const fitState = React.useMemo(() => osmFitViewState(projection), [projection]);
+  // the fit and "zoom 1, centred" are the same view; tight bounds snap there
   const controlled = props.view !== undefined;
   const [inner, setInner] = React.useState<OsmViewState>(() => (props.defaultView ? toState(props.defaultView, fitState) : fitState));
   const cv = props.view;

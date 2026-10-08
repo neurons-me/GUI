@@ -54,7 +54,26 @@ export type OsmView = {
   height: number;
   /** Device pixel ratio used for canvas backing stores. */
   dpr: number;
+  /** User zoom over the fit (1 = fit). Set by the map root; absent = 1. */
+  zoom?: number;
+  /**
+   * Scale applied to marker geometry (map px) so markers keep their on-screen
+   * size while the map zooms: 1 at the fit with markerScale 'fit'. Absent = 1.
+   */
+  markerScale?: number;
 };
+
+/**
+ * Marker scale for a view: map px per marker unit. 'fit' keeps the size a marker
+ * has at zoom 1 (1 / zoom); 'screen' makes marker units CSS px (1 / view scale).
+ */
+export function osmMarkerScale(mode: 'fit' | 'screen', view: Pick<OsmView, 'scale'>, zoom: number): number {
+  if (mode === 'screen') return view.scale > 0 ? 1 / view.scale : 1;
+  return zoom > 0 ? 1 / zoom : 1;
+}
+
+/** Exponent for basemap stroke widths under zoom: drawn width grows as zoom^(1 − e). */
+export const OSM_STROKE_ZOOM_EXPONENT = 0.75;
 
 export type OsmTransform = {
   projection: OsmProjection;
@@ -171,17 +190,30 @@ export function isOsmFitViewState(projection: Pick<OsmProjection, 'width' | 'hei
 
 /**
  * Keep a view state inside sensible bounds: zoom in [minZoom, maxZoom], and the
- * centre inside the map frame (so at least a quarter of the view shows the map).
+ * centre inside the map frame. With the fit view (`fit`, measured container) the
+ * bounds are tighter: the visible rectangle stays on the map (no panning into
+ * empty space; an axis where the whole frame is visible stays centred). Without
+ * a measured size the frame aspect stands in for the container.
  */
 export function clampOsmViewState(
   projection: Pick<OsmProjection, 'width' | 'height'>,
   s: OsmViewState,
   minZoom = OSM_DEFAULT_MIN_ZOOM,
   maxZoom = OSM_DEFAULT_MAX_ZOOM,
+  fit?: OsmView,
 ): OsmViewState {
+  const W = projection.width;
+  const H = projection.height;
   const zoom = Math.min(Math.max(Number.isFinite(s.zoom) ? s.zoom : 1, minZoom), Math.max(minZoom, maxZoom));
-  const cx = Math.min(Math.max(Number.isFinite(s.cx) ? s.cx : projection.width / 2, 0), projection.width);
-  const cy = Math.min(Math.max(Number.isFinite(s.cy) ? s.cy : projection.height / 2, 0), projection.height);
+  let cx = Math.min(Math.max(Number.isFinite(s.cx) ? s.cx : W / 2, 0), W);
+  let cy = Math.min(Math.max(Number.isFinite(s.cy) ? s.cy : H / 2, 0), H);
+  if (fit) {
+    const measured = fit.width > 0 && fit.height > 0 && fit.scale > 0;
+    const hw = measured ? fit.width / (2 * fit.scale * zoom) : W / (2 * zoom);
+    const hh = measured ? fit.height / (2 * fit.scale * zoom) : H / (2 * zoom);
+    cx = 2 * hw >= W - 1e-6 ? W / 2 : Math.min(Math.max(cx, hw), W - hw);
+    cy = 2 * hh >= H - 1e-6 ? H / 2 : Math.min(Math.max(cy, hh), H - hh);
+  }
   return { zoom, cx, cy };
 }
 
