@@ -1393,6 +1393,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     monadTransport: verifiedRoot.transportOrigin,
   });
   const monadOff = doorLayers.monad === 'off';
+  const monadChecking = doorLayers.monad === 'checking';
+  // The root is verified once, at mount, and a first failure used to stay a failure for the life of the page: a monad
+  // that came up AFTER the page loaded left the QR red until a reload. When the layers say the monad is up and the
+  // root is not confirmed, verify it again.
+  const monadUp = doorLayers.monad === 'up';
+  React.useEffect(() => {
+    if (monadUp && verifiedRoot.status !== 'confirmed') verifiedRoot.promote(rootSeed);
+    // Only the monad coming up triggers it; the verification itself moves `verifiedRoot.status`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monadUp]);
 
   // The persistent "where am I" position — namespace/identity + the CURRENT route's path — shown at the
   // shell level (below) so it survives navigation instead of only existing on the Landing page's own QR.
@@ -1539,7 +1549,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff }
+            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking }
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,

@@ -160,9 +160,11 @@ export type CleakerIdentityCardProps = DocumentPageProps & {
    */
   doorLayers?: DoorLayers;
   doorOff?: boolean;
+  /** The layers have not been read yet: neither the form nor the panel is shown until they are. */
+  doorChecking?: boolean;
 };
 
-const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -297,6 +299,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
   const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' =
     doorOff ? 'off'
+    : doorChecking ? 'checking'
     : beatleState === 'error' || beatleState === 'invalid' ? 'error'
     : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
     : beatleState === 'connected' || beatleState === 'streaming'
@@ -483,7 +486,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // on screen would reflect this channel's status there, so there's no
   // reason to open one.
   // Nothing answers here (doorOff): there is no channel to open until something does.
-  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && !doorOff;
+  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && !doorOff && !doorChecking;
   useEffect(() => {
     if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
     // openBeatleChannel is stable (useBeatle's own useCallback) except
@@ -624,13 +627,25 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           to do it -- it connects on its own the moment there's an
           expression to open. */}
 
-      {doorOff && doorLayers ? (
-        <DoorLayersPanel
-          layers={doorLayers}
-          namespace={namespaceRootLabel}
-          location={typeof window !== 'undefined' ? window.location.origin : undefined}
-          data-gui-node-id={`${nodeId}.off`}
-        />
+      {doorChecking ? null : doorOff && doorLayers ? (
+        // The QR is the way in even with nothing behind it: it is clickable, and the layers panel is what it opens,
+        // not something stacked under it. Closed, the Home is the grey QR and one line saying what to do with it.
+        expanded ? (
+          <DoorLayersPanel
+            layers={doorLayers}
+            namespace={namespaceRootLabel}
+            location={typeof window !== 'undefined' ? window.location.origin : undefined}
+            data-gui-node-id={`${nodeId}.off`}
+          />
+        ) : (
+          <Typography
+            variant="body2"
+            data-gui-node-id={`${nodeId}.off.hint`}
+            sx={{ color: 'text.secondary', textAlign: 'center', mt: 1.5 }}
+          >
+            No .me answers here. Click the QR to see what is missing.
+          </Typography>
+        )
       ) : authenticated
       && (mode !== 'register' || registrationComplete)
       && (mode !== 'recover' || recoveryComplete) ? (
