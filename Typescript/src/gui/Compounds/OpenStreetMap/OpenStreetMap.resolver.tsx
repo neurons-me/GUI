@@ -7,6 +7,7 @@ import OpenStreetMapOverlay, { type OsmOverlayProps } from './OpenStreetMapOverl
 import OpenStreetMapLegend, { type OsmLegendProps } from './OpenStreetMapLegend';
 import OpenStreetMapChip, { type OsmChipProps } from './OpenStreetMapChip';
 import OpenStreetMapControls, { type OsmControlsProps } from './OpenStreetMapControls';
+import OpenStreetMapMarkerList, { type OsmMarkerListProps } from './OpenStreetMapMarkerList';
 
 // Kernel bindings in declarative specs use the renderer's existing read
 // expressions (e.g. `lat: "me/ships.1.lat"`), resolved and subscribed by the
@@ -170,6 +171,24 @@ export const controlsMeta = {
   },
 };
 
+export const markerListMeta = {
+  id: 'compounds.openstreetmap.markerlist',
+  label: 'OpenStreetMap.MarkerList',
+  kind: 'molecule' as const,
+  path: ['Maps', 'OpenStreetMap'],
+  tags: ['map', 'pins', 'selection', 'list', 'openstreetmap'],
+  story: { title: 'Compounds/OpenStreetMap/Selection' },
+  demoSpec: {
+    type: 'OpenStreetMap',
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, defaultSelected: ['demo-a'], style: { height: 240 } },
+    children: [
+      { type: 'OpenStreetMapMarker', props: { id: 'demo-a', lat: 19.2, lon: -96.13, label: 'A', tone: 'port' } },
+      { type: 'OpenStreetMapMarker', props: { id: 'demo-b', lat: 19.197, lon: -96.127, label: 'B', tone: 'ship' } },
+      { type: 'OpenStreetMapMarkerList', props: {} },
+    ],
+  },
+};
+
 const strip = <T,>(props: T & { key?: unknown }): T => {
   const { key: _key, ...rest } = props as any;
   return rest as T;
@@ -208,6 +227,15 @@ export const OpenStreetMapControlsResolver: RegistryEntry = {
   resolve(spec: { props?: OsmControlsProps & { [key: string]: any } }) {
     const props = strip(spec.props ?? {}) as OsmControlsProps;
     return <OpenStreetMapControls {...props} />;
+  },
+};
+
+export const OpenStreetMapMarkerListResolver: RegistryEntry = {
+  type: 'OpenStreetMapMarkerList',
+  meta: markerListMeta,
+  resolve(spec: { props?: OsmMarkerListProps & { [key: string]: any } }) {
+    const props = strip(spec.props ?? {}) as OsmMarkerListProps;
+    return <OpenStreetMapMarkerList {...props} />;
   },
 };
 

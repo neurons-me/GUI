@@ -75,6 +75,8 @@ export {
   OpenStreetMapLegend,
   OpenStreetMapChip,
   OpenStreetMapControls,
+  OpenStreetMapMarkerList,
+  useOpenStreetMapLink,
   useOpenStreetMap,
   useOpenStreetMapContext,
   useOpenStreetMapPalette,
@@ -114,6 +116,10 @@ export type {
   OsmMarkerDefaults,
   OsmMarkerScaleMode,
   OsmGestureOptions,
+  OsmMarkerListProps,
+  OsmSelectionProps,
+  OsmSelectionChangeInfo,
+  OsmLink,
 } from '@/gui/Compounds/OpenStreetMap';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';
