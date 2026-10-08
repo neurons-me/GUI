@@ -20,6 +20,13 @@ export type OsmFrameInfo = {
   palette: OsmPalette;
   /** The user asked for reduced motion (prefers-reduced-motion) and the layer throttles; draw a calmer frame. */
   reducedMotion: boolean;
+  /** User zoom over the fit (1 = fit). */
+  zoom: number;
+  /**
+   * Map px per marker unit: multiply symbol sizes by this to keep them the same
+   * on-screen size as markers at any zoom (e.g. arc radius r * markerScale).
+   */
+  markerScale: number;
 };
 
 export type OsmCanvasProps = {
@@ -72,7 +79,7 @@ export function drawOsmCanvasFrame(
     ctx.clip();
   }
   try {
-    onFrame({ ctx, now: timing.now, dt: timing.dt, frame: timing.frame, transform, project: transform.project, palette: palette as OsmPalette, reducedMotion });
+    onFrame({ ctx, now: timing.now, dt: timing.dt, frame: timing.frame, transform, project: transform.project, palette: palette as OsmPalette, reducedMotion, zoom: view.zoom ?? 1, markerScale: view.markerScale ?? 1 });
   } finally {
     ctx.restore();
   }

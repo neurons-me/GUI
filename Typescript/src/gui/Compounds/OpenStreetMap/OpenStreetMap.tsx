@@ -36,6 +36,8 @@ import {
   fitOsmView,
   osmViewBox,
   zoomOsmView,
+  OSM_STROKE_ZOOM_EXPONENT,
+  osmMarkerScale,
   type OsmBBox,
   type OsmProjectionKind,
   type OsmTransform,
@@ -47,7 +49,8 @@ import OpenStreetMapLegend, { OpenStreetMapLegendRow } from './OpenStreetMapLege
 import OpenStreetMapChip from './OpenStreetMapChip';
 import OpenStreetMapControls from './OpenStreetMapControls';
 import { osmLayerLabel, useOsmLayersState, useOsmViewState, type OsmLayersProps, type OsmViewProps } from './viewport';
-import type { OsmMarkerDefaults } from './context';
+import type { OsmMarkerDefaults, OsmMarkerScaleMode, OsmViewport } from './context';
+import { useOsmGestures, type OsmGestureOptions } from './gestures';
 import { osmLayerKind, osmLayerPaint, osmPaletteCssVars, useOsmPalette, type OsmLayerKind, type OsmPalette } from './mapPalette';
 
 export type OsmBasemapLayerStyle = {
@@ -118,6 +121,16 @@ export type OpenStreetMapProps = OsmViewProps & OsmLayersProps & {
   ariaLabel?: string;
   /** Upper bound for the canvas device-pixel ratio. Default 2. */
   maxDpr?: number;
+  /**
+   * Zoom / pan by wheel, drag, pinch, double-click and keyboard (arrows, + / −, 0
+   * on the focused map). Default true; false keeps only Controls and the API.
+   */
+  zoomPan?: boolean | OsmGestureOptions;
+  /**
+   * Marker size while zooming: 'fit' (default) keeps the size markers have at the
+   * fit view, 'screen' makes marker sizes CSS px. Either way only the geometry zooms.
+   */
+  markerScale?: OsmMarkerScaleMode;
   /** Defaults for markers that leave shape / size / tone unset. */
   markerDefaults?: OsmMarkerDefaults;
   /** Space between the map edge and docked overlays (CSS px). Default 10. */
@@ -139,16 +152,21 @@ export type OpenStreetMapProps = OsmViewProps & OsmLayersProps & {
 const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
 /** A layer's geometry; memoised so view / visibility changes only touch the layer's <g>. */
-const OsmLayerShapes = React.memo(function OsmLayerShapes({ layer }: { layer: OsmBasemapLayer }) {
-  return (
-    <>
-      {(layer.paths ?? []).map((d, i) => <path key={`p${i}`} d={d} />)}
-      {(layer.circles ?? []).map((c, i) => <circle key={`c${i}`} cx={c.cx} cy={c.cy} r={c.r} />)}
-    </>
-  );
+const OsmLayerPaths = React.memo(function OsmLayerPaths({ layer }: { layer: OsmBasemapLayer }) {
+  return <>{(layer.paths ?? []).map((d, i) => <path key={`p${i}`} d={d} />)}</>;
+});
+const OsmLayerCircles = React.memo(function OsmLayerCircles({ layer, rScale }: { layer: OsmBasemapLayer; rScale: number }) {
+  const r = (n: number) => (rScale === 1 ? n : Math.round(n * rScale * 1000) / 1000);
+  return <>{(layer.circles ?? []).map((c, i) => <circle key={`c${i}`} cx={c.cx} cy={c.cy} r={r(c.r)} />)}</>;
 });
 
-const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette, hidden }: { layers: OsmBasemapLayer[]; palette: OsmPalette | null; hidden: ReadonlySet<string> }) {
+/**
+ * Basemap layers. While zoomed, stroke widths and place dots shrink by
+ * zoom^OSM_STROKE_ZOOM_EXPONENT so lines grow only gently on screen.
+ */
+const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette, hidden, zoom }: { layers: OsmBasemapLayer[]; palette: OsmPalette | null; hidden: ReadonlySet<string>; zoom: number }) {
+  const k = zoom === 1 ? 1 : 1 / Math.pow(zoom, OSM_STROKE_ZOOM_EXPONENT);
+  const sw = (w: number | undefined) => (k === 1 ? w : Math.round((w ?? 1) * k * 1000) / 1000);
   return (
     <g className="gui-osm__basemap">
       {layers.map((layer) => {
@@ -163,13 +181,14 @@ const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette,
             data-osm-layer-kind={kind}
             fill={paint ? paint.fill : s.fill ?? 'none'}
             stroke={paint ? paint.stroke : s.stroke}
-            strokeWidth={s.strokeWidth}
+            strokeWidth={sw(s.strokeWidth)}
             opacity={paint ? undefined : s.opacity}
             strokeLinecap={s.strokeLinecap}
             strokeLinejoin={s.strokeLinejoin}
             display={hidden.has(layer.id) ? 'none' : undefined}
           >
-            <OsmLayerShapes layer={layer} />
+            <OsmLayerPaths layer={layer} />
+            {layer.circles?.length ? <OsmLayerCircles layer={layer} rScale={k} /> : null}
           </g>
         );
       })}
@@ -260,6 +279,9 @@ function dockRowStyle(row: 'top' | 'middle' | 'bottom', gap: number): React.CSSP
 
 const DOCK_CSS = [
   '.gui-osm__dock:empty{display:none}',
+  '.gui-osm[data-osm-dragging]{cursor:grabbing!important}',
+  '.gui-osm:focus-visible{outline:2px solid var(--gui-osm-overlay-accent);outline-offset:-2px}',
+  '.gui-osm__overlays .gui-osm__dock>*{cursor:auto}',
   '.gui-osm-control:hover:not([aria-disabled=true]){border-color:var(--gui-osm-overlay-accent)}',
   '.gui-osm-control:focus-visible{outline:2px solid var(--gui-osm-overlay-accent);outline-offset:2px;position:relative;z-index:1}',
 ].join('');
@@ -291,6 +313,8 @@ function OpenStreetMapRoot({
   defaultHiddenLayers,
   onLayersChange,
   markerDefaults,
+  zoomPan = true,
+  markerScale: markerScaleMode = 'fit',
   overlayInset = 10,
   overlayGap = 8,
   onTransformChange,
@@ -326,10 +350,18 @@ function OpenStreetMapRoot({
   const fit = React.useMemo(() => fitOsmView(projection, size.w, size.h, size.dpr), [projection, size]);
   const { state: viewState, viewport } = useOsmViewState(projection, fit, { view, defaultView, onViewChange, minZoom, maxZoom });
   const isFit = viewport.isFit;
-  const transform = React.useMemo(
-    () => createOsmTransform(projection, isFit ? fit : zoomOsmView(fit, viewState)),
-    [projection, fit, viewState, isFit]
-  );
+  const viewportRef = React.useRef<OsmViewport>(viewport);
+  viewportRef.current = viewport;
+  const zoom = isFit ? 1 : viewState.zoom;
+  const transform = React.useMemo(() => {
+    const v = isFit ? fit : zoomOsmView(fit, viewState);
+    // markers keep their size: 'fit' = size at zoom 1, 'screen' = CSS px
+    return createOsmTransform(projection, { ...v, zoom, markerScale: osmMarkerScale(markerScaleMode, v, zoom) });
+  }, [projection, fit, viewState, isFit, zoom, markerScaleMode]);
+  const gestures: OsmGestureOptions | null = zoomPan === false ? null : zoomPan === true ? {} : zoomPan;
+  useOsmGestures(rootRef, viewportRef, Boolean(gestures), gestures ?? undefined);
+  const keyboardNav = Boolean(gestures) && gestures?.keyboard !== false;
+  const touchPan = Boolean(gestures) && (gestures?.drag !== false || gestures?.pinch !== false);
   const viewBox = isFit ? projection.viewBox : osmViewBox(projection, fit, viewState);
   const layerList = React.useMemo(
     () => (basemap?.layers ?? []).map((l) => {
@@ -403,7 +435,21 @@ function OpenStreetMapRoot({
         data-osm-frame={`${projection.width}x${projection.height}+${projection.pad}`}
         data-osm-basemap-style={themed ? 'theme' : 'source'}
         data-osm-zoom={isFit ? undefined : Math.round(viewState.zoom * 1000) / 1000}
-        style={{ ...cssVars, position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: bg, ...style }}
+        data-osm-gestures={gestures ? '' : undefined}
+        tabIndex={keyboardNav ? 0 : undefined}
+        role={keyboardNav ? 'region' : undefined}
+        aria-label={keyboardNav ? ariaLabel : undefined}
+        aria-keyshortcuts={keyboardNav ? 'ArrowLeft ArrowRight ArrowUp ArrowDown + - 0' : undefined}
+        style={{
+          ...cssVars,
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          background: bg,
+          ...(touchPan ? { touchAction: 'none', cursor: 'grab' } : {}),
+          ...style,
+        }}
       >
         <svg
           className="gui-osm__svg"
@@ -417,7 +463,7 @@ function OpenStreetMapRoot({
         >
           <metadata>{JSON.stringify(metadata)}</metadata>
           {bg ? <rect className="gui-osm__background" width={projection.width} height={projection.height} fill={bg} /> : null}
-          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} palette={themed ? palette : null} hidden={layers.hidden} /> : null}
+          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} palette={themed ? palette : null} hidden={layers.hidden} zoom={zoom} /> : null}
           <g className="gui-osm__overlay">
             <OsmSvgScopeContext.Provider value={true}>{svgChildren}</OsmSvgScopeContext.Provider>
           </g>

@@ -187,7 +187,7 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
     <g
       id={props.id}
       className={['gui-osm-marker', tone ? `gui-osm-marker--${tone}` : null, state !== 'default' ? `gui-osm-marker--${state}` : null, props.className].filter(Boolean).join(' ')}
-      transform={`translate(${round(x)},${round(y)})`}
+      transform={markerTransform(x, y, map.view.markerScale)}
       style={state === 'dimmed' ? { opacity: 0.3, ...props.style } : props.style}
       onClick={props.onClick}
       data-gui-component="OpenStreetMap.Marker"
@@ -243,6 +243,17 @@ function tint(land: string, color: string): string {
   } catch {
     return color;
   }
+}
+
+/**
+ * Marker group transform: its map position, plus the marker scale that keeps it
+ * the same size on screen at any zoom (omitted when 1, e.g. at the fit).
+ */
+export function markerTransform(x: number, y: number, markerScale: number | undefined): string {
+  const t = `translate(${round(x)},${round(y)})`;
+  const k = markerScale ?? 1;
+  if (!(k > 0) || Math.abs(k - 1) < 1e-4) return t;
+  return `${t} scale(${Math.round(k * 10000) / 10000})`;
 }
 
 function round(n: number): number {

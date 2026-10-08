@@ -29,6 +29,13 @@ export type OpenStreetMapContextValue = {
 
 export type OsmViewSource = 'button' | 'keyboard' | 'wheel' | 'drag' | 'pinch' | 'reset' | 'api';
 
+/**
+ * How markers (and other screen-space symbols) are sized while the map zooms.
+ * 'fit' (default): their size at the fit view, kept while zooming (today's look at zoom 1).
+ * 'screen': sizes are CSS px, whatever the container size.
+ */
+export type OsmMarkerScaleMode = 'fit' | 'screen';
+
 export type OsmViewport = {
   zoom: number;
   minZoom: number;
