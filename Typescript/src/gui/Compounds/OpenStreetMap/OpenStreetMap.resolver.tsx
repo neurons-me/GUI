@@ -3,6 +3,9 @@ import type { RegistryEntry, ResolveCtx } from '@/Registry/types';
 import { ensureNodeId } from '@/gui-internals/utils/nodeID';
 import OpenStreetMap, { type OpenStreetMapProps } from './OpenStreetMap';
 import OpenStreetMapMarker, { type OsmMarkerProps } from './OpenStreetMapMarker';
+import OpenStreetMapOverlay, { type OsmOverlayProps } from './OpenStreetMapOverlay';
+import OpenStreetMapLegend, { type OsmLegendProps } from './OpenStreetMapLegend';
+import OpenStreetMapChip, { type OsmChipProps } from './OpenStreetMapChip';
 
 // Kernel bindings in declarative specs use the renderer's existing read
 // expressions (e.g. `lat: "me/ships.1.lat"`), resolved and subscribed by the
@@ -87,6 +90,100 @@ export const OpenStreetMapMarkerResolver: RegistryEntry = {
     // registration that would replace the recorded spec). `bind` passes through.
     const { key: _key, ...props } = (spec.props ?? {}) as OsmMarkerProps & { key?: unknown };
     return <OpenStreetMapMarker {...(props as OsmMarkerProps)} />;
+  },
+};
+
+// HTML overlays: docked by the map (directly under it, or portalled from inside
+// a spec renderer node). Legend rows and chip values bind with `bind` (kernel
+// paths) or take the renderer's read expressions as `value`.
+export const overlayMeta = {
+  id: 'compounds.openstreetmap.overlay',
+  label: 'OpenStreetMap.Overlay',
+  kind: 'atom' as const,
+  path: ['Maps', 'OpenStreetMap'],
+  tags: ['map', 'overlay', 'hud', 'openstreetmap'],
+  story: { title: 'Compounds/OpenStreetMap/Overlays' },
+  demoSpec: {
+    type: 'OpenStreetMap',
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, style: { height: 200 } },
+    children: [
+      { type: 'OpenStreetMapOverlay', props: { position: 'top-left' }, children: ['top-left overlay'] },
+    ],
+  },
+};
+
+export const legendMeta = {
+  id: 'compounds.openstreetmap.legend',
+  label: 'OpenStreetMap.Legend',
+  kind: 'atom' as const,
+  path: ['Maps', 'OpenStreetMap'],
+  tags: ['map', 'legend', 'openstreetmap'],
+  story: { title: 'Compounds/OpenStreetMap/Overlays' },
+  demoSpec: {
+    type: 'OpenStreetMap',
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, style: { height: 220 } },
+    children: [
+      {
+        type: 'OpenStreetMapLegend',
+        props: {
+          title: 'Legend',
+          items: [
+            { label: 'ships', tone: 'ship', value: 3 },
+            { label: 'trains', tone: 'train', value: 1 },
+            { label: 'queued', tone: 'queue', swatch: 'ring', value: 12 },
+          ],
+        },
+      },
+    ],
+  },
+};
+
+export const chipMeta = {
+  id: 'compounds.openstreetmap.chip',
+  label: 'OpenStreetMap.Chip',
+  kind: 'atom' as const,
+  path: ['Maps', 'OpenStreetMap'],
+  tags: ['map', 'chip', 'hud', 'stat', 'openstreetmap'],
+  story: { title: 'Compounds/OpenStreetMap/Overlays' },
+  demoSpec: {
+    type: 'OpenStreetMap',
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, style: { height: 200 } },
+    children: [
+      { type: 'OpenStreetMapChip', props: { label: 'import left', value: 128000, unit: ' t', tone: 'ship', fx: true } },
+      { type: 'OpenStreetMapChip', props: { label: 'simulation', value: '06:00', variant: 'adapter' } },
+    ],
+  },
+};
+
+const strip = <T,>(props: T & { key?: unknown }): T => {
+  const { key: _key, ...rest } = props as any;
+  return rest as T;
+};
+
+export const OpenStreetMapOverlayResolver: RegistryEntry = {
+  type: 'OpenStreetMapOverlay',
+  meta: overlayMeta,
+  resolve(spec: { props?: OsmOverlayProps & { [key: string]: any }; children?: any }) {
+    const { children, ...props } = strip(spec.props ?? {}) as OsmOverlayProps;
+    return <OpenStreetMapOverlay {...props}>{children ?? spec.children}</OpenStreetMapOverlay>;
+  },
+};
+
+export const OpenStreetMapLegendResolver: RegistryEntry = {
+  type: 'OpenStreetMapLegend',
+  meta: legendMeta,
+  resolve(spec: { props?: OsmLegendProps & { [key: string]: any }; children?: any }) {
+    const { children, ...props } = strip(spec.props ?? {}) as OsmLegendProps;
+    return <OpenStreetMapLegend {...props}>{children ?? spec.children}</OpenStreetMapLegend>;
+  },
+};
+
+export const OpenStreetMapChipResolver: RegistryEntry = {
+  type: 'OpenStreetMapChip',
+  meta: chipMeta,
+  resolve(spec: { props?: OsmChipProps & { [key: string]: any }; children?: any }) {
+    const { children, ...props } = strip(spec.props ?? ({} as OsmChipProps));
+    return <OpenStreetMapChip {...props}>{children ?? spec.children}</OpenStreetMapChip>;
   },
 };
 

@@ -83,3 +83,51 @@ export function useBoundValue(path: string | null | undefined): any {
   const source = React.useMemo(() => createBoundValueSource(runtime, me, path), [runtime, me, path]);
   return React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
 }
+
+/** One store over several kernel paths; the snapshot (array) stays stable while every value is equal. */
+export function createBoundListSource(
+  runtime: RuntimeAdapter | null | undefined,
+  me: MeLike | null | undefined,
+  paths: string[],
+): BoundValueSource {
+  const sources = paths.map((path) => createBoundValueSource(runtime, me, path));
+  let last: any[] | null = null;
+  return {
+    subscribe(callback) {
+      const unsubs = sources.map((s) => s.subscribe(callback));
+      return () => unsubs.forEach((u) => u());
+    },
+    getSnapshot() {
+      const values = sources.map((s) => s.getSnapshot());
+      if (last && last.length === values.length && values.every((v, i) => Object.is(v, last![i]))) return last;
+      last = values;
+      return values;
+    },
+  };
+}
+
+/**
+ * Read one kernel path (string) or several (array) through the runtime.
+ * Returns the value, or an array of values for an array of paths; undefined when unbound.
+ */
+export function useBoundValues(bind: string | readonly string[] | null | undefined): any {
+  const { me, runtime } = useOptionalMeScope();
+  const many = Array.isArray(bind);
+  const key = many ? (bind as readonly string[]).join('\u0000') : (bind as string | null | undefined) ?? '';
+  const source = React.useMemo(
+    () => createBoundListSource(runtime, me, key ? key.split('\u0000') : []),
+    [runtime, me, key],
+  );
+  const values = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
+  return many ? values : values[0];
+}
+
+const NUMBER_FORMAT = typeof Intl !== 'undefined' ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }) : null;
+
+/** Default text for a bound or given overlay value: numbers grouped, lists joined with " · ", missing = "—". */
+export function formatOsmValue(value: any): string {
+  if (value === undefined || value === null || (typeof value === 'number' && !Number.isFinite(value))) return '—';
+  if (Array.isArray(value)) return value.map(formatOsmValue).join(' · ');
+  if (typeof value === 'number') return NUMBER_FORMAT ? NUMBER_FORMAT.format(value) : String(value);
+  return String(value);
+}

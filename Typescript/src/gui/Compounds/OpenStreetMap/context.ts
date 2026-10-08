@@ -11,7 +11,27 @@ export type OpenStreetMapContextValue = {
   palette: OsmPalette;
   /** Always-current palette, for per-frame readers (canvas layers). */
   paletteRef: React.MutableRefObject<OsmPalette>;
+  /**
+   * The HTML dock element for an overlay position, once mounted (null before
+   * the first commit and on the server). Used by overlays that end up inside
+   * the SVG subtree (e.g. wrapped by a spec renderer node) to portal out.
+   */
+  getDock(position: OsmOverlayPosition): HTMLElement | null;
+  /** True after the docks mounted (re-renders portalled overlays once). */
+  docksReady: boolean;
 };
+
+export type OsmOverlayPosition =
+  | 'top-left' | 'top' | 'top-right'
+  | 'left' | 'right'
+  | 'bottom-left' | 'bottom' | 'bottom-right';
+
+export const OSM_OVERLAY_POSITIONS: readonly OsmOverlayPosition[] = [
+  'top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right',
+];
+
+/** True inside the map's <svg> subtree (markers / svg overlays), false in HTML docks. */
+export const OsmSvgScopeContext = React.createContext(false);
 
 export const OpenStreetMapContext = React.createContext<OpenStreetMapContextValue | null>(null);
 

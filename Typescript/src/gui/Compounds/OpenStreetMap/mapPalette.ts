@@ -25,6 +25,10 @@
  *                 accent contrasts better (PrinceOfDarkness dark, Seafoam dark)
  *   states        busy = warning, done = success, highlight = primary (+ glow)
  *   attribution   background.paper @ 85 % / text.secondary
+ *   overlay       legend / chip surfaces: background.paper @ 90 %, border = divider (or a
+ *                 text.primary mix when the divider is too faint), text / muted = text.secondary
+ *                 and strong = text.primary (≥ 4.5:1 on the surface), accent = primary tone,
+ *                 adapter = warning tone (≥ 3:1 on the surface, for borders and badges)
  *
  * Colours are flattened to opaque rgb over the land, so layer opacity never
  * stacks and the same values work in SVG, CSS variables and canvas.
@@ -74,6 +78,19 @@ export type OsmPalette = {
   domain: Record<OsmDomainTone, string>;
   states: { busy: string; done: string; highlight: string; glow: string };
   attribution: { background: string; text: string };
+  /** HTML overlays on the map (legend, chips): colours for their surface. */
+  overlay: {
+    /** Translucent surface colour (CSS). */
+    background: string;
+    /** The surface flattened over the land: what overlay text actually sits on. */
+    surface: string;
+    border: string;
+    text: string;
+    strong: string;
+    muted: string;
+    accent: string;
+    adapter: string;
+  };
 };
 
 type Rgba = [number, number, number, number];
@@ -208,6 +225,30 @@ function waterColors(land: string, info: string, text: string, light: boolean): 
   return { water, waterArea: mix(land, water, light ? 0.35 : 0.4) };
 }
 
+function overlayColors(p: Theme['palette'], land: string, textPrimary: string, textSecondary: string, tones: Record<OsmBaseTone, string>, mode: 'light' | 'dark'): OsmPalette['overlay'] {
+  const paper = flatten(p.background.paper, land);
+  const background = rgba(paper, 0.9);
+  const surface = flatten(background, land);
+  let divider = surface;
+  try { divider = flatten(String(p.divider), surface); } catch { /* unparsable divider: use the mix below */ }
+  const text = ensureContrast(textSecondary, surface, 4.5, textPrimary);
+  return {
+    background,
+    surface,
+    border: contrast(divider, surface) >= 1.3 ? divider : mix(surface, textPrimary, 0.22),
+    text,
+    strong: ensureContrast(textPrimary, surface, 4.5, mode === 'dark' ? '#fff' : '#000'),
+    muted: ensureContrast(mix(surface, textSecondary, 0.8), surface, 4.5, textPrimary),
+    accent: ensureContrast(tones.primary, surface, 3, textPrimary),
+    adapter: ensureContrast(tones.warning, surface, 3, textPrimary),
+  };
+}
+
+/** A tone's colour for TEXT on an overlay surface (≥ 4.5:1), e.g. a chip value. */
+export function osmToneText(palette: OsmPalette, tone: OsmMarkerTone): string {
+  return ensureContrast(osmToneColor(palette, tone), palette.overlay.surface, 4.5, palette.overlay.strong);
+}
+
 /** Build the map palette from a (GUI-built) MUI theme. Pure; safe on the server. */
 export function buildOsmPalette(theme: Theme): OsmPalette {
   const p = theme.palette;
@@ -257,6 +298,7 @@ export function buildOsmPalette(theme: Theme): OsmPalette {
       background: rgba(flatten(p.background.paper, land), 0.85),
       text: ensureContrast(textSecondary, flatten(p.background.paper, land), 4.5, textPrimary),
     },
+    overlay: overlayColors(p, land, textPrimary, textSecondary, tones, mode),
   };
 }
 
@@ -316,6 +358,10 @@ export function osmPaletteCssVars(palette: OsmPalette): Record<string, string> {
     '--gui-osm-busy': palette.states.busy,
     '--gui-osm-done': palette.states.done,
     '--gui-osm-highlight': palette.states.highlight,
+    '--gui-osm-overlay-bg': palette.overlay.background,
+    '--gui-osm-overlay-border': palette.overlay.border,
+    '--gui-osm-overlay-text': palette.overlay.text,
+    '--gui-osm-overlay-strong': palette.overlay.strong,
     ...Object.fromEntries(Object.entries(palette.tones).map(([k, v]) => [`--gui-osm-tone-${k}`, v])),
     ...Object.fromEntries(Object.entries(palette.domain).map(([k, v]) => [`--gui-osm-tone-${k}`, v])),
   };

@@ -38,7 +38,7 @@ import SearchFieldResolver, { meta as SearchFieldMeta } from "@/gui/Molecules/Se
 import LineChartResolver from "@/gui/Compounds/Charts/LineChart/LineChart.resolver";
 import BarChartResolver from "@/gui/Compounds/Charts/BarChart/BarChart.resolver";
 import ChartSliderResolver from "@/gui/Compounds/Charts/Slider/Slider.resolver";
-import OpenStreetMapResolver, { meta as OpenStreetMapMeta, OpenStreetMapMarkerResolver, markerMeta as OpenStreetMapMarkerMeta } from "@/gui/Compounds/OpenStreetMap/OpenStreetMap.resolver";
+import OpenStreetMapResolver, { meta as OpenStreetMapMeta, OpenStreetMapMarkerResolver, markerMeta as OpenStreetMapMarkerMeta, OpenStreetMapOverlayResolver, overlayMeta as OpenStreetMapOverlayMeta, OpenStreetMapLegendResolver, legendMeta as OpenStreetMapLegendMeta, OpenStreetMapChipResolver, chipMeta as OpenStreetMapChipMeta } from "@/gui/Compounds/OpenStreetMap/OpenStreetMap.resolver";
 
 // Layout
 import LayoutResolver from "@/gui/Layout/Layout.resolver";
@@ -111,6 +111,9 @@ export const GuiRegistry = createRegistry([
   // Maps
   withMeta(OpenStreetMapResolver, OpenStreetMapMeta),
   withMeta(OpenStreetMapMarkerResolver, OpenStreetMapMarkerMeta),
+  withMeta(OpenStreetMapOverlayResolver, OpenStreetMapOverlayMeta),
+  withMeta(OpenStreetMapLegendResolver, OpenStreetMapLegendMeta),
+  withMeta(OpenStreetMapChipResolver, OpenStreetMapChipMeta),
   // Layout — Layout/TopBar/LeftBar/RightBar/Footer have no meta anywhere
   // yet either (same "never authored" case as the Cards/Icon above).
   LayoutResolver,
