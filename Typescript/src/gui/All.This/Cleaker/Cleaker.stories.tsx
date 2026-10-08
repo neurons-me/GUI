@@ -3,7 +3,7 @@ import type { Meta } from "@storybook/react";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import Theme from "@/gui/Theme/Theme";
 import { SeedSessionProvider, useOptionalSeedSessionContext } from "@/react/session/SeedSessionProvider";
-import CleakerLanding from "@/react/session/CleakerLanding";
+import CleakerLanding from "@/react/session/Namespace"; // renamed to Namespace.tsx in 0293760
 import Cleaker from "./Cleaker";
 import { setActiveNamespaceRoot } from "./signedRequest";
 
