@@ -8,9 +8,16 @@
  * were projected into (bbox, width, height, pad), and the map renders them
  * with the OpenStreetMap attribution (© OpenStreetMap contributors, ODbL),
  * which is always shown.
+ *
+ * Colours: by default the basemap, markers and attribution take their colours
+ * from the GUI theme in scope (mapPalette.ts: derived from existing theme
+ * tokens, both modes). Basemap layers are painted by kind (water, roads-*,
+ * places), inferred from the layer id or given as `kind`; the layer's own
+ * fill/stroke/opacity are ignored for known kinds (stroke width and caps are
+ * kept). `basemapStyle="source"` keeps the generator's own colours instead.
  */
 import * as React from 'react';
-import { OpenStreetMapContext, useOpenStreetMap } from './context';
+import { OpenStreetMapContext, useOpenStreetMap, useOpenStreetMapPalette } from './context';
 import {
   OSM_ATTRIBUTION,
   createOsmProjection,
@@ -22,6 +29,7 @@ import {
 } from './projection';
 import OpenStreetMapMarker from './OpenStreetMapMarker';
 import OpenStreetMapCanvas from './OpenStreetMapCanvas';
+import { osmLayerKind, osmLayerPaint, osmPaletteCssVars, useOsmPalette, type OsmLayerKind, type OsmPalette } from './mapPalette';
 
 export type OsmBasemapLayerStyle = {
   fill?: string;
@@ -34,6 +42,12 @@ export type OsmBasemapLayerStyle = {
 
 export type OsmBasemapLayer = {
   id: string;
+  /**
+   * What the layer is, for theme colours. Inferred from the id when omitted
+   * (water, water-polys, roads-primary|secondary|tertiary|residential, places);
+   * 'custom' (or an unknown id) keeps the layer's own style.
+   */
+  kind?: OsmLayerKind;
   style?: OsmBasemapLayerStyle;
   /** SVG path data, already projected into the map frame (map pixels). */
   paths?: string[];
@@ -70,9 +84,15 @@ export type OpenStreetMapProps = {
   pad?: number;
   projection?: OsmProjectionKind;
   basemap?: OsmBasemap;
+  /**
+   * 'theme' (default): basemap colours come from the GUI theme in scope, by layer kind.
+   * 'source': use each layer's own `style` and `basemap.background`, as given.
+   */
+  basemapStyle?: 'theme' | 'source';
   source?: OsmSourceMeta;
   /** Placement and extra text for the (always rendered) OSM attribution. */
   attribution?: { position?: OsmAttributionPosition; extra?: React.ReactNode };
+  /** Explicit map background; wins over the theme's land colour and `basemap.background`. */
   background?: string;
   ariaLabel?: string;
   /** Upper bound for the canvas device-pixel ratio. Default 2. */
@@ -91,20 +111,23 @@ export type OpenStreetMapProps = {
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
-const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers }: { layers: OsmBasemapLayer[] }) {
+const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette }: { layers: OsmBasemapLayer[]; palette: OsmPalette | null }) {
   return (
     <g className="gui-osm__basemap">
       {layers.map((layer) => {
         const s = layer.style ?? {};
+        const kind = osmLayerKind(layer);
+        const paint = palette ? osmLayerPaint(kind, palette) : null;
         return (
           <g
             key={layer.id}
             id={layer.id}
             className="gui-osm__layer"
-            fill={s.fill ?? 'none'}
-            stroke={s.stroke}
+            data-osm-layer-kind={kind}
+            fill={paint ? paint.fill : s.fill ?? 'none'}
+            stroke={paint ? paint.stroke : s.stroke}
             strokeWidth={s.strokeWidth}
-            opacity={s.opacity}
+            opacity={paint ? undefined : s.opacity}
             strokeLinecap={s.strokeLinecap}
             strokeLinejoin={s.strokeLinejoin}
           >
@@ -159,6 +182,7 @@ function OpenStreetMapRoot({
   pad = 0,
   projection: projectionKind = 'equirectangular',
   basemap,
+  basemapStyle = 'theme',
   source,
   attribution,
   background,
@@ -200,7 +224,11 @@ function OpenStreetMapRoot({
   );
   const transformRef = React.useRef(transform);
   transformRef.current = transform;
-  const contextValue = React.useMemo(() => ({ transform, transformRef }), [transform]);
+  const palette = useOsmPalette();
+  const paletteRef = React.useRef(palette);
+  paletteRef.current = palette;
+  const contextValue = React.useMemo(() => ({ transform, transformRef, palette, paletteRef }), [transform, palette]);
+  const themed = basemapStyle !== 'source';
 
   React.useEffect(() => {
     onTransformChange?.(transform);
@@ -227,7 +255,8 @@ function OpenStreetMapRoot({
     `bbox W=${projection.bbox.west} S=${projection.bbox.south} E=${projection.bbox.east} N=${projection.bbox.north}`,
     projection.kind,
   ].filter(Boolean).join(' · ');
-  const bg = background ?? basemap?.background;
+  const bg = background ?? (themed ? palette.land : basemap?.background);
+  const cssVars = osmPaletteCssVars(palette) as React.CSSProperties;
 
   return (
     <OpenStreetMapContext.Provider value={contextValue}>
@@ -241,7 +270,8 @@ function OpenStreetMapRoot({
         data-osm-bbox={`${projection.bbox.west},${projection.bbox.south},${projection.bbox.east},${projection.bbox.north}`}
         data-osm-projection={projection.kind}
         data-osm-frame={`${projection.width}x${projection.height}+${projection.pad}`}
-        style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: bg, ...style }}
+        data-osm-basemap-style={themed ? 'theme' : 'source'}
+        style={{ ...cssVars, position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: bg, ...style }}
       >
         <svg
           className="gui-osm__svg"
@@ -253,7 +283,7 @@ function OpenStreetMapRoot({
         >
           <metadata>{JSON.stringify(metadata)}</metadata>
           {bg ? <rect className="gui-osm__background" width={projection.width} height={projection.height} fill={bg} /> : null}
-          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} /> : null}
+          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} palette={themed ? palette : null} /> : null}
           <g className="gui-osm__overlay">{svgChildren}</g>
         </svg>
         {canvasLayers}
@@ -266,8 +296,8 @@ function OpenStreetMapRoot({
             zIndex: 2,
             padding: '1px 6px',
             font: '10px/1.5 system-ui, sans-serif',
-            color: 'rgba(220,232,239,0.75)',
-            background: 'rgba(11,13,16,0.6)',
+            color: palette.attribution.text,
+            background: palette.attribution.background,
           }}
         >
           <a href={OSM_ATTRIBUTION.href} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit' }}>
@@ -288,12 +318,14 @@ type OpenStreetMapComponent = typeof OpenStreetMapRoot & {
   Marker: typeof OpenStreetMapMarker;
   Canvas: typeof OpenStreetMapCanvas;
   useMap: typeof useOpenStreetMap;
+  usePalette: typeof useOpenStreetMapPalette;
 };
 
 const OpenStreetMap = Object.assign(OpenStreetMapRoot, {
   Marker: OpenStreetMapMarker,
   Canvas: OpenStreetMapCanvas,
   useMap: useOpenStreetMap,
+  usePalette: useOpenStreetMapPalette,
 }) as OpenStreetMapComponent;
 
 export default OpenStreetMap;

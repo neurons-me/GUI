@@ -72,6 +72,8 @@ export {
   OpenStreetMapMarker,
   OpenStreetMapCanvas,
   useOpenStreetMap,
+  useOpenStreetMapPalette,
+  buildOsmPalette,
   createOsmProjection,
   fitOsmView,
   createOsmTransform,
@@ -91,6 +93,10 @@ export type {
   OsmProjection,
   OsmView,
   OsmTransform,
+  OsmPalette,
+  OsmMarkerTone,
+  OsmMarkerState,
+  OsmLayerKind,
 } from '@/gui/Compounds/OpenStreetMap';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';

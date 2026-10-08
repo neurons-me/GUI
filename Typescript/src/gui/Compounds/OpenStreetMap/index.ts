@@ -11,7 +11,9 @@ export { default as OpenStreetMapMarker } from './OpenStreetMapMarker';
 export type { OsmMarkerProps, OsmMarkerShape, OsmMarkerBindableProp, OsmMarkerLabelPlacement } from './OpenStreetMapMarker';
 export { default as OpenStreetMapCanvas, drawOsmCanvasFrame } from './OpenStreetMapCanvas';
 export type { OsmCanvasProps, OsmFrameInfo } from './OpenStreetMapCanvas';
-export { useOpenStreetMap } from './context';
+export { useOpenStreetMap, useOpenStreetMapPalette } from './context';
+export { buildOsmPalette, useOsmPalette, osmLayerKind, osmToneColor, OSM_DOMAIN_TONES } from './mapPalette';
+export type { OsmPalette, OsmMarkerTone, OsmBaseTone, OsmDomainTone, OsmMarkerState, OsmLayerKind } from './mapPalette';
 export {
   createOsmProjection,
   fitOsmView,

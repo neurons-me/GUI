@@ -36,12 +36,11 @@ export const meta = {
       width: 600,
       height: 400,
       pad: 12,
-      background: '#0b0d10',
       source: { dataSource: 'demo frame (no basemap layers)', license: 'ODbL' },
       style: { height: 260 },
     },
     children: [
-      { type: 'OpenStreetMapMarker', props: { lat: 19.1985, lon: -96.132, shape: 'circle', size: 14, color: '#7eb8c9', label: 'centre' } },
+      { type: 'OpenStreetMapMarker', props: { lat: 19.1985, lon: -96.132, shape: 'circle', size: 14, tone: 'primary', label: 'centre' } },
     ],
   },
 };
@@ -55,10 +54,10 @@ export const markerMeta = {
   story: { title: 'Compounds/OpenStreetMap' },
   demoSpec: {
     type: 'OpenStreetMap',
-    props: { bbox: DEMO_BBOX, width: 600, height: 400, background: '#0b0d10', style: { height: 200 } },
+    props: { bbox: DEMO_BBOX, width: 600, height: 400, style: { height: 200 } },
     children: [
-      { type: 'OpenStreetMapMarker', props: { lat: 19.2, lon: -96.135, shape: 'triangle', size: 14, color: '#c9b87e', label: 'triangle' } },
-      { type: 'OpenStreetMapMarker', props: { lat: 19.196, lon: -96.128, shape: 'icon', icon: 'directions_boat', size: 18, color: '#7eb8c9', label: 'icon' } },
+      { type: 'OpenStreetMapMarker', props: { lat: 19.2, lon: -96.135, shape: 'triangle', size: 14, tone: 'warning', label: 'triangle' } },
+      { type: 'OpenStreetMapMarker', props: { lat: 19.196, lon: -96.128, shape: 'icon', icon: 'directions_boat', size: 18, tone: 'ship', label: 'icon' } },
     ],
   },
 };

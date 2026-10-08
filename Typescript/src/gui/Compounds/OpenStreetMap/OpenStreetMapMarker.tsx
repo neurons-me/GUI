@@ -1,6 +1,7 @@
 import * as React from 'react';
 import Icon from '@/gui/Atoms/Icon/Icon';
-import { useOpenStreetMap } from './context';
+import { useOpenStreetMapContext } from './context';
+import { osmToneColor, mix, type OsmMarkerState, type OsmMarkerTone } from './mapPalette';
 import { useBoundValue } from './bindings';
 import { useRegisterGuiNode } from '@/runtime/selection';
 import type { GuiNodeProvenance } from '@/types/gui.types';
@@ -10,7 +11,7 @@ export type OsmMarkerLabelPlacement = 'right' | 'left' | 'top' | 'bottom';
 
 /** Props that may be bound to a kernel path instead of given as values. */
 export type OsmMarkerBindableProp =
-  | 'lat' | 'lon' | 'label' | 'meta' | 'color' | 'fill' | 'shape' | 'icon' | 'size' | 'visible';
+  | 'lat' | 'lon' | 'label' | 'meta' | 'color' | 'fill' | 'shape' | 'icon' | 'size' | 'visible' | 'tone' | 'state';
 
 export type OsmMarkerProps = {
   /** Latitude (WGS84 degrees). */
@@ -23,9 +24,24 @@ export type OsmMarkerProps = {
   /** Rect width/height in map pixels (shape="rect"). */
   width?: number;
   height?: number;
-  /** Outline colour. */
+  /**
+   * Theme colour role: a base tone (primary, secondary, info, success, warning,
+   * error, neutral) or a domain alias (port, ship, train, yard, queue). Resolved
+   * against the map's theme palette in both modes. Default 'neutral'.
+   */
+  tone?: OsmMarkerTone;
+  /**
+   * busy / done recolour the outline (theme warning / success), highlight
+   * thickens it with a primary glow and bolds the label, dimmed fades the marker.
+   */
+  state?: OsmMarkerState;
+  /** Outline colour. Overrides `tone` (busy / done states still win). */
   color?: string;
-  /** Fill colour (defaults to `color`, or `none` when an icon sits on the shape). */
+  /**
+   * Fill colour. Default: with `tone` (or no `color`), a tint of the tone on the
+   * map's land colour; with only `color`, `color` itself (or `none` when an icon
+   * sits on the shape), as before.
+   */
   fill?: string;
   strokeWidth?: number;
   /** GUI.Icon name drawn centred on the marker (or alone with shape="icon"). */
@@ -38,6 +54,8 @@ export type OsmMarkerProps = {
   labelPlacement?: OsmMarkerLabelPlacement;
   /** Gap in map pixels between the marker edge and its label. */
   labelOffset?: number;
+  /** Outline the label text in the map's land colour so it stays legible on roads. Default true. */
+  labelHalo?: boolean;
   /** Native tooltip. */
   title?: string;
   visible?: boolean;
@@ -74,7 +92,7 @@ export type OsmMarkerProps = {
   'data-testid'?: string;
 };
 
-const BINDABLE: OsmMarkerBindableProp[] = ['lat', 'lon', 'label', 'meta', 'color', 'fill', 'shape', 'icon', 'size', 'visible'];
+const BINDABLE: OsmMarkerBindableProp[] = ['lat', 'lon', 'label', 'meta', 'color', 'fill', 'shape', 'icon', 'size', 'visible', 'tone', 'state'];
 
 function useBoundProps(props: OsmMarkerProps) {
   const out: Record<string, any> = {};
@@ -101,10 +119,10 @@ export function markerExtent(shape: OsmMarkerShape, size: number, width?: number
   return { halfW: size / 2, halfH: size / 2, w: size, h: size };
 }
 
-function MarkerCore({ shape, size, width, height, color, fill, strokeWidth }: {
-  shape: OsmMarkerShape; size: number; width?: number; height?: number; color: string; fill: string; strokeWidth: number;
+function MarkerCore({ shape, size, width, height, color, fill, strokeWidth, glow }: {
+  shape: OsmMarkerShape; size: number; width?: number; height?: number; color: string; fill: string; strokeWidth: number; glow?: string;
 }) {
-  const common = { className: 'gui-osm-marker__core', fill, stroke: color, strokeWidth } as const;
+  const common = { className: 'gui-osm-marker__core', fill, stroke: color, strokeWidth, style: glow ? { filter: `drop-shadow(0 0 4px ${glow})` } : undefined } as const;
   if (shape === 'icon') return null;
   if (shape === 'circle') return <circle {...common} r={size / 2} />;
   if (shape === 'triangle') {
@@ -125,7 +143,7 @@ function useStableProvenance(provenance: GuiNodeProvenance | undefined): GuiNode
 }
 
 export default function OpenStreetMapMarker(props: OsmMarkerProps) {
-  const map = useOpenStreetMap();
+  const { transform: map, palette } = useOpenStreetMapContext();
   const v = useBoundProps(props);
   const provenance = useStableProvenance(props.provenance);
   useRegisterGuiNode(props.nodeId, 'OpenStreetMap.Marker', undefined, provenance);
@@ -135,9 +153,21 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
 
   const shape: OsmMarkerShape = (v.shape as OsmMarkerShape) || 'circle';
   const size = Number.isFinite(toNumber(v.size)) ? toNumber(v.size) : 10;
-  const color = (v.color as string) || '#90a4ae';
-  // With an icon on top, the shape is an outline unless a fill is given.
-  const fill = (v.fill as string) || (v.icon && shape !== 'icon' ? 'none' : color);
+  const tone = (v.tone as OsmMarkerTone | undefined) || undefined;
+  const state = ((v.state as OsmMarkerState | undefined) || 'default') as OsmMarkerState;
+  const toneColor = osmToneColor(palette, tone);
+  const explicitColor = (v.color as string) || undefined;
+  const color =
+    state === 'busy' ? palette.states.busy
+    : state === 'done' ? palette.states.done
+    : explicitColor ?? toneColor;
+  // Legacy look when only `color` is given (filled shape, outline under an icon);
+  // otherwise a tint of the tone on the land, like the port page's nodes.
+  const legacy = Boolean(explicitColor) && !tone;
+  const fill = (v.fill as string) || (legacy ? (v.icon && shape !== 'icon' ? 'none' : color) : tint(palette.land, explicitColor ?? toneColor));
+  const highlight = state === 'highlight';
+  const halo = props.labelHalo !== false;
+  const haloProps = halo ? { stroke: palette.halo, strokeWidth: 3, strokeLinejoin: 'round' as const, paintOrder: 'stroke' } : {};
   const { x, y } = map.project(lat, lon);
   const { halfW, halfH } = markerExtent(shape, size, props.width, props.height);
   const iconSize = props.iconSize ?? Math.max(10, Math.round(Math.min(halfW, halfH) * 1.5));
@@ -155,13 +185,15 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
   return (
     <g
       id={props.id}
-      className={['gui-osm-marker', props.className].filter(Boolean).join(' ')}
+      className={['gui-osm-marker', tone ? `gui-osm-marker--${tone}` : null, state !== 'default' ? `gui-osm-marker--${state}` : null, props.className].filter(Boolean).join(' ')}
       transform={`translate(${round(x)},${round(y)})`}
-      style={props.style}
+      style={state === 'dimmed' ? { opacity: 0.3, ...props.style } : props.style}
       onClick={props.onClick}
       data-gui-component="OpenStreetMap.Marker"
       data-gui-node-id={props.nodeId || props['data-gui-node-id'] || undefined}
       data-testid={props['data-testid']}
+      data-tone={tone}
+      data-state={state !== 'default' ? state : undefined}
       data-lat={lat}
       data-lon={lon}
       data-x={round(x)}
@@ -175,7 +207,8 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
         height={props.height}
         color={color}
         fill={fill}
-        strokeWidth={props.strokeWidth ?? 1.5}
+        strokeWidth={round((props.strokeWidth ?? 1.5) * (highlight ? 1.6 : 1))}
+        glow={highlight ? palette.states.glow : undefined}
       />
       {v.icon ? (
         <foreignObject x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} className="gui-osm-marker__icon" pointerEvents="none">
@@ -189,17 +222,26 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
         </foreignObject>
       ) : null}
       {v.label !== undefined && v.label !== null && v.label !== '' ? (
-        <text className="gui-osm-marker__label" x={labelPos.x} y={labelPos.y} textAnchor={labelPos.anchor} fontSize={10} fill="#c9d4dc">
+        <text className="gui-osm-marker__label" x={labelPos.x} y={labelPos.y} textAnchor={labelPos.anchor} fontSize={10} fontWeight={highlight ? 600 : undefined} fill={palette.label} {...haloProps}>
           {v.label as React.ReactNode}
         </text>
       ) : null}
       {hasMeta ? (
-        <text className="gui-osm-marker__meta" x={metaPos.x} y={metaPos.y} textAnchor={metaPos.anchor} fontSize={9} fill="#7a8590">
+        <text className="gui-osm-marker__meta" x={metaPos.x} y={metaPos.y} textAnchor={metaPos.anchor} fontSize={9} fill={palette.meta} {...haloProps}>
           {v.meta as React.ReactNode}
         </text>
       ) : null}
     </g>
   );
+}
+
+/** A tint of `color` on the land; colours mix() cannot parse (var(), currentColor) pass through. */
+function tint(land: string, color: string): string {
+  try {
+    return mix(land, color, 0.18);
+  } catch {
+    return color;
+  }
 }
 
 function round(n: number): number {

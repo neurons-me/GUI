@@ -94,7 +94,23 @@ function fixedMarkersAndAttribution() {
   assert.match(html, /<polygon class="gui-osm-marker__core"/);
   assert.match(html, /material-symbols-rounded[^>]*>directions_boat</, 'icon marker renders a GUI.Icon');
   assert.ok(!html.includes('id="m-hidden"') && !html.includes('id="m-nocoords"'));
-  assert.match(html, /<g id="roads-primary"[^>]*stroke="#505860"[^>]*><path d="M24,24 L1176,776"/);
+  // Default basemapStyle 'theme': the layer is painted by kind (roads-primary) from
+  // the theme palette, so the generator's baked-in stroke does not win...
+  assert.match(html, /<g id="roads-primary"[^>]*data-osm-layer-kind="road-primary"[^>]*><path d="M24,24 L1176,776"/);
+  assert.ok(!html.includes('stroke="#505860"'), 'theme colours win over the layer style');
+  assert.ok(!html.includes('fill="#0b0d10"'), 'theme land wins over basemap.background');
+  // ...while basemapStyle 'source' keeps the layer's own style, as before.
+  const sourceHtml = renderToString(
+    h(OpenStreetMap, {
+      ...FRAME,
+      basemapStyle: 'source',
+      basemap: { background: '#0b0d10', layers: [{ id: 'roads-primary', style: { stroke: '#505860' }, paths: ['M24,24 L1176,776'] }] },
+    }),
+  );
+  assert.match(sourceHtml, /<g id="roads-primary"[^>]*stroke="#505860"[^>]*><path d="M24,24 L1176,776"/);
+  assert.match(sourceHtml, /<rect class="gui-osm__background"[^>]*fill="#0b0d10"/);
+  // A marker given only `color` keeps its legacy look (filled with that colour).
+  assert.match(html, /<polygon class="gui-osm-marker__core" fill="#c9b87e" stroke="#c9b87e"/);
   assert.ok(html.includes(OSM_ATTRIBUTION.text), 'OSM attribution is rendered');
   assert.ok(html.includes(OSM_ATTRIBUTION.href));
   assert.ok(html.includes('>ODbL<'), 'licence is rendered');

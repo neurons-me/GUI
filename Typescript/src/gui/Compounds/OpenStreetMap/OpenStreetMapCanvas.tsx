@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useOpenStreetMapContext } from './context';
 import { osmCanvasMatrix, type OsmPoint, type OsmTransform } from './projection';
+import type { OsmPalette } from './mapPalette';
 
 export type OsmFrameInfo = {
   /** 2D context, already transformed to map pixels (and clipped to the frame unless clip=false). */
@@ -15,6 +16,8 @@ export type OsmFrameInfo = {
   transform: OsmTransform;
   /** geo -> map pixels. */
   project(lat: number, lon: number): OsmPoint;
+  /** The map's theme-derived palette (current theme and mode), for drawing in theme colours. */
+  palette: OsmPalette;
 };
 
 export type OsmCanvasProps = {
@@ -40,6 +43,7 @@ export function drawOsmCanvasFrame(
   onFrame: OsmCanvasProps['onFrame'],
   timing: { now: number; dt: number; frame: number },
   clip = true,
+  palette?: OsmPalette,
 ) {
   const { view, projection } = transform;
   const bw = Math.round(view.width * view.dpr);
@@ -57,14 +61,14 @@ export function drawOsmCanvasFrame(
     ctx.clip();
   }
   try {
-    onFrame({ ctx, now: timing.now, dt: timing.dt, frame: timing.frame, transform, project: transform.project });
+    onFrame({ ctx, now: timing.now, dt: timing.dt, frame: timing.frame, transform, project: transform.project, palette: palette as OsmPalette });
   } finally {
     ctx.restore();
   }
 }
 
 export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey, clip = true, id, className, style, 'data-gui-node-id': guiNodeId }: OsmCanvasProps) {
-  const { transform, transformRef } = useOpenStreetMapContext();
+  const { transform, transformRef, palette, paletteRef } = useOpenStreetMapContext();
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const onFrameRef = React.useRef(onFrame);
   onFrameRef.current = onFrame;
@@ -78,8 +82,8 @@ export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey
     const dt = t.last ? Math.max(0, (now - t.last) / 1000) : 0;
     t.last = now;
     t.frame += 1;
-    drawOsmCanvasFrame(canvas, ctx, transformRef.current, onFrameRef.current, { now, dt, frame: t.frame }, clip);
-  }, [transformRef, clip]);
+    drawOsmCanvasFrame(canvas, ctx, transformRef.current, onFrameRef.current, { now, dt, frame: t.frame }, clip, paletteRef.current);
+  }, [transformRef, paletteRef, clip]);
 
   React.useEffect(() => {
     if (!animate || typeof requestAnimationFrame !== 'function') return;
@@ -95,7 +99,7 @@ export default function OpenStreetMapCanvas({ onFrame, animate = true, redrawKey
   React.useEffect(() => {
     if (animate) return;
     drawNow(typeof performance !== 'undefined' ? performance.now() : Date.now());
-  }, [animate, drawNow, redrawKey, transform]);
+  }, [animate, drawNow, redrawKey, transform, palette]);
 
   return (
     <canvas
