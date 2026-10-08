@@ -1,0 +1,1 @@
+import{u as s}from"./SeedSessionProvider-BwzhF3Oe.js";function o(){const e=s();if(!e)throw new Error("useSeedSession must be used inside SeedSessionProvider.");return e}function t(){return s()}export{o as a,t as u};
