@@ -58,6 +58,8 @@ import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import ME from "this.me";
 import Theme from "@/gui/Theme/Theme";
 import Cleaker from "@/gui/All.This/Cleaker/Cleaker";
+import { ConnectionSeamsContext } from "./useQRConnect";
+import { disposableDoorSeams } from "./disposableDoor";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
 import { writeMeValue } from "@/runtime/run-me";
 
@@ -163,13 +165,15 @@ MalformedMeNamespaceErrors.play = async ({ canvasElement }: { canvasElement: HTM
 // App.jsx) -- proves the internal SeedSessionProvider+Namespace wiring is
 // real, not just that it renders.
 export const RegisterThroughCleaker = () => (
-  <Theme>
-    <Cleaker
-      cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`}
-      netgetMonadOrigin={DISPOSABLE_ORIGIN}
-      transportOrigin={DISPOSABLE_ORIGIN}
-    />
-  </Theme>
+  <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
+    <Theme>
+      <Cleaker
+        cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`}
+        netgetMonadOrigin={DISPOSABLE_ORIGIN}
+        transportOrigin={DISPOSABLE_ORIGIN}
+      />
+    </Theme>
+  </ConnectionSeamsContext.Provider>
 );
 
 RegisterThroughCleaker.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {

@@ -29,6 +29,8 @@ import Theme from "@/gui/Theme/Theme";
 import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
 import Namespace from "@/react/session/Namespace";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
+import { ConnectionSeamsContext } from "./useQRConnect";
+import { disposableDoorSeams } from "./disposableDoor";
 
 // Must match a disposable monad started locally, e.g.:
 //   SEED=<random 32-byte hex> ME_STATE_DIR=<scratch dir> PORT=18322 \
@@ -46,12 +48,16 @@ export default meta;
 
 setActiveNamespaceRoot(DISPOSABLE_ROOT_LABEL);
 
+const DISPOSABLE_SEAMS = disposableDoorSeams(DISPOSABLE_ORIGIN);
+
 export const Default = () => (
-  <Theme>
-    <SeedSessionProvider transportOrigin={DISPOSABLE_ORIGIN} sessionBackend="cleaker">
-      <Namespace cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`} netgetMonadOrigin={DISPOSABLE_ORIGIN} />
-    </SeedSessionProvider>
-  </Theme>
+  <ConnectionSeamsContext.Provider value={DISPOSABLE_SEAMS}>
+    <Theme>
+      <SeedSessionProvider transportOrigin={DISPOSABLE_ORIGIN} sessionBackend="cleaker">
+        <Namespace cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`} netgetMonadOrigin={DISPOSABLE_ORIGIN} />
+      </SeedSessionProvider>
+    </Theme>
+  </ConnectionSeamsContext.Provider>
 );
 
 // Reads the 12 revealed words directly out of the Passphrase 'reveal' grid
@@ -123,11 +129,13 @@ function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: s
 // genuinely work for day-to-day sign-in, not just for reaching the recovery
 // screen itself.
 export const RegisterBackupThenRecoverThenLogin = () => (
-  <Theme>
-    <SeedSessionProvider transportOrigin={DISPOSABLE_ORIGIN} sessionBackend="cleaker">
-      <Namespace cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`} netgetMonadOrigin={DISPOSABLE_ORIGIN} />
-    </SeedSessionProvider>
-  </Theme>
+  <ConnectionSeamsContext.Provider value={DISPOSABLE_SEAMS}>
+    <Theme>
+      <SeedSessionProvider transportOrigin={DISPOSABLE_ORIGIN} sessionBackend="cleaker">
+        <Namespace cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`} netgetMonadOrigin={DISPOSABLE_ORIGIN} />
+      </SeedSessionProvider>
+    </Theme>
+  </ConnectionSeamsContext.Provider>
 );
 
 RegisterBackupThenRecoverThenLogin.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
