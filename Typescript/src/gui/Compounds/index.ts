@@ -1,5 +1,4 @@
 export {
-  AllThis,
   BarChart,
   Charts,
   ChartsSlider,

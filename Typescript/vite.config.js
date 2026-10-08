@@ -27,8 +27,7 @@ const isStorybook =
   lifecycle.includes('storybook') ||
   argv.includes('storybook');
 const isUMD = process.env.UMD === 'true';
-const umdTarget = process.env.UMD_TARGET || 'core'; // 'core' | 'bootstrap' | 'searchbar'
-const isSearchbarUMD = isUMD && umdTarget === 'searchbar';
+const umdTarget = process.env.UMD_TARGET || 'core'; // 'core' | 'bootstrap'
 const isDev = !isUMD && !isStorybook && !isDemo && process.env.NODE_ENV !== 'test';
 export default defineConfig({
   plugins: [
@@ -251,16 +250,12 @@ export default defineConfig({
           // We support two targets via env:
           //   UMD_TARGET=core      -> dist/this.gui.umd.js
           //   UMD_TARGET=bootstrap -> dist/this.gui.bootstrap.umd.js
-          //   UMD_TARGET=searchbar -> dist/gui-searchbar.iife.js
           entry:
             umdTarget === 'bootstrap'
               ? resolve(dirname, 'src/runtime/bootstrap-umd.ts')
-              : umdTarget === 'searchbar'
-                ? resolve(dirname, 'src/runtime/searchbar-standalone.tsx')
               : resolve(dirname, 'index.ts'),
-          name: umdTarget === 'searchbar' ? 'GUISearchBar' : 'GUI',
+          name: 'GUI',
           fileName: (format) => {
-            if (umdTarget === 'searchbar') return 'gui-searchbar.iife.js';
             if (format === 'umd') {
               return umdTarget === 'bootstrap' ? 'this.gui.bootstrap.umd.js' : 'this.gui.umd.js';
             }
@@ -271,7 +266,7 @@ export default defineConfig({
               ? `this.gui.bootstrap.${format}.js`
               : `this.gui.${format}.js`;
           },
-          formats: umdTarget === 'searchbar' ? ['iife'] : ['umd'],
+          formats: ['umd'],
         }
       : {
           entry: {
@@ -363,11 +358,9 @@ export default defineConfig({
           'fs-extra',
         ]);
 
-        if (!isSearchbarUMD) {
-          baseExternalIds.add('react');
-          baseExternalIds.add('react-dom');
-          baseExternalIds.add('react-dom/client');
-        }
+        baseExternalIds.add('react');
+        baseExternalIds.add('react-dom');
+        baseExternalIds.add('react-dom/client');
 
         // In non-UMD builds, keep these as externals (peer deps / helpers).
         if (!isUMD) {

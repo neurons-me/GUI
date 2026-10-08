@@ -11,8 +11,6 @@ import FaceRecognition from './FaceRecognition/FaceRecognition';
 import RubiksCube from './RubiksCube/RubiksCubeLazy';
 import Monad from '../All.This/monad.ai/monad.ai';
 export type { MonadProps } from '../All.This/monad.ai/monad.ai';
-import Beatle from '../All.This/NRP/Beatle/Beatle';
-export type { BeatleProps, ResolutionState, NamespaceChannel, BeatleMessage } from '../All.This/NRP/Beatle/Beatle.types';
 export { HighLighter };
 export type { HighLighterProps, HighLighterColor } from './HighLighter/HighLighter';
 export { DEFAULT_COLORS as HIGH_LIGHTER_DEFAULT_COLORS } from './HighLighter/HighLighter';
@@ -22,7 +20,6 @@ export { FaceRecognition };
 export { RubiksCube };
 export type { RubiksCubeProps } from './RubiksCube/RubiksCube.types';
 export { Monad };
-export { Beatle };
 // Default registry (mirrors components/molecules barrels)
 const Widgets = {
   HighLighter,
@@ -30,7 +27,6 @@ const Widgets = {
   FaceRecognition,
   RubiksCube,
   Monad,
-  Beatle,
 };
 
 export default Widgets;

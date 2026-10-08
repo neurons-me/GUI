@@ -70,56 +70,8 @@ export { default as DomIcon } from '@/gui/Atoms/Icon/DomIcon';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';
 export { default as InspectorToggle } from '@/gui/Molecules/InspectorToggle/InspectorToggle';
-export { default as AllThis } from '@/gui/All.This/All.This';
-export { default as ModuleCard } from '@/gui/All.This/src/ModuleCard/ModuleCard';
-export { default as ModuleRow } from '@/gui/All.This/src/ModuleRow/ModuleRow';
-export { default as ModulesGrid } from '@/gui/All.This/src/ModulesGrid/ModulesGrid';
-export { default as ModulesList } from '@/gui/All.This/src/ModulesList/ModulesList';
 export { default as Cleaker } from '@/gui/All.This/Cleaker/Cleaker';
 export { default as CleakerQR } from '@/gui/All.This/Cleaker/QR/CleakerQR';
-export { default as Namespace } from '@/gui/All.This/Cleaker/Namespace/namespace';
-export {
-  createProfileCardSpec,
-  createTopbarSpec,
-} from '@/gui/All.This/Cleaker/specs';
-export type {
-  ProfileCardSpecOptions,
-  TopbarSpecOptions,
-} from '@/gui/All.This/Cleaker/specs';
-export {
-  AccessConfirmationModal,
-  AccessRequestHandler,
-  claimCleakerNamespace,
-  logoutCleakerSession,
-  openCleakerSession,
-  PinVerificationModal,
-  requestAccess,
-  resolveSession as resolveCleakerSession,
-} from '@/gui/All.This/Cleaker/access';
-export type {
-  AccessConfirmationInput,
-  AccessErrorCode,
-  AccessKernelContext,
-  AccessRequest,
-  AccessResponse,
-  AccessScope,
-  CanonicalProfileSnapshot,
-  ClaimHandlerInput,
-  ClaimHandlerResult,
-  IssuedAccessToken,
-  LogoutSessionInput,
-  LogoutSessionResult,
-  NormalizedAccessRequest,
-  OpenSessionInput,
-  OpenSessionResult,
-  PinVerificationInput,
-  RequestAccessInput,
-  ResolveSessionInput,
-  ResolvedCleakerSession,
-  ScopeValidationInput,
-  ScopeValidationResult,
-  TokenIssueInput,
-} from '@/gui/All.This/Cleaker/access';
 export { default as FaceRecognition } from '@/gui/widgets/FaceRecognition/FaceRecognition';
 export { RubiksCube }; // lazy — see definition above
 export type { RubiksCubeProps } from '@/gui/widgets/RubiksCube/RubiksCube.types';
@@ -127,20 +79,6 @@ export { default as Monad } from '@/gui/All.This/monad.ai/monad.ai';
 export type { MonadProps } from '@/gui/All.This/monad.ai/monad.ai';
 export { default as QRme } from '@/gui/All.This/me/QR/QR.me';
 export type { QRmeProps } from '@/gui/All.This/me/QR/QR.me';
-export { default as MonadMesh } from '@/gui/All.This/monad.ai/Surface/MonadMesh';
-export type {
-  MonadMeshProps,
-  MonadMeshAppEntry,
-  MonadMeshSleepingEntry,
-  MonadMeshRestartStatus,
-} from '@/gui/All.This/monad.ai/Surface/MonadMesh';
-export { default as MonadNamespaceCard } from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
-export type {
-  MonadNamespaceCardProps,
-  MonadNamespaceAppEntry,
-  MonadNamespaceSleepingEntry,
-  MonadNamespaceRestartStatus,
-} from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
 export { default as HighLighter } from '@/gui/widgets/HighLighter/HighLighter';
 export { default as CodeBlock } from '@/gui/Molecules/CodeBlock/CodeBlock';
 export { default as MarkdownDocument } from '@/gui/Molecules/Documents/MarkdownDocument/MarkdownDocument';
@@ -173,8 +111,6 @@ export {
   guiToolsElements,
   guiToolsLeftSidebarConfig,
 } from '@/gui/Molecules/menus/GUI-Tools/GUI-Tools';
-export { default as CleakerGroup } from '@/gui/All.This/Cleaker/Group/CleakerGroup';
-export { default as CleakerUser } from '@/gui/All.This/Cleaker/User/CleakerUser';
 export { default as NetGetMark } from '@/gui/All.This/netget/NetGetMark';
 export { default as GatewaySetup } from '@/gui/All.This/netget/Setup/GatewaySetup';
 export type { GatewaySetupProps, ActionResult, SetupCodeResult } from '@/gui/All.This/netget/Setup/GatewaySetup';
@@ -183,8 +119,6 @@ export { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetup
 export type { NetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
 export { default as MainServerView } from '@/gui/All.This/netget/MainServer/MainServerView';
 export type { MainServerViewProps } from '@/gui/All.This/netget/MainServer/MainServerView';
-export { default as LogsView } from '@/gui/All.This/netget/MainServer/LogsView';
-export type { LogsViewProps, LogEntry, LogType } from '@/gui/All.This/netget/MainServer/LogsView';
 export {
   createMonadClient,
   claimNamespace,
