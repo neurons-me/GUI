@@ -9,6 +9,7 @@ export type {
 } from './OpenStreetMap';
 export { default as OpenStreetMapMarker } from './OpenStreetMapMarker';
 export type { OsmMarkerProps, OsmMarkerShape, OsmMarkerBindableProp, OsmMarkerLabelPlacement } from './OpenStreetMapMarker';
+export { markerTransform } from './OpenStreetMapMarker';
 export { default as OpenStreetMapCanvas, drawOsmCanvasFrame, usePrefersReducedMotion } from './OpenStreetMapCanvas';
 export type { OsmCanvasProps, OsmFrameInfo } from './OpenStreetMapCanvas';
 export { default as OpenStreetMapOverlay } from './OpenStreetMapOverlay';
@@ -21,7 +22,9 @@ export { default as OpenStreetMapControls } from './OpenStreetMapControls';
 export type { OsmControlsProps } from './OpenStreetMapControls';
 export { useOsmViewState, useOsmLayersState, osmLayerLabel } from './viewport';
 export type { OsmViewProps, OsmLayersProps, OsmViewChangeInfo } from './viewport';
-export type { OsmViewport, OsmViewSource, OsmLayersState, OsmLayerInfo, OsmMarkerDefaults } from './context';
+export type { OsmViewport, OsmViewSource, OsmLayersState, OsmLayerInfo, OsmMarkerDefaults, OsmMarkerScaleMode } from './context';
+export { useOsmGestures, osmWheelZoomFactor, osmKeyAction } from './gestures';
+export type { OsmGestureOptions } from './gestures';
 export { useOpenStreetMap, useOpenStreetMapContext, useOpenStreetMapPalette, OSM_OVERLAY_POSITIONS } from './context';
 export { buildOsmPalette, useOsmPalette, osmLayerKind, osmToneColor, osmToneText, OSM_DOMAIN_TONES } from './mapPalette';
 export type { OsmPalette, OsmMarkerTone, OsmBaseTone, OsmDomainTone, OsmMarkerState, OsmLayerKind } from './mapPalette';
@@ -37,6 +40,8 @@ export {
   osmFitViewState,
   isOsmFitViewState,
   osmViewBox,
+  osmMarkerScale,
+  OSM_STROKE_ZOOM_EXPONENT,
   OSM_DEFAULT_MIN_ZOOM,
   OSM_DEFAULT_MAX_ZOOM,
   OSM_ATTRIBUTION,

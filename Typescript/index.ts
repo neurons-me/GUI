@@ -112,6 +112,8 @@ export type {
   OsmViewport,
   OsmViewChangeInfo,
   OsmMarkerDefaults,
+  OsmMarkerScaleMode,
+  OsmGestureOptions,
 } from '@/gui/Compounds/OpenStreetMap';
 export { default as ThemeModeToggle } from '@/gui/Theme/ToggleMode/ToggleMode';
 export { default as AdminViewToggle } from '@/gui/Molecules/AdminViewToggle/AdminViewToggle';
