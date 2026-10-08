@@ -52,6 +52,17 @@ import TopBarResolver from "@/gui/Layout/Sidebars/TopBar/TopBar.resolver";
 import TabViewsResolver, { meta as TabViewsMeta } from "@/gui/Layout/Stage/TabViews/TabViews.resolver";
 
 // All.This
+import CleakerResolver, { meta as CleakerMeta } from "@/gui/All.This/Cleaker/Cleaker.resolver";
+import CleakerQRResolver, { meta as CleakerQRMeta } from "@/gui/All.This/Cleaker/QR/CleakerQR.resolver";
+import CleakerGroupResolver, { meta as CleakerGroupMeta } from "@/gui/All.This/Cleaker/Group/CleakerGroup.resolver";
+import CleakerUserResolver, { meta as CleakerUserMeta } from "@/gui/All.This/Cleaker/User/CleakerUser.resolver";
+import NamespaceResolver, { meta as NamespaceMeta } from "@/gui/All.This/Cleaker/Namespace/Namespace.resolver";
+import NamespaceUsersResolver from "@/gui/All.This/Cleaker/Namespace/NamespaceUsers.resolver";
+import NamespaceSurfaceResolver from "@/gui/All.This/Cleaker/Namespace/NamespaceSurface.resolver";
+import QRmeResolver, { meta as QRmeMeta } from "@/gui/All.This/me/QR/QR.me.resolver";
+import SessionQRResolver, { meta as SessionQRMeta } from "@/gui/All.This/me/QR.resolver";
+import MeResolver, { meta as MeMeta } from "@/gui/All.This/me/me.resolver";
+import SearchBarResolver from "@/gui/All.This/SearchBar/SearchBar.resolver";
 
 // Newly wired (2026-09-29) -- 15 resolvers that were fully written (real
 // `type`, real `resolve()`, in several cases real `meta` too) but never
@@ -164,7 +175,18 @@ export const GuiRegistry = createRegistry([
   FooterResolver,
   withMeta(TabViewsResolver, TabViewsMeta),
   // All.This
+  withMeta(MeResolver, MeMeta),
+  withMeta(SessionQRResolver, SessionQRMeta),
+  withMeta(QRmeResolver, QRmeMeta),
+  withMeta(CleakerQRResolver, CleakerQRMeta),
+  withMeta(CleakerResolver, CleakerMeta),
+  withMeta(NamespaceResolver, NamespaceMeta),
   // NamespaceUsers/NamespaceSurface/SearchBar: also never authored.
+  NamespaceUsersResolver,
+  NamespaceSurfaceResolver,
+  withMeta(CleakerGroupResolver, CleakerGroupMeta),
+  withMeta(CleakerUserResolver, CleakerUserMeta),
+  SearchBarResolver,
   // Newly wired (2026-09-29) — see the import block above for what was
   // deliberately left out and why.
   ContentResolver,
