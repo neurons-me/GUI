@@ -53,7 +53,8 @@ export interface MeLauncherView {
   label: string;
   pending: boolean;
   error: Error | null;
-  onEnter: () => Promise<void>;
+  /** `transportOrigin`: sign in against that host instead of this page's own (a root that is another host). */
+  onEnter: (options?: { transportOrigin?: string }) => Promise<void>;
   onLogout: () => void;
   // Credentials-branch only — null for SessionSurface's one-click shape.
   credentialsForm: { username: string; setUsername: (v: string) => void; password: string; setPassword: (v: string) => void } | null;
@@ -100,8 +101,12 @@ export function useMeLauncherView(): MeLauncherView | null {
       label: authenticated ? (identityHash ? identityHash.slice(0, 10) : 'Connected') : 'Sign in with .me',
       pending,
       error,
-      onEnter: async () => {
-        await loginWithCredentials({ username: username.trim(), password });
+      onEnter: async (options) => {
+        await loginWithCredentials({
+          username: username.trim(),
+          password,
+          ...(options?.transportOrigin ? { transportOrigin: options.transportOrigin } : {}),
+        });
         setUsername('');
         setPassword('');
       },

@@ -592,7 +592,8 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
 
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
-    await onEnter();
+    // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
+    await onEnter(remoteRoot ? { transportOrigin: `https://${remoteRoot}` } : undefined);
   };
 
   return (
@@ -731,8 +732,10 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           onDismiss={() => setFailureShown(false)}
           data-gui-node-id={`${nodeId}.connect-failure`}
         />
-      ) : doorOff ? (
-        // Grey QR, nothing else: it is the way in. Clicking it executes its expression.
+      ) : (remoteRoot ? qrStatus !== 'confirmed' : doorOff) ? (
+        // Grey QR (or one still connecting to another host), nothing else: it is the way in. Clicking it executes its
+        // expression. Once another host answers, the person is offered "Hello, I am…" there, whether or not this
+        // page's own door is up.
         null
       ) : authenticated
       && (mode !== 'register' || registrationComplete)
@@ -902,8 +905,25 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           )}
           {error && (
             <Typography variant="body2" sx={{ color: 'error.main' }}>
-              {error.message}
+              {/* A server that ANSWERED and refused the credentials says so itself; anything else, against another host,
+                  is that host not taking the request from here (a cross-origin sign-in it does not allow), and the raw
+                  transport code ("REQUEST_FAILED_405") says nothing to the person. */}
+              {remoteRoot && !['INVALID_CLAIM', 'INVALID_CREDENTIAL_RESULT'].includes(String((error as { code?: unknown }).code ?? ''))
+                ? `${remoteRoot} did not accept this sign-in from here.`
+                : error.message}
             </Typography>
+          )}
+          {error && remoteRoot && (
+            // Another host decides who may sign in to it from where: cleaker.me, for one, answers only requests that
+            // come from cleaker.me itself. When that is why this failed, the way through is its own page.
+            <Box
+              component="a"
+              href={`https://${remoteRoot}/`}
+              data-gui-node-id={`${nodeId}.continue-remote`}
+              sx={{ alignSelf: 'center', color: 'text.secondary', fontSize: '0.8rem', textDecoration: 'underline', textUnderlineOffset: '3px', '&:hover': { color: 'text.primary' } }}
+            >
+              Continue at {remoteRoot}
+            </Box>
           )}
           <Box
             component="button"
@@ -931,6 +951,8 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
               {pending ? '…' : '.me'}
             </Typography>
           </Box>
+          {/* Registering and recovering are not aimed at another host yet: only signing in is. */}
+          {!remoteRoot && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, alignSelf: 'center' }}>
             <Box
               component="button"
@@ -974,6 +996,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
               Recover Account
             </Box>
           </Box>
+          )}
         </Box>
         </>
       )}
