@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import Theme from '@/gui/Theme/Theme';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmBasemap } from './OpenStreetMap';
+import { createOsmProjection } from './projection';
+import { VERACRUZ_BASEMAP, VERACRUZ_FRAME, VERACRUZ_SOURCE } from './OpenStreetMap.veracruz.fixture';
 
 // Demo frame only: two hand-written strokes stand in for a project's
 // pre-projected basemap (a real page passes the layers its own generator made).
@@ -18,13 +19,14 @@ const meta: Meta<typeof OpenStreetMap> = {
   title: 'Compounds/OpenStreetMap',
   component: OpenStreetMap,
   tags: ['autodocs'],
+  // No <Theme> here: the global preview decorator already provides it, so the
+  // toolbar's Mode (light/dark) reaches these stories. (The map's own colours
+  // are still fixed at this stage; see the Veracruz story.)
   decorators: [
     (Story: any) => (
-      <Theme>
-        <div style={{ height: 420, width: '100%' }}>
-          <Story />
-        </div>
-      </Theme>
+      <div style={{ height: 420, width: '100%' }}>
+        <Story />
+      </div>
     ),
   ],
   args: {
@@ -63,6 +65,71 @@ export const CanvasLayer: Story = {
           ctx.fill();
         }}
       />
+    </OpenStreetMap>
+  ),
+};
+
+// Real data: a trimmed copy of the Veracruz port basemap (build_basemap.py
+// output, © OpenStreetMap contributors, ODbL) with the port page's main nodes.
+// Node positions are the page's map pixels, unprojected with the map's own
+// projection, exactly as port-gui.js does.
+const VERACRUZ_PROJ = createOsmProjection(VERACRUZ_FRAME);
+const VERACRUZ_NODES = [
+  { id: 'n-port', x: 600.0, y: 255.4, shape: 'circle', size: 28, gap: 7, icon: 'anchor', color: '#7eb8c9', label: 'VERACRUZ', meta: 'port' },
+  { id: 'n-ship1', x: 801.6, y: 168.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[1] coffee', meta: 'unloading' },
+  { id: 'n-ship2', x: 888.0, y: 284.3, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[2] sugar', meta: 'unloading' },
+  { id: 'n-ship3', x: 945.6, y: 382.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[3] TEU', meta: 'unloading' },
+  { id: 'n-train', x: 340.8, y: 342.2, shape: 'rect', width: 36, height: 16, gap: 5, place: 'left', icon: 'train', color: '#b0a06a', label: 'TRAIN[1]', meta: 'loading' },
+  { id: 'n-yard', x: 513.6, y: 457.8, shape: 'square', size: 28, gap: 7, icon: 'warehouse', color: '#7a9a7a', label: 'CARGO YARD · CEDIS A', meta: 'pool' },
+] as const;
+
+/**
+ * The real Veracruz port basemap with a few of the port page's markers.
+ *
+ * Expected at this stage: the map keeps the generator's dark colours in both
+ * Mode settings (light/dark). Only the page around it follows the theme. Theme
+ * tokens for the basemap, markers and attribution are the next step.
+ */
+export const Veracruz: Story = {
+  args: {
+    ...VERACRUZ_FRAME,
+    basemap: VERACRUZ_BASEMAP,
+    source: VERACRUZ_SOURCE,
+    ariaLabel: 'Port of Veracruz (OpenStreetMap basemap)',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Real data: a trimmed copy of the Veracruz port basemap (build_basemap.py output, © OpenStreetMap contributors, ODbL), about 12 KB, story-only. ' +
+          'Markers are placed at the port page\'s node positions. The map colours do not follow the theme yet, so it stays dark in light mode. That is expected for now.',
+      },
+    },
+  },
+  render: (args) => (
+    <OpenStreetMap {...args}>
+      {VERACRUZ_NODES.map((n) => {
+        const { lat, lon } = VERACRUZ_PROJ.unproject(n.x, n.y);
+        return (
+          <OpenStreetMap.Marker
+            key={n.id}
+            id={n.id}
+            lat={lat}
+            lon={lon}
+            shape={n.shape}
+            size={'size' in n ? n.size : undefined}
+            width={'width' in n ? n.width : undefined}
+            height={'height' in n ? n.height : undefined}
+            color={n.color}
+            icon={n.icon}
+            iconColor={n.color}
+            label={n.label}
+            meta={n.meta}
+            labelPlacement={'place' in n ? n.place : 'right'}
+            labelOffset={n.gap}
+          />
+        );
+      })}
     </OpenStreetMap>
   ),
 };
