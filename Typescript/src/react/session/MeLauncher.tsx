@@ -30,7 +30,8 @@ import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 import { useLauncherPopover } from '@/runtime/launcherPopover';
 import { useRegisterGuiNode } from '@/runtime/selection';
 import { useGuiNodeId } from '@/runtime/guiNodeId';
-import CleakerQR from '@/gui/All.This/Cleaker/QR/CleakerQR';
+import QRme from '@/gui/All.This/me/QR/QR.me';
+import { buildCleakerNamespaceUrl, DEFAULT_CLEAKER_NAMESPACE_ORIGIN } from '@/gui/All.This/Cleaker/namespaceExpression';
 
 export interface MeLauncherProps {
   sx?: any;
@@ -65,7 +66,7 @@ export interface MeLauncherView {
   semanticNamespace: string | null;
 }
 
-// Exported so CleakerLanding.tsx (the full-page "Hello, I am .me" landing,
+// Exported so Namespace.tsx (the full-page "Hello, I am .me" landing,
 // same session, different chrome) can share this exact adapter instead of
 // re-deriving it — one source of truth for "how do I get a seed" across
 // both the compact sidebar bubble and the landing page.
@@ -111,6 +112,27 @@ export function useMeLauncherView(): MeLauncherView | null {
   }
 
   return null;
+}
+
+// Mirrors CleakerQR.tsx's own (unexported, local-only) `buildCleakerUrl` --
+// not duplicated as a NEW shared utility, just the same real resolution
+// CleakerQR itself relies on, reused here since this call site already
+// always has an explicit `username` (unlike CleakerQR's own window/
+// location/storage/bootstrap fallback chain, which this call site never
+// exercised anyway -- the prop always won). `buildCleakerNamespaceUrl` can
+// throw on a malformed `endpoint`; same graceful host-guess fallback
+// CleakerQR's own helper falls back to.
+function resolveCleakerQrValue(username: string, endpoint: string): string {
+  const base = String(endpoint || DEFAULT_CLEAKER_NAMESPACE_ORIGIN).trim().replace(/\/+$/, '');
+  try {
+    return buildCleakerNamespaceUrl(base || DEFAULT_CLEAKER_NAMESPACE_ORIGIN, username || undefined);
+  } catch {
+    if (!username) return base || DEFAULT_CLEAKER_NAMESPACE_ORIGIN;
+    const host = base.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/\/+$/, '');
+    if (!host) return DEFAULT_CLEAKER_NAMESPACE_ORIGIN;
+    const scheme = /^https:\/\//i.test(base) ? 'https://' : 'http://';
+    return `${scheme}${username}.${host}`;
+  }
 }
 
 const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
@@ -305,10 +327,10 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
                   <>
                     {credentialsForm.username.trim() && (
                       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-                        <CleakerQR
+                        <QRme
+                          value={resolveCleakerQrValue(credentialsForm.username.trim(), cleakerEndpoint || '')}
                           username={credentialsForm.username.trim()}
-                          endpoint={cleakerEndpoint}
-                          variant="icon"
+                          size={58}
                           data-gui-node-id={`${base}.qr`}
                         />
                       </Box>

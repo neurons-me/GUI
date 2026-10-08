@@ -22,8 +22,8 @@ type LeftSidebarHeaderSpec = {
   iconColor?: string;
 };
 
-type LeftSidebarSpec = {
-  type: 'LeftSidebar';
+type LeftBarSpec = {
+  type: 'LeftBar';
   props?: {
     // Behavior / layout
     drawerWidth?: number; // px, default 240 (component default)
@@ -48,16 +48,32 @@ type LeftSidebarSpec = {
   };
 };
 
+const LEFT_BAR_META: RegistryEntry['meta'] = {
+  id: 'layout.leftbar',
+  label: 'LeftBar',
+  kind: 'layout',
+  group: 'Layout',
+  path: ['Layout', 'Sidebars'],
+  tags: ['sidebar', 'navigation', 'drawer', 'left', 'bar'],
+  demoSpec: {
+    type: 'LeftBar',
+    props: {
+      drawerLinks: [{ label: 'Home', href: '/' }],
+    },
+  },
+};
+
 /**
- * LeftSidebarResolver
+ * LeftBarResolver
  * - Maps a JSON-friendly spec into <LeftSidebar /> props.
  * - Doesn’t make layout decisions (permanent vs temporary): that logic lives in the component
  *   via breakpoints. We just pass data and optional controlled "open"/"onClose".
  * - `onCloseId` lets you bind to a handler from the outside world through the ResolveCtx.
  */
-const LeftSidebarResolver: RegistryEntry = {
-  type: 'LeftSidebar',
-  resolve(spec: LeftSidebarSpec, ctx?: ResolveCtx) {
+const LeftBarResolver: RegistryEntry = {
+  type: 'LeftBar',
+  meta: LEFT_BAR_META,
+  resolve(spec: LeftBarSpec, ctx?: ResolveCtx) {
     const p = spec.props ?? {};
     // Resolve handler by id from ctx (optional)
     const onClose =
@@ -97,4 +113,4 @@ const LeftSidebarResolver: RegistryEntry = {
   },
 };
 
-export default LeftSidebarResolver;
+export default LeftBarResolver;

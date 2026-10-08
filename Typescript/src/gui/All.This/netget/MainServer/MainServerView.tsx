@@ -17,7 +17,7 @@ import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
-import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, type EntrypointsView } from './mainServerPresentation';
+import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, describePort, type EntrypointsView, type PortView } from './mainServerPresentation';
 
 export interface MainServerViewProps {
   /** This netget's own base URL (its own backend, not a monad — same
@@ -75,8 +75,8 @@ type MainServerState = {
   // unrelated thing: the port/scheme the CURRENT request itself arrived on,
   // not OpenResty's listen configuration -- kept separate so it's never
   // mistaken for the other.
-  httpListening: boolean;
-  httpsListening: boolean;
+  httpListening: PortView;
+  httpsListening: PortView;
   openrestyMode: string;
   gatewayPort: number | null;
   gatewayScheme: string;
@@ -100,8 +100,8 @@ const EMPTY_STATE: MainServerState = {
   bootstrapped: false,
   servingNamespace: '',
   mainServerName: null,
-  httpListening: false,
-  httpsListening: false,
+  httpListening: 'unavailable',
+  httpsListening: 'unavailable',
   openrestyMode: '',
   gatewayPort: null,
   gatewayScheme: '',
@@ -145,6 +145,10 @@ function maskHash(hash: string): string {
   if (!value) return '—';
   if (value.length <= 11) return value;
   return `${value.slice(0, 5)}…${value.slice(-5)}`;
+}
+
+function portText(view: PortView): string {
+  return view === 'listening' ? 'listening' : view === 'not-listening' ? 'not listening' : 'unavailable';
 }
 
 function StatusDot({ on }: { on: boolean }) {
@@ -231,8 +235,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         mainServerName: namespaceRes?.mainServerName ? String(namespaceRes.mainServerName) : null,
         gatewayPort: identity && typeof identity.port === 'number' ? identity.port : null,
         gatewayScheme: identity ? String(identity.scheme || '') : '',
-        httpListening: !!openresty?.httpListening,
-        httpsListening: !!openresty?.httpsListening,
+        httpListening: describePort(openresty, 'httpListening'),
+        httpsListening: describePort(openresty, 'httpsListening'),
         openrestyMode: String(openresty?.mode || '').toUpperCase(),
         localIP: ipInfo?.success ? String(ipInfo.localIP || '') : '',
         publicIP: ipInfo?.success ? String(ipInfo.publicIP || '') : '',
@@ -482,12 +486,12 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         </Box>
         <Box sx={{ display: 'flex', gap: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StatusDot on={state.httpListening} />
-            <Typography variant="body2">HTTP :80 {state.httpListening ? 'listening' : 'not listening'}</Typography>
+            <StatusDot on={state.httpListening === 'listening'} />
+            <Typography variant="body2">HTTP :80 {portText(state.httpListening)}</Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StatusDot on={state.httpsListening} />
-            <Typography variant="body2">HTTPS :443 {state.httpsListening ? 'listening' : 'not listening'}</Typography>
+            <StatusDot on={state.httpsListening === 'listening'} />
+            <Typography variant="body2">HTTPS :443 {portText(state.httpsListening)}</Typography>
           </Box>
         </Box>
       </Box>

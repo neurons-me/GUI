@@ -17,6 +17,20 @@ export interface TopBarProps extends AppBarProps {
   /** Icon name used when right elements are collapsed (mobile). Default: "more_horiz". */
   collapsedIconRight?: string;
   homeTo?: string | null;
+  /**
+   * Drops the AppBar's own `borderBottom`/`borderColor` (the divider line
+   * under the bar) — everything else about `baseAppBarSx` stays. Default:
+   * false (the line renders, same as before this prop existed).
+   */
+  noBorder?: boolean;
+  /**
+   * Skips rendering the brand area entirely (the `logo` image, or the
+   * title-initial/"?" `Avatar` fallback when no `logo` is given, plus its
+   * home-link wrapper) — for a caller that only wants `elementsCenter`/
+   * `elementsRight` and no brand mark at all. Default: false (the brand
+   * area renders, same as before this prop existed).
+   */
+  hideBrand?: boolean;
   sx?: SxProps<Theme>;
   appBarSx?: SxProps<Theme>;
   toolbarSx?: SxProps<Theme>;

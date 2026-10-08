@@ -1,1119 +1,300 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import ME from 'this.me';
-import { alpha } from '@mui/material/styles';
-import { useGuiTheme } from '@/gui-internals/Hooks';
-import Box from '@/gui/Atoms/Box/Box';
-import Card from '@/gui/Atoms/Card/Card';
-import CardContent from '@/gui/Atoms/Card/CardContent/CardContent';
-import Paper from '@/gui/Atoms/Paper/Paper';
-// Removed: TextField, Icon, IconButton
-import Button from '@/gui/Atoms/Button/Button';
-import Typography from '@/gui/Atoms/Typography/Typography';
-import Stack from '@/gui/Molecules/Stack/Stack';
-import {
-  type ConnectionStatus,
-  useSovereignPresence,
-} from "./Namespace/scripts/connection";
-// Removed: QR
-import { sanitizeCleakerUsername } from './runtimeUsername';
-import useCleakerAuth from './hooks/useCleakerAuth';
-import useCleakerDerivedIdentity from './hooks/useCleakerDerivedIdentity';
-import useCleakerMeshPairing from './hooks/useCleakerMeshPairing';
-import useCleakerNamespace from './hooks/useCleakerNamespace';
-import useCleakerProfileRuntime from './hooks/useCleakerProfileRuntime';
-import useCleakerSelectionRegistry from './hooks/useCleakerSelectionRegistry';
-import useCleakerView from './hooks/useCleakerView';
-import { useCleakerKernelSync } from './hooks/useCleakerKernelSync';
-import { MeRuntimeProvider, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
-import {
-  SeedSessionProvider,
-  useOptionalSeedSessionContext,
-} from '@/react/session/SeedSessionProvider';
-import { useMe } from '@/react/useMe';
-import { useMeAction } from '@/react/useMeAction';
-import { useMeValue } from '@/react/useMeValue';
+// Cleaker — the one public entry point for a complete, namespace-scoped
+// identity surface:
+//
+//   <Cleaker me={me} />
+//
+// One prop. No `namespace` prop, no manually-assembled
+// `<SeedSessionProvider>` above it, no second context. Internally this
+// reuses what already works rather than reinventing any of it:
+// `Namespace.tsx`'s own real rendering logic (the production identity-
+// landing shell — QR/sign-in/register/recover/users/blockchain/url/
+// keychain, already live), `SeedSessionProvider` (the real session/claim/
+// open/logout machinery), `CleakerIdentityCard`/`Claim`/`RecoverAccount`
+// (the real identity-flow UI `Namespace.tsx` already mounts as its Landing
+// page). This file does none of that work itself — it is a thin
+// destination-derivation + wiring layer, nothing more.
+//
+// HOW `me` IS ACTUALLY USED TODAY (2026-10-01, corrected 2026-10-02 twice —
+// see both corrections below, neither superseded by the other): `me` is
+// read for CONFIGURATION ONLY — `profile.rootNamespace` (the bare root a
+// `.me` kernel constructed with a namespace option writes at construction
+// time — see `me/Typescript/src/me.ts`'s `rootProxy.profile.rootNamespace(...)`
+// call, and `src/factory.ts`'s identical write) becomes `cleakerEndpoint`.
+// That is the full extent of what `me` does here. It is NEVER "logged in",
+// and nothing below this derivation (`SeedSessionProvider`, `Namespace`,
+// `CleakerIdentityCard`) ever receives or operates on this `me` object —
+// confirmed by grep: zero `useMe()`/`useMeValue`/`MeLike`-prop references
+// anywhere in `Namespace.tsx`'s real code; every identity/session read in
+// the tree this component renders goes exclusively through
+// `useOptionalSeedSessionContext()`, which builds and owns its own,
+// entirely separate kernel on real claim/open — independently in each of
+// its own entry paths (username+password, vault-unlock, phrase recovery),
+// which is correct and does not need to change.
+//
+// CORRECTION 1 (same day, same review): a first pass of this comment
+// proposed closing the gap below by having `SeedSessionProvider` RE-SEED
+// the caller's own `me` object in place on real authentication (`.me`
+// already exposes a real, public mechanism for this — calling a kernel as
+// `me(username, password)` re-derives its identity on the SAME object,
+// confirmed via `me/Typescript/src/handleCall.ts`'s `reseedIdentity` wiring
+// and a real precedent already in this monorepo,
+// `modules/netget/.../GatewayIdentity.ts`). That proposal was REJECTED,
+// correctly: re-seeding the connection's own identity on login conflates
+// connection and session again (the thing this whole consolidation was
+// supposed to keep separate), behaves inconsistently across entry paths
+// (username+password can reseed in place; vault-unlock and phrase recovery
+// construct a genuinely different kernel, so "the same object" would mean
+// different things depending on how someone signs in), and silently
+// mutates the identity of any OTHER code that happens to hold the same
+// `me` reference. Reference equality was never proof that caches, pending
+// operations, or derived reads stayed coherent through that mutation
+// either. This was NOT implemented. `.me` was NOT modified.
+//
+// CORRECTION 2 (same review): a second pass claimed the architectural goal
+// was satisfied anyway, because `cleakerEndpoint` (derived from `me` here)
+// ends up feeding BOTH `SeedSessionProvider`'s transport and `Namespace`'s
+// content resolution, and because the namespace a real claim/open actually
+// authenticates against is itself derived from this same `cleakerEndpoint`
+// (traced through `CleakerIdentityCard.tsx` -> `documentPages.ts`'s
+// `deriveNamespaceRootLabel`). That tracing is accurate, but the
+// conclusion drawn from it overstated what it proves: a shared
+// CONFIGURATION value (the destination string) is not the same claim as a
+// shared RUNTIME or a single connection object, and describing the former
+// as satisfying the latter was itself an overstatement, not a closed
+// architectural decision. What this file actually provides is destination
+// consistency — the same `cleakerEndpoint` reaches both the session and
+// the content layer — nothing more.
+//
+// WHERE THIS STANDS: "one shared runtime consuming GUI" (in whatever sense
+// goes beyond destination-config consistency) is NOT implemented here and
+// is NOT claimed to be. If that goal is still wanted, it remains a
+// SEPARATE, OPEN architectural question — this file does not prescribe
+// re-seeding `me`, does not prescribe changing `.me`, and does not
+// prescribe any other specific mechanism as "the" fix; none of those paths
+// were shown to be necessary, only one (re-seeding) was shown to be wrong.
+//
+// A related, separately-documented limit (not something this file's design
+// causes or could fix by itself): `SeedSessionProvider`'s own `logout()`
+// closes further operations THROUGH that session's own wrapper (its
+// `activeNamespace` closure clears, so `write()`/`signAndWrite()` on that
+// wrapper start failing) — it does not revoke cryptographic capability a
+// reference obtained before logout might still hold elsewhere (e.g. a
+// consumer that captured `useMe()`'s value while authenticated). Whether
+// that gap is worth closing, and how — which could plausibly be addressed
+// on the GUI side (how references/credentials are handed out and how long
+// they're retained) without necessarily touching `.me` at all — is not
+// investigated here and is not claimed to require any particular fix.
+//
+// Finished, not in question: retiring the old `Cleaker.tsx`/
+// `CleakerComposer.tsx` (below) and the single public `<Cleaker>` entry
+// point's composition shape, with destination configuration consistently
+// derived from `me` once. Open, separate, not attempted: whether a shared
+// RUNTIME (beyond shared configuration) is still wanted, and if so, how.
+//
+// THIS REPLACES THE OLDER `Cleaker.tsx`/`CleakerComposer.tsx` THAT USED TO
+// LIVE IN THIS DIRECTORY (2026-10-01 retirement — both already independently
+// flagged legacy in this codebase's own history; see `CleakerIdentityCard
+// .tsx`'s 2026-09-29 comment). Two real, distinct capabilities existed only
+// in that old code and do NOT exist here. Both were investigated in full
+// before this retirement (not assumed) and explicitly decided, not silently
+// dropped:
+//
+// 1. MESH-PAIRING QR CLAIM FLOW (`GeneratePairingQR`/`useCleakerMeshPairing`/
+//    `ClaimSurface`/`meshPairing.ts`) — ABANDONED, deleted outright, not
+//    ported. Investigation found: zero network calls anywhere in it (grepped
+//    for fetch/axios/WebSocket/literal URLs — nothing); "scanning" a QR was
+//    never real — there was no camera path, only a `window` CustomEvent or a
+//    URL query param standing in for a scan; the claim token was an unsigned,
+//    client-generated hex string checked only against in-kernel bookkeeping,
+//    never a server; it only ever worked when host and claiming surface
+//    shared the same `.me` kernel/tab state. Zero consumers anywhere in the
+//    monorepo besides old `Cleaker.tsx`/`CleakerCard.tsx` and one Storybook
+//    story (also deleted). None of the deleted files were exported from this
+//    package's published root (`index.ts`) or any other public entry point —
+//    confirmed by grep before deleting — so this is NOT a breaking change to
+//    the published `this.gui` package.
+// 2. PIN-BASED ACCESS-GRANT (`Cleaker/access/`'s `<AccessRequestHandler/>`
+//    mount point) — the MOUNT is abandoned (not rendered here); the session
+//    handlers it sits alongside are kept, exported, and marked `@deprecated`
+//    (see `access/index.ts` and its handler files), not deleted — different
+//    bar because those ARE exported from the published root and "no internal
+//    consumer" doesn't rule out an external one. Investigation found PIN
+//    verification was already provably unreachable before this retirement:
+//    `AccessRequestHandler.tsx` only ever registered the confirmation half of
+//    `access/ui/bridge.ts`'s UI bridge, never `requestPinVerification` — so
+//    any call to `requestAccess()` with `requirePin` (the default) already
+//    failed closed with `PIN_REQUIRED` regardless of whether this mount
+//    existed. `requestAccess()` itself has zero callers anywhere in the
+//    monorepo today. Verified explicitly, by re-reading `requestAccess.ts`'s
+//    own fail path, that removing this mount does not change that function's
+//    behavior from "fails closed" to "silently grants access": both its
+//    confirmation step and its PIN step call through `access/ui/bridge.ts`'s
+//    own module-singleton directly (`requestAccessConfirmationFromUi`/
+//    `requestPinVerificationFromUi`), independent of whether any particular
+//    component is mounted — with no UI registered at all (the state after
+//    this retirement), `requestAccess()` now fails even earlier, at the
+//    confirmation step (`CONFIRMATION_REQUIRED`), before it would ever reach
+//    the PIN check. Retiring an incomplete, already-unreachable interface
+//    does not mean skipping verification; it was never reachable to skip.
+//
+// See this consolidation's own handoff reports for the full investigation
+// trail (file-by-file consumer greps across the whole monorepo, not just
+// this package) behind both decisions above.
+import * as React from 'react';
 import type { MeLike } from '@/react/types';
-import { useRuntimeEnvironment } from '@/runtime/runtimeContext';
-import { renderNode } from '@/runtime/renderer';
-import { readMeValue, writeMeValue } from '@/runtime/run-me';
-import QRme from '@/gui/All.This/me/QR/QR.me';
-import { DEFAULT_CLEAKER_NAMESPACE_EXPRESSION } from "./namespaceExpression";
-import { createSurfaceEntry, resolveSemanticRootName } from "./surfaceModel";
-import { createProfileCardSpec } from './specs';
-import { AccessRequestHandler } from './access';
-import ClaimSurface from './ClaimSurface';
-import CleakerCard from './CleakerCard';
-import GeneratePairingQR from './GeneratePairingQR';
-import CleakerSignUpModal from './SignUp/Modal';
+import { readMeValue } from '@/runtime/run-me';
+import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
+import Namespace from '@/react/session/Namespace';
+import type { GuiDocument } from '@/runtime/guiDocument';
+import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import {
-  isProbablyLocalOrigin,
-  registerMeshSurface,
-  slugifySurfaceName,
-  writeMeshRuntimeValue,
-} from './meshPairing';
-import { writeKernelWindowLocation } from '@/core/session/createSeedSession';
-
+  parseCleakerNamespaceExpression,
+  DEFAULT_CLEAKER_NAMESPACE_EXPRESSION,
+} from './namespaceExpression';
 
 export type CleakerProps = {
-  'data-gui-node-id'?: string;
-  'data-gui-component'?: string;
-  username?: string;
-  namespace?: string;
-  namespaceOrigin?: string;
+  sx?: any;
+  /**
+   * The base runtime this Cleaker derives its destination from. Read ONCE,
+   * synchronously, at render time, purely to compute `cleakerEndpoint` via
+   * `profile.rootNamespace` — see this file's own header comment for the
+   * full reasoning. Never propagated downstream, never read again after
+   * this derivation, never "logged in". Omit to get the literal default
+   * destination (`'cleaker.me'`).
+   */
   me?: MeLike;
-  /** Override the card's maxWidth. Default: '320px' login, '460px' claim surface. Pass '100%' to fill the container. */
-  maxWidth?: string;
+  /**
+   * Transport origin `SeedSessionProvider`/`Namespace` actually send
+   * requests to. Defaults to this Cleaker's own resolved `cleakerEndpoint`
+   * when omitted (2026-10-02, corrected after the previous default --
+   * `${window.location.origin}/apps/netget`, assuming this page IS a
+   * netget gateway -- 404'd everywhere that assumption doesn't hold, e.g.
+   * Storybook) — NOT `SeedSessionProvider`'s own internal default
+   * (`http://localhost:8161`), which is only ever correct for a bare local
+   * dev kernel, never a real deployment. A caller whose session transport
+   * genuinely differs from its destination (netget's own App.jsx, served
+   * FROM a gateway whose `/apps/netget` proxy IS the correct session
+   * transport, different from whatever foreign namespace a `cleaker`-role
+   * door is displaying) still passes this explicitly, same as always.
+   */
+  transportOrigin?: string;
+  /**
+   * Explicit destination override — wins outright over whatever `me` would
+   * otherwise derive, and means `me` need not be given at all. For a caller
+   * that already resolves its own correct destination through its own
+   * means (e.g. netget's App.jsx, which resolves `cleakerEndpoint` from the
+   * page's own boot/mount context depending on which door it's serving —
+   * see its own header comment — not from an identity kernel at all: there
+   * is no live `.me` object to pass as `me` in that case). Most callers
+   * should prefer `me` and leave this omitted.
+   */
+  cleakerEndpoint?: string;
+  /**
+   * `Namespace`'s own data-fetch origin (where the CONNECTED namespace's
+   * own directory/blockchain data actually lives) — defaults to the same
+   * resolved value as `transportOrigin` when omitted, which is correct for
+   * the common case (this app's own session transport and the namespace it
+   * serves live at the same origin). Pass this separately only when they
+   * genuinely differ — e.g. netget's App.jsx uses its OWN transport for
+   * `SeedSessionProvider` (its own login/credentials) while a `cleaker`-role
+   * door's `Namespace` must read a DIFFERENT, foreign namespace's own monad
+   * for its directory data.
+   */
+  netgetMonadOrigin?: string;
+  /** Passed straight through to `SeedSessionProvider` — see its own doc comment. */
+  resolveSeedFromCredentials?: ResolveSeedFromCredentials;
+  /**
+   * Passed straight through to `Namespace` — its own existing content-
+   * extension contract (an app such as netget adding its own pages/left-bar
+   * elements on top of the shared shell), unrelated to identity composition.
+   */
+  document?: GuiDocument;
+  pages?: Record<string, React.ComponentType<any>>;
+  footerExtras?: LeftBarElement[];
 };
 
-const KERNEL_CLEAKER_IDENTITY_PATH = 'identity.session';
-const KERNEL_CLEAKER_UI_PATH = 'ui.cleaker';
-const KERNEL_CLEAKER_AUTH_PATH = 'runtime.cleaker.auth';
-const KERNEL_CLEAKER_NAMESPACE_PATH = 'runtime.cleaker.namespace';
-const KERNEL_CLEAKER_REGISTER_PATH = 'ui.cleaker.register';
-const KERNEL_CLEAKER_CANONICAL_AUTH_PATH = 'auth';
-
-
-function safeWriteKernelPath(me: MeLike, runtime: any, path: string, value: any): boolean {
-  try {
-    writeMeValue(me, path, value);
-    runtime?.notify?.(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function describeConnectionStatus(status: ConnectionStatus): string {
-  switch (status) {
-    case 'online': return 'online';
-    case 'offline': return 'offline';
-    case 'declined': return 'blocked';
-    case 'connecting': return 'checking';
-    default: return 'idle';
-  }
-}
-
-function cleanString(value: unknown): string {
-  return String(value || '').trim();
-}
-
-function maskHash(hash: string): string {
-  const value = String(hash || '').trim();
-  if (!value) return '';
-  if (value.length <= 18) return value;
-  return `${value.slice(0, 10)}…${value.slice(-8)}`;
-}
-
-function safeAlphaColor(color: string | undefined, opacity: number, fallback: string): string {
-  const normalized = String(color || '').trim().toLowerCase();
-  if (!normalized || normalized === 'transparent') return fallback;
-  try {
-    return alpha(color as string, opacity);
-  } catch {
-    return fallback;
-  }
-}
-
-function CleakerInner(props: CleakerProps) {
-  const { me: runtimeMe, runtime } = useMe();
-  const theme = useGuiTheme();
-  const rootNodeId = String(props['data-gui-node-id'] || 'Cleaker');
-  const rootNodeType = String(props['data-gui-component'] || 'Cleaker');
-  // Root paths are canonical. Both hooks always called (Rules of Hooks);
-  // legacy profile.* value used as fallback for existing kernels.
-  const _username        = useMeValue<string>('me.username');
-  const _legacyUsername  = useMeValue<string>('username');
-  const _legacyUsername2 = useMeValue<string>('profile.username');
-  const _name            = useMeValue<string>('me.name');
-  const _legacyName      = useMeValue<string>('name');
-  const _legacyName2     = useMeValue<string>('profile.name');
-  const _email           = useMeValue<string>('me.email.primary');
-  const _legacyEmail     = useMeValue<string>('email');
-  const _legacyEmail2    = useMeValue<string>('profile.email');
-  const _phone           = useMeValue<string>('me.phone.primary');
-  const _legacyPhone     = useMeValue<string>('phone');
-  const _legacyPhone2    = useMeValue<string>('profile.phone');
-  const profileUsername = _username || _legacyUsername || _legacyUsername2 || '';
-  const profileName     = _name     || _legacyName     || _legacyName2     || '';
-  const profileEmail    = _email    || _legacyEmail    || _legacyEmail2    || '';
-  const profilePhone    = _phone    || _legacyPhone    || _legacyPhone2    || '';
-  const claimedAtPath = useMeValue<number | null>('auth.claimed_at');
-  const activeSessionNamespace = useMeValue<string>('identity.session.namespace') || '';
-  const kernelRuntimeAuthenticated = Boolean(useMeValue<boolean>('identity.session.authenticated'));
-  const kernelViewMode = useMeValue<string>('ui.cleaker.viewMode') || '';
-  const setKernelViewMode = useMeAction('ui.cleaker.viewMode');
-
-  const namespaceBootstrap = useCleakerNamespace({
-    me: runtimeMe,
-    namespace: props.namespace,
-    namespaceOrigin: props.namespaceOrigin,
-  });
-
-  const {
-    namespaceInput,
-    setNamespaceInput,
-    namespaceConfig,
-    namespaceOrigin,
-    namespaceHost,
-    namespaceDisplayHost,
-    namespaceSeedFallback,
-  } = namespaceBootstrap;
-
-  const nodeId = useCallback((segment: string) => `${rootNodeId}/${segment}`, [rootNodeId]);
-  const nodePath = useCallback((segment: string) => `${rootNodeId}.${segment}`, [rootNodeId]);
-  const nodeAttrs = useCallback(
-    (segment: string, component: string) => ({
-      'data-gui-node-id': nodeId(segment),
-      'data-gui-component': component,
-    }),
-    [nodeId]
+export default function Cleaker({
+  sx,
+  me,
+  transportOrigin,
+  cleakerEndpoint: explicitCleakerEndpoint,
+  netgetMonadOrigin: explicitNetgetMonadOrigin,
+  resolveSeedFromCredentials,
+  document,
+  pages,
+  footerExtras,
+}: CleakerProps) {
+  // Config-only derivation (see `me`'s own doc comment above for what this
+  // does NOT do). Memoized on `[me, explicitCleakerEndpoint]`, not a plain
+  // per-render read and not a true one-time-ever read either — it
+  // recomputes if the `me` reference or `cleakerEndpoint` prop actually
+  // changes between renders, and is a no-op otherwise. (A prior version of
+  // this comment claimed "one-time" while the code read on every render
+  // regardless of memoization; this corrects that mismatch.) Skipped
+  // entirely when the caller already supplies an explicit `cleakerEndpoint`
+  // (no kernel read needed, and none is self-minted when `me` is also
+  // omitted: an un-configured kernel has no `profile.rootNamespace` to read
+  // back out anyway, so "no `me`" and "default to 'cleaker.me'" are the
+  // same outcome without needing an object to exist for it).
+  const rootNamespace = React.useMemo(
+    () =>
+      !explicitCleakerEndpoint && me
+        ? String(readMeValue(me, 'profile.rootNamespace', { allowBarePath: true }) || '').trim()
+        : '',
+    [me, explicitCleakerEndpoint],
   );
 
-  const specRegistry = useMemo(
-    () => ({
-      Box,
-      Button,
-      Card,
-      CardContent,
-      Paper,
-      Stack,
-      Typography,
-      'QR.me': QRme,
-    }),
-    []
-  );
-
-  const renderSpecNode = useCallback(
-    (spec: any, path: string) =>
-      renderNode(spec, {
-        React,
-        registry: specRegistry,
-        runtime: runtime ?? undefined,
-      }, path),
-    [runtime, specRegistry]
-  );
-
-  const sanitizeRuntimeUsername = useCallback(
-    (raw: string) => sanitizeCleakerUsername(raw),
-    []
-  );
-
-  const themedUi = useMemo(() => {
-    const primary = theme.palette.primary.main;
-    const divider = theme.palette.divider;
-    const paper = theme.palette.background.paper;
-    const subtleSection = theme.palette.section.subtle;
-    const defaultSection = theme.palette.section.default;
-    const isDark = theme.palette.mode === 'dark';
-    const paperLow = safeAlphaColor(
-      paper,
-      isDark ? 0.04 : 0.94,
-      isDark ? alpha(theme.palette.common.black, 0.18) : alpha(theme.palette.common.white, 0.94)
-    );
-    const paperMid = safeAlphaColor(
-      paper,
-      isDark ? 0.16 : 0.84,
-      isDark ? alpha(theme.palette.common.black, 0.24) : alpha(theme.palette.common.white, 0.84)
-    );
-    const paperSoft = safeAlphaColor(
-      paper,
-      0.08,
-      isDark ? alpha(theme.palette.common.white, 0.06) : alpha(theme.palette.common.black, 0.03)
-    );
-
-    return {
-      shellBorder: safeAlphaColor(primary, isDark ? 0.2 : 0.14, divider),
-      shellBackground: isDark
-        ? `linear-gradient(180deg, ${paperLow} 0%, ${defaultSection} 100%)`
-        : `linear-gradient(180deg, ${paperLow} 0%, ${subtleSection} 100%)`,
-      shellShadow: isDark ? theme.shadows[8] : theme.shadows[3],
-      panelBackground: paperMid,
-      panelBorder: safeAlphaColor(divider, isDark ? 0.92 : 0.8, divider),
-      qrBorder: safeAlphaColor(primary, isDark ? 0.42 : 0.28, divider),
-      qrBackground: isDark
-        ? `radial-gradient(circle at 28% 24%, ${safeAlphaColor(primary, 0.16, divider)} 0%, ${subtleSection} 48%, ${paperLow} 100%)`
-        : `radial-gradient(circle at 28% 24%, ${safeAlphaColor(primary, 0.12, divider)} 0%, ${paperLow} 52%, ${subtleSection} 100%)`,
-      qrExpandedShadow: `0 0 0 2px ${safeAlphaColor(primary, 0.24, divider)}, ${theme.shadows[8]}`,
-      qrCollapsedShadow: `0 0 0 1px ${safeAlphaColor(primary, 0.18, divider)}, ${theme.shadows[2]}`,
-      inputUnderline: safeAlphaColor(primary, 0.78, primary),
-      subtleSurface: isDark ? paperSoft : alpha(theme.palette.common.black, 0.03),
-      ghostHover: safeAlphaColor(
-        theme.palette.text.primary,
-        isDark ? 0.08 : 0.05,
-        isDark ? alpha(theme.palette.common.white, 0.08) : alpha(theme.palette.common.black, 0.05)
-      ),
-      activeIcon: safeAlphaColor(primary, 0.12, divider),
-    };
-  }, [theme]);
-
-
-  const [avatarExpanded, setAvatarExpanded] = useState(false);
- 
-  const { parentHost, parentStatus } = useSovereignPresence({
-    parent: namespaceOrigin,
-    local: '',
-  });
-
-  const isParentOnline = parentStatus === 'online';
-
-  const actionTarget = useMemo(() => {
-    if (namespaceOrigin || isParentOnline) return 'cloud' as const;
-    return 'none' as const;
-  }, [isParentOnline, namespaceOrigin]);
-
-  const actionBaseUrl = useMemo(() => {
-    if (actionTarget === 'cloud') return namespaceOrigin;
-    return '';
-  }, [actionTarget, namespaceOrigin]);
-
-  const actionTargetLabel = useMemo(() => {
-    if (actionTarget === 'cloud') return parentHost || namespaceDisplayHost || namespaceHost || 'cleaker.me';
-    return 'offline';
-  }, [actionTarget, namespaceDisplayHost, namespaceHost, parentHost]);
-
-  const rootHostNamespace = useMemo(() => {
-    return String(namespaceConfig.transport.host || '').trim().toLowerCase();
-  }, [namespaceConfig.transport.host]);
-
-  const semanticRootName = useMemo(() => {
-    return resolveSemanticRootName({
-      namespaceHandle: namespaceHost,
-      resolverHostName: '',
-      rootHostNamespace,
-    });
-  }, [namespaceHost, rootHostNamespace]);
-
-
-
-// ===========================================================================
-// Profile Runtime — extracted to its own hook
-// ===========================================================================
-const profileRuntime = useCleakerProfileRuntime({
-  me: runtimeMe,
-  runtime,
-  sanitizeRuntimeUsername,
-});
-
-const {
-  activeProfileUsername,
-  activeProfileName,
-  activeProfileEmail,
-  activeProfilePhone,
-  activeIdentityNamespace,
-  claimedAt,
-  sessionAuthenticated,
-  updateProfileFromAuth,
-  clearProfileState,
-} = profileRuntime;
-
-// ===========================================================================
-// Mesh Pairing — extracted to its own hook
-// ===========================================================================
-const meshPairing = useCleakerMeshPairing({
-  me: runtimeMe,
-  runtime,
-  runtimeAuthenticated: kernelRuntimeAuthenticated,
-  setKernelViewMode,
-});
-
-const {
-  pairingExpression,
-  pairingLinkError,
-  clearPairingState,
-} = meshPairing;
-
-
-  const auth = useCleakerAuth({
-    username: props.username,
-    namespaceOrigin,
-    namespaceSeedHandle: String(semanticRootName || namespaceSeedFallback || '').trim().toLowerCase(),
-    namespaceSeedFallback,
-    actionBaseUrl,
-    actionTargetLabel,
-    activeProfile: {
-      username: activeProfileUsername,
-      name: activeProfileName,
-      email: activeProfileEmail,
-      phone: activeProfilePhone,
-      namespace: activeIdentityNamespace,
-      claimedAt,
-    },
-    onAuthenticated: (profile) => {
-      updateProfileFromAuth(profile);
-    },
-    onViewModeChange: (viewMode) => {
-      setKernelViewMode(viewMode);
-    },
-  });
-
-  const {
-    username,
-    setUsername,
-    usernameError,
-    normalizedUsername,
-    secret,
-    setSecret,
-    showSecret,
-    setShowSecret,
-    registerOpen,
-    openRegisterModal,
-    closeRegisterModal,
-    registerFullName,
-    setRegisterFullName,
-    registerUsername,
-    setRegisterUsername,
-    registerEmail,
-    setRegisterEmail,
-    registerPhone,
-    setRegisterPhone,
-    registerPassword,
-    setRegisterPassword,
-    registerConfirmPassword,
-    setRegisterConfirmPassword,
-    registerError,
-    authStatus,
-    authAction,
-    authError,
-    claimResolution,
-    claimResolutionNote,
-    sessionAuthenticated: authSessionAuthenticated,
-    bootstrapInfo,
-    handleCleak,
-    handleRegisterSubmit,
-    handleLogout: handleAuthLogout,
-    authSuccessMessage,
-    authProgressMessage,
-
-  } = auth;
-
-  const resolverHostName = useMemo(() => {
-    return String(bootstrapInfo?.resolverHostName || '').trim().toLowerCase();
-  }, [bootstrapInfo?.resolverHostName]);
-
-  const resolverDisplayName = useMemo(() => {
-    return String(bootstrapInfo?.resolverDisplayName || '').trim();
-  }, [bootstrapInfo?.resolverDisplayName]);
-
-  const hostResolvedSurfaceEntry = useMemo(() => {
-    const entry = bootstrapInfo?.surfaceEntry;
-    if (!entry) return null;
-    return {
-      ...entry,
-      status: {
-        ...entry.status,
-        availability: parentStatus === 'online' ? 'online' : entry.status.availability,
-        syncState: parentStatus === 'online' ? 'current' : entry.status.syncState,
-        lastSeen: parentStatus === 'online' ? Date.now() : entry.status.lastSeen,
-      },
-    };
-  }, [bootstrapInfo?.surfaceEntry, parentStatus]);
-
-  const effectiveSemanticRootInput = useMemo(() => {
-    const resolvedRoot = String(hostResolvedSurfaceEntry?.rootName || '').trim().toLowerCase();
-    if (resolvedRoot) return resolvedRoot;
-    return semanticRootName;
-  }, [hostResolvedSurfaceEntry?.rootName, semanticRootName]);
-
-  // ===========================================================================
-  // Namespace Hook — enriched with auth/bootstrap-derived inputs.
-  // Single source of truth for derived namespace values.
-  // ===========================================================================
-  const namespace = useCleakerNamespace({
-    me: runtimeMe,
-    namespace: props.namespace,
-    namespaceOrigin: props.namespaceOrigin,
-    normalizedUsername,
-    resolverHostName,
-    effectiveSemanticRootName: effectiveSemanticRootInput,
-  });
-
-  const {
-    resolvedNamespaceRootName,
-    namespaceSeedHandle,
-    surfaceNamespace,
-    subjectSurfaceNamespace,
-    resolverSurfaceNamespace,
-    resolverSubjectSurfaceNamespace,
-    localNamespaceUrl,
-    networkNamespaceUrl,
-    activeNamespaceUrl,
-    compactMonadLabel,
-    compactRootLabel,
-  } = namespace;
-
-  const effectiveSemanticRootName = resolvedNamespaceRootName;
-
-  // ===========================================================================
-  // Derived Identity — extracted into its own hook.
-  // ===========================================================================
-  const derivedIdentity = useCleakerDerivedIdentity({
-    username,
-    normalizedUsername,
-    secret,
-    namespaceSeedHandle,
-    rootHostNamespace,
-    activeNamespaceUrl,
-    sanitizeRuntimeUsername,
-  });
-
-  const {
-    globalNamespaceRootHash,
-    subjectNamespaceHash,
-    identityNamespace,
-    typingNamespace,
-    subjectHandleNamespace,
-    identity,
-    previewQrValue,
-  } = derivedIdentity;
-
-
-  const liveUsernameState = useMemo(() => {
-    const raw = String(username || '').trim();
-    if (!raw) return 'idle' as const;
-    if (usernameError) return 'invalid' as const;
-    return 'valid' as const;
-  }, [username, usernameError]);
-
-  const liveUsernameNote = useMemo(() => {
-    if (liveUsernameState === 'invalid') return String(usernameError || 'invalid username format');
-    if (liveUsernameState === 'valid') return identityNamespace;
-    return '';
-  }, [identityNamespace, liveUsernameState, usernameError]);
-
-  const surfaceEntry = useMemo(() => {
-    if (hostResolvedSurfaceEntry) return hostResolvedSurfaceEntry;
-    return createSurfaceEntry({
-      namespaceUrl: activeNamespaceUrl,
-      endpoint: namespaceOrigin,
-      namespaceHandle: namespaceSeedHandle,
-      rootHostNamespace,
-      resolverHostName,
-      connected: parentStatus === 'online',
-    });
-  }, [
-    activeNamespaceUrl,
-    hostResolvedSurfaceEntry,
-    namespaceSeedHandle,
-    namespaceOrigin,
-    parentStatus,
-    resolverHostName,
-    rootHostNamespace,
-  ]);
-
-  const hasNamespaceBinding = Boolean(
-    (activeSessionNamespace || activeIdentityNamespace)
-    && (activeSessionNamespace || activeIdentityNamespace) === identityNamespace
-    && activeNamespaceUrl
-  );
-
-  const runtimeAuthenticated = Boolean(
-    (kernelRuntimeAuthenticated || authSessionAuthenticated || sessionAuthenticated)
-    && hasNamespaceBinding
-  );
-
-  const hasCanonicalClaim = Boolean(profileUsername && claimedAtPath);
-  const hasClaimedIdentity = Boolean(profileUsername && claimedAtPath && activeSessionNamespace);
-
-  const view = useCleakerView({
-    kernelViewMode,
-    pairingExpression,
-    hasClaimedIdentity,
-  });
-
-  const {
-    isClaimSurfaceView,
-    settingsOpen,
-    currentViewMode,
-    semanticViewMode,
-    showProfileView,
-    showClaimSurfaceView,
-    showLoginView,
-  } = view;
-
-  const isClaimed = Boolean(hasCanonicalClaim || claimResolution === 'openable');
-
-  const hostSurfaceId = useMemo(() => {
-    return slugifySurfaceName(
-      surfaceEntry.hostId || resolverHostName || effectiveSemanticRootName || 'host-surface'
-    );
-  }, [effectiveSemanticRootName, resolverHostName, surfaceEntry.hostId]);
-
-  const hostSurfaceRecord = useMemo(() => ({
-    hostId: hostSurfaceId,
-    displayName: resolverDisplayName || compactMonadLabel || hostSurfaceId,
-    type: surfaceEntry.type,
-    platform:
-      typeof navigator === 'undefined'
-        ? 'unknown'
-        : String((navigator as any).userAgentData?.platform || navigator.platform || 'unknown'),
-    note: 'Active Cleaker host surface.',
-    namespace: activeIdentityNamespace || identityNamespace || typingNamespace || namespaceSeedHandle,
-    status: (parentStatus === 'online' ? 'online' : 'unknown') as 'online' | 'unknown',
-    confidence: isProbablyLocalOrigin(namespaceOrigin) ? 96 : 88,
-    lastSeen: surfaceEntry.status.lastSeen || Date.now(),
-    pairedAt: surfaceEntry.status.lastSeen || Date.now(),
-    origin: namespaceOrigin || activeNamespaceUrl || null,
-    localNetwork: isProbablyLocalOrigin(namespaceOrigin),
-    claimToken: null,
-    transport: (isProbablyLocalOrigin(namespaceOrigin) ? 'mdns' : 'https') as 'mdns' | 'https',
-    trust: 'owner' as const,
-    metadata: {
-      userAgent: typeof navigator === 'undefined' ? 'unknown' : String(navigator.userAgent || 'unknown'),
-      hostSurface: null,
-    },
-  }), [
-    activeIdentityNamespace,
-    activeNamespaceUrl,
-    compactMonadLabel,
-    hostSurfaceId,
-    identityNamespace,
-    namespaceOrigin,
-    namespaceSeedHandle,
-    parentStatus,
-    resolverDisplayName,
-    surfaceEntry.status.lastSeen,
-    surfaceEntry.type,
-    typingNamespace,
-  ]);
-
-  // ---------------------------------------------------------------------------
-  // Namespace preview broadcast (window event + global ref)
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const detail = {
-      namespaceExpression: namespaceConfig.expression,
-      namespaceOrigin,
-      namespaceHost,
-      semanticRootName: effectiveSemanticRootName,
-      localNamespaceUrl,
-      networkNamespaceUrl,
-      identityNamespace,
-      rootHostNamespace,
-      surfaceNamespace,
-      resolverHostName,
-      resolverDisplayName,
-      resolverSurfaceNamespace,     
-      resolverSubjectSurfaceNamespace,
-      surfaceEntry,
-      subjectSurfaceNamespace,
-      subjectHandleNamespace,
-      namespaceUrl: activeNamespaceUrl,
-      rootHash: globalNamespaceRootHash,
-      subjectHash: subjectNamespaceHash,
-      previewQrValue,
-      endpoint: namespaceOrigin,
-    };
-
-    try {
-      (window as any).__cleakerNamespacePreview = detail;
-      window.dispatchEvent(new CustomEvent('cleaker:namespace-preview-changed', { detail }));
-    } catch {
-      // Ignore preview broadcast failures in restricted runtimes.
+  // No silent fallback: an EMPTY rootNamespace (omitted `me`, or a `me`
+  // with no namespace configured) is the one case where substituting the
+  // default is correct. A NON-EMPTY rootNamespace that fails to parse must
+  // throw for real, not be swallowed into the default -- same principle
+  // this package already enforces for an explicit, malformed `namespace`
+  // prop elsewhere (a caller/kernel with a genuinely broken root deserves a
+  // real error, not a silent redirect to 'cleaker.me' as if nothing were
+  // wrong). A prior version of this code wrapped BOTH cases in the same
+  // try/catch, which silently re-introduced exactly that bug for the `me`
+  // path -- confirmed and fixed, not assumed fine.
+  const namespaceConfig = React.useMemo(() => {
+    if (!rootNamespace) {
+      return parseCleakerNamespaceExpression(DEFAULT_CLEAKER_NAMESPACE_EXPRESSION);
     }
-  }, [
-    identityNamespace,
-    namespaceConfig.expression,
-    namespaceHost,
-    namespaceOrigin,
-    effectiveSemanticRootName,
-    resolvedNamespaceRootName,
-    surfaceNamespace,
-    localNamespaceUrl,
-    networkNamespaceUrl,
-    resolverDisplayName,
-    resolverHostName,
-    resolverSurfaceNamespace,
-    resolverSubjectSurfaceNamespace,
-    surfaceEntry,
-    activeNamespaceUrl,
-    previewQrValue,
-    rootHostNamespace,
-    globalNamespaceRootHash,
-    subjectHandleNamespace,
-    subjectNamespaceHash,
-    subjectSurfaceNamespace,
-  ]);
+    return parseCleakerNamespaceExpression(rootNamespace);
+  }, [rootNamespace]);
+  const cleakerEndpoint = String(explicitCleakerEndpoint || namespaceConfig.transport.origin).trim();
 
-  // ---------------------------------------------------------------------------
-  // Semantic states — each describes one slice of Cleaker's runtime state.
-  // These are passed to useCleakerKernelSync which owns all writes to the kernel.
-  // ---------------------------------------------------------------------------
-
-  const identitySemanticState = useMemo(() => ({
-    username: runtimeAuthenticated ? activeProfileUsername || null : null,
-    draftUsername: String(username || '').trim() || null,
-    usernameError: usernameError || null,
-    namespace: runtimeAuthenticated ? activeIdentityNamespace || null : null,
-    namespaceSeed: namespaceSeedHandle || null,
-    typingNamespace: typingNamespace || null,
-    note: liveUsernameNote || null,
-    liveState: liveUsernameState,
-    rootHash: globalNamespaceRootHash || null,
-    surfaceHash: globalNamespaceRootHash || null,
-    subjectHash: subjectNamespaceHash || null,
-    namespaceUrl: activeNamespaceUrl || null,
-    authenticated: runtimeAuthenticated,
-    hasSecret: Boolean(secret),
-  }), [
-    activeNamespaceUrl,
-    activeIdentityNamespace,
-    activeProfileUsername,
-    liveUsernameNote,
-    liveUsernameState,
-    namespaceSeedHandle,
-    globalNamespaceRootHash,
-    secret,
-    subjectNamespaceHash,
-    typingNamespace,
-    runtimeAuthenticated,
-    username,
-    usernameError,
-  ]);
-
-  const namespaceSemanticState = useMemo(() => ({
-    expression: namespaceConfig.expression,
-    input: String(namespaceInput || '').trim() || null,
-    origin: namespaceOrigin || null,
-    host: namespaceHost || null,
-    displayHost: namespaceDisplayHost || null,
-    localUrl: localNamespaceUrl || null,
-    networkUrl: networkNamespaceUrl || null,
-    activeUrl: activeNamespaceUrl || null,
-    rootHostNamespace: rootHostNamespace || null,
-    surfaceNamespace: surfaceNamespace || null,
-    subjectSurfaceNamespace: subjectSurfaceNamespace || null,
-    subjectHandleNamespace: subjectHandleNamespace || null,
-    resolverHostName: resolverHostName || null,
-    resolverDisplayName: resolverDisplayName || null,
-    resolverSurfaceNamespace: resolverSurfaceNamespace || null,
-    resolverSubjectSurfaceNamespace: resolverSubjectSurfaceNamespace || null,
-    previewQrValue: previewQrValue || null,
-  }), [
-    activeNamespaceUrl,
-    localNamespaceUrl,
-    namespaceConfig.expression,
-    namespaceDisplayHost,
-    namespaceHost,
-    namespaceInput,
-    namespaceOrigin,
-    networkNamespaceUrl,
-    previewQrValue,
-    resolverDisplayName,
-    resolverHostName,
-    resolverSubjectSurfaceNamespace,
-    resolverSurfaceNamespace,
-    rootHostNamespace,
-    subjectHandleNamespace,
-    subjectSurfaceNamespace,
-    surfaceNamespace,
-  ]);
-
-  const uiSemanticState = useMemo(() => ({
-    settingsOpen,
-    registerOpen,
-    avatarExpanded,
-    showSecret,
-    viewMode: semanticViewMode,
-    actionDisabled: !normalizedUsername || !secret || actionTarget === 'none' || authStatus === 'checking',
-    parentStatus: describeConnectionStatus(parentStatus),
-    parentOnline: isParentOnline,
-  }), [
-    avatarExpanded,
-    semanticViewMode,
-    actionTarget,
-    authStatus,
-    isParentOnline,
-    normalizedUsername,
-    parentStatus,
-    registerOpen,
-    secret,
-    settingsOpen,
-    showSecret,
-  ]);
-
-  const authSemanticState = useMemo(() => ({
-    status: authStatus,
-    action: authAction,
-    error: authError || null,
-    claimed: isClaimed,
-    claimResolution,
-    claimResolutionNote: claimResolutionNote || null,
-    progressMessage: authStatus === 'checking' ? authProgressMessage : null,
-    successMessage: authStatus === 'ok' ? authSuccessMessage : null,
-    actionTarget,
-    actionTargetLabel,
-    actionBaseUrl: actionBaseUrl || null,
-  }), [
-    actionBaseUrl,
-    actionTarget,
-    actionTargetLabel,
-    authAction,
-    authError,
-    authProgressMessage,
-    authStatus,
-    authSuccessMessage,
-    isClaimed,
-    claimResolution,
-    claimResolutionNote,
-  ]);
-
-  const canonicalAuthSemanticState = useMemo(() => ({
-    claimed_at: claimedAtPath ?? claimedAt,
-  }), [claimedAt, claimedAtPath]);
-
-  const profileSemanticState = useMemo(() => ({
-    username: sanitizeRuntimeUsername(profileUsername) || activeProfileUsername || null,
-    name: cleanString(profileName) || activeProfileName || null,
-    email: cleanString(profileEmail) || activeProfileEmail || null,
-    phone: cleanString(profilePhone) || activeProfilePhone || null,
-  }), [
-    activeProfileEmail,
-    activeProfileName,
-    activeProfilePhone,
-    activeProfileUsername,
-    profileEmail,
-    profileName,
-    profilePhone,
-    profileUsername,
-    sanitizeRuntimeUsername,
-  ]);
-
-  const registerSemanticState = useMemo(() => ({
-    open: registerOpen,
-    name: cleanString(registerFullName).replace(/\s+/g, ' ') || null,
-    username: String(registerUsername || '').trim() || null,
-    email: String(registerEmail || '').trim() || null,
-    phone: String(registerPhone || '').trim() || null,
-    error: registerError || null,
-  }), [
-    registerEmail,
-    registerError,
-    registerFullName,
-    registerOpen,
-    registerPhone,
-    registerUsername,
-  ]);
-
-  // ---------------------------------------------------------------------------
-  // Kernel sync — replaces the manual semanticWrites useMemo + useEffect.
-  // All kernel writes for Cleaker's UI/auth/profile state flow through here.
-  // Imperative mesh writes (writeMeshRuntimeValue) remain outside this hook.
-  // ---------------------------------------------------------------------------
-
-  useCleakerKernelSync({
-    me: runtimeMe,
-    runtime,
-    blocks: [
-      { path: KERNEL_CLEAKER_IDENTITY_PATH,       value: identitySemanticState },
-      { path: KERNEL_CLEAKER_NAMESPACE_PATH,      value: namespaceSemanticState },
-      { path: KERNEL_CLEAKER_UI_PATH,             value: uiSemanticState },
-      { path: KERNEL_CLEAKER_AUTH_PATH,           value: authSemanticState },
-      { path: KERNEL_CLEAKER_REGISTER_PATH,       value: registerSemanticState },
-      { path: KERNEL_CLEAKER_CANONICAL_AUTH_PATH, value: canonicalAuthSemanticState },
-    ],
-    // Identity fields — canonical me.* paths
-    entries: [
-      { path: 'me.username',      value: profileSemanticState.username },
-      { path: 'me.name',          value: profileSemanticState.name },
-      { path: 'me.email.primary', value: profileSemanticState.email },
-      { path: 'me.phone.primary', value: profileSemanticState.phone },
-    ],
-  });
-
-  // ---------------------------------------------------------------------------
-  // Mesh surface registration
-  // ---------------------------------------------------------------------------
-
-  const hostSurfaceSnapshotRef = React.useRef('');
-
-  useEffect(() => {
-    if (!runtimeMe) return;
-    const snapshot = JSON.stringify(hostSurfaceRecord);
-    if (hostSurfaceSnapshotRef.current === snapshot) return;
-    hostSurfaceSnapshotRef.current = snapshot;
-    registerMeshSurface(runtimeMe, runtime, hostSurfaceId, hostSurfaceRecord);
-    writeMeshRuntimeValue(runtimeMe, runtime, 'runtime.mesh.hostSurface', hostSurfaceRecord);
-  }, [hostSurfaceId, hostSurfaceRecord, runtime, runtimeMe]);
-
-  // ---------------------------------------------------------------------------
-  // Mesh deep link / pairing expression handler
-  // ---------------------------------------------------------------------------
-
-
-  // ---------------------------------------------------------------------------
-  // Selection store node registry
-  // ---------------------------------------------------------------------------
-
-  const isActionDisabled = !normalizedUsername || !secret || actionTarget === 'none' || authStatus === 'checking';
-
-  // ===========================================================================
-  // Selection Registry — extracted to its own hook
-  // ===========================================================================
-  useCleakerSelectionRegistry({
-    rootNodeId,
-    rootNodeType,
-    nodeId,
-    nodePath,
-    namespaceConfigExpression: namespaceConfig.expression,
-    namespaceInput,
-    namespaceHost,
-    namespaceOrigin,
-    namespaceDisplayHost,
-    rootHostNamespace,
-    effectiveSemanticRootName,
-    resolvedNamespaceRootName,
-    namespaceSeedHandle,
-    surfaceNamespace,
-    subjectSurfaceNamespace,
-    subjectHandleNamespace,
-    localNamespaceUrl,
-    networkNamespaceUrl,
-    activeNamespaceUrl,
-    resolverHostName,
-    resolverDisplayName,
-    resolverSurfaceNamespace,
-    resolverSubjectSurfaceNamespace,
-    surfaceEntry,
-    compactMonadLabel,
-    compactRootLabel,
-    previewQrValue,
-    globalNamespaceRootHash,
-    subjectNamespaceHash,
-    identityNamespace,
-    typingNamespace,
-    identityRoot: identity.identityRoot,
-    actionTarget,
-    actionBaseUrl,
-    actionTargetLabel,
-    claimResolution,
-    claimResolutionNote,
-    authStatus,
-    authError,
-    authProgressMessage,
-    authSuccessMessage,
-    isClaimed,
-    isActionDisabled,
-    liveUsernameState,
-    username,
-    usernameError,
-    secret,
-    showSecret,
-    settingsOpen,
-    registerOpen,
-    registerFullName,
-    registerEmail,
-    registerPhone,
-    registerUsername,
-    currentViewMode,
-    showProfileView,
-    avatarExpanded,
-    activeProfileUsername,
-    activeProfileName,
-    activeProfileEmail,
-    activeProfilePhone,
-    activeSessionNamespace,
-    claimedAt,
-    claimedAtPath,
-    runtimeAuthenticated,
-    profileUsername,
-    profileName,
-    profileEmail,
-    profilePhone,
-    sanitizeRuntimeUsername,
-    parentStatus,
-    describeConnectionStatus,
-    themeMode: theme.palette.mode,
-    primaryColor: theme.palette.primary.main,
-  });
-
-  // ---------------------------------------------------------------------------
-  // Logout
-  // ---------------------------------------------------------------------------
-
-  const handleLogout = useCallback(() => {
-    const clearEntries: Array<[string, any]> = [
-      ['username', null],
-      ['name', null],
-      ['avatar', null],
-      ['bio', null],
-      ['email', null],
-      ['phone', null],
-      ['auth.claimed_at', null],
-      ['auth.keys', null],
-      ['identity.session.username', ''],
-      ['identity.session.draftUsername', ''],
-      ['identity.session.authenticated', false],
-      ['identity.session.identityHash', ''],
-      ['identity.session.hasSecret', false],
-      ['identity.session.namespace', ''],
-      ['identity.session.openedAt', null],
-      ['identity.session.note', ''],
-      ['runtime.cleaker.auth.status', 'idle'],
-      ['runtime.cleaker.auth.error', null],
-      ['runtime.cleaker.auth.successMessage', null],
-      ['runtime.cleaker.auth.progressMessage', null],
-      ['runtime.cleaker.auth.claimed', false],
-      ['runtime.cleaker.auth.claimResolution', 'idle'],
-      ['ui.cleaker.settingsOpen', false],
-      ['ui.cleaker.registerOpen', false],
-      ['ui.cleaker.avatarExpanded', false],
-      ['ui.cleaker.showSecret', false],
-      ['ui.cleaker.viewMode', 'login'],
-    ];
-    clearEntries.forEach(([path, value]) => {
-      safeWriteKernelPath(runtimeMe, runtime, path, value);
-    });
-    clearProfileState();
-    clearPairingState();
-    setAvatarExpanded(false);
-    handleAuthLogout();
-  }, [clearPairingState, clearProfileState, handleAuthLogout, runtime, runtimeMe]);
-
-  // ---------------------------------------------------------------------------
-  // Profile card spec
-  // ---------------------------------------------------------------------------
-
-  const claimedProfileCardSpec = useMemo(
-    () => createProfileCardSpec({
-      rootNodeId: nodeId('profile-spec'),
-      showIdentityFace: true,
-      showActions: true,
-    }),
-    [nodeId]
-  );
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // Falls back to `cleakerEndpoint` itself (the destination this Cleaker
+  // already resolved), NOT `window.location.origin + /apps/netget` --
+  // flagged live (2026-10-02): a caller giving zero props at all
+  // (`<Cleaker />`) got a destination that correctly resolved to a real
+  // namespace (`cleakerEndpoint`, e.g. 'cleaker.me') while the SESSION
+  // transport silently defaulted to wherever THIS PAGE happened to be
+  // served from instead -- correct for netget's real App.jsx (it IS
+  // served from a netget gateway with a real `/apps/netget` proxy) but
+  // wrong anywhere else, confirmed live in Storybook: login/Users/
+  // Blockchain all 404'd against `http://localhost:6006/apps/netget`
+  // (Storybook's own origin, no such route) while Netget's own view
+  // worked, because THAT one already read `cleakerEndpoint`, never this.
+  // Assuming "this page is a netget gateway" was never something this
+  // component should guess at all -- a caller that actually needs that
+  // specific assumption (netget's App.jsx) already passes `transportOrigin`
+  // explicitly, so it's unaffected by removing the guess as the default.
+  const resolvedTransportOrigin = String(transportOrigin || cleakerEndpoint || '').trim();
+  const resolvedNetgetMonadOrigin = String(explicitNetgetMonadOrigin || resolvedTransportOrigin).trim();
 
   return (
-    <Box
-      data-gui-node-id={rootNodeId}
-      data-gui-component={rootNodeType}
-      sx={{
-        width: '100%',
-        px: '5px',
-        boxSizing: 'border-box',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        gap: 2,
-        justifyContent: 'center',
-        alignItems: 'start',
-      }}
+    <SeedSessionProvider
+      transportOrigin={resolvedTransportOrigin}
+      resolveSeedFromCredentials={resolveSeedFromCredentials}
+      sessionBackend="cleaker"
     >
-      <CleakerCard
-        nodeAttrs={nodeAttrs}
-        themedUi={themedUi}
-        theme={theme}
-        maxWidth={props.maxWidth ?? (showClaimSurfaceView ? '460px' : '320px')}
-        showProfileView={showProfileView}
-        showClaimSurfaceView={showClaimSurfaceView}
-        showLoginView={showLoginView}
-        settingsOpen={settingsOpen}
-        avatarExpanded={avatarExpanded}
-        setAvatarExpanded={setAvatarExpanded}
-        activeNamespaceUrl={activeNamespaceUrl}
-        identityRoot={identity.identityRoot}
-        username={username}
-        setUsername={setUsername}
-        usernameError={usernameError}
-        secret={secret}
-        namespaceSeedHandle={namespaceSeedHandle}
-        liveUsernameState={liveUsernameState}
-        liveUsernameNote={liveUsernameNote}
-        setKernelViewMode={setKernelViewMode}
-        claimResolutionNote={claimResolutionNote}
-        namespaceInput={namespaceInput}
-        setNamespaceInput={setNamespaceInput}
-        defaultNamespaceExpression={DEFAULT_CLEAKER_NAMESPACE_EXPRESSION}
-        namespaceConfigExpression={namespaceConfig.expression}
-        localNamespaceUrl={localNamespaceUrl}
-        networkNamespaceUrl={networkNamespaceUrl}
-        resolverDisplayName={resolverDisplayName}
-        compactMonadLabel={compactMonadLabel}
-        compactRootLabel={compactRootLabel}
-        globalNamespaceRootHash={globalNamespaceRootHash}
-        maskHash={maskHash}
-        previewQrValue={previewQrValue}
-        runtimeAuthenticated={runtimeAuthenticated}
-        activeIdentityNamespace={activeIdentityNamespace}
-        identityNamespace={identityNamespace}
-        namespaceOrigin={namespaceOrigin}
-        hostSurfaceId={hostSurfaceId}
-        effectiveSemanticRootName={effectiveSemanticRootName}
-        pairingExpression={pairingExpression}
-        clearPairingState={clearPairingState}
-        pairingLinkError={pairingLinkError}
-        registerOpen={registerOpen}
-        openRegisterModal={openRegisterModal}
-        closeRegisterModal={closeRegisterModal}
-        handleRegisterSubmit={() => void handleRegisterSubmit()}
-        registerFullName={registerFullName}
-        setRegisterFullName={setRegisterFullName}
-        registerUsername={registerUsername}
-        setRegisterUsername={setRegisterUsername}
-        registerEmail={registerEmail}
-        setRegisterEmail={setRegisterEmail}
-        registerPhone={registerPhone}
-        setRegisterPhone={setRegisterPhone}
-        registerPassword={registerPassword}
-        setRegisterPassword={setRegisterPassword}
-        registerConfirmPassword={registerConfirmPassword}
-        setRegisterConfirmPassword={setRegisterConfirmPassword}
-        registerError={registerError}
-        handleLogout={handleLogout}
-        renderProfileCard={() => renderSpecNode(claimedProfileCardSpec, `${rootNodeId}.profile-card`)}
-        showSecret={showSecret}
-        setShowSecret={setShowSecret}
-        setSecret={setSecret}
-        handleOpenLogin={() => void handleCleak('open')}
-        authStatus={authStatus}
-        authProgressMessage={authProgressMessage}
-        authError={authError}
-        authSuccessMessage={authSuccessMessage}
-        isActionDisabled={isActionDisabled}
+      <Namespace
+        sx={sx}
+        cleakerEndpoint={cleakerEndpoint}
+        netgetMonadOrigin={resolvedNetgetMonadOrigin}
+        document={document}
+        pages={pages}
+        footerExtras={footerExtras}
       />
-
-      <AccessRequestHandler />
-
-      {/* Sign-up form is now inline in CleakerCard — no modal needed */}
-    </Box>
+    </SeedSessionProvider>
   );
-}
-
-export default function Cleaker(props: CleakerProps) {
-  const localContext = useOptionalMeRuntimeContext();
-  const seedContext = useOptionalSeedSessionContext();
-  const env = useRuntimeEnvironment();
-  const localKernelRef = React.useRef<MeLike | null>(null);
-
-  if (!localKernelRef.current) {
-    localKernelRef.current = new ME() as unknown as MeLike;
-    writeKernelWindowLocation(localKernelRef.current);
-  }
-
-  const inheritedMe = (
-    props.me ??
-    localContext?.me ??
-    env.me ??
-    (env.runtime as any)?.__me ??
-    (env.runtime as any)?.me
-  ) as MeLike | undefined;
-
-  const kernel = inheritedMe ?? localKernelRef.current;
-  const shouldWrap = !localContext?.me || localContext.me !== kernel;
-  let content = <CleakerInner {...props} me={kernel} />;
-
-  if (shouldWrap) {
-    content = <MeRuntimeProvider me={kernel}>{content}</MeRuntimeProvider>;
-  }
-
-  if (!seedContext) {
-    content = <SeedSessionProvider>{content}</SeedSessionProvider>;
-  }
-
-  return content;
 }

@@ -7,6 +7,7 @@
 // and two absences that are not what they were being read as:
 //   an IP that is not CONFIGURED does not show the gateway is local-only (it may sit behind NAT; nothing here detects it)
 //   an /entrypoints that did not answer is not an empty list
+//   an /openresty-status that did not answer (401, 404, timeout, not JSON) is not "the port is not listening"
 
 /** The machine's name from the identity payload; '' when the gateway did not say (an older one) -- never the gatewayId. */
 export function hostnameOf(identity: { hostname?: unknown } | null | undefined): string {
@@ -39,4 +40,18 @@ export function describeEntrypoints(response: { entrypoints?: unknown } | null |
     .map((e) => (e && typeof e === 'object' ? String((e as { host?: unknown }).host ?? '').trim() : ''))
     .filter(Boolean);
   return rows.length === 0 ? { kind: 'empty' } : { kind: 'list', rows };
+}
+
+export type PortView = 'listening' | 'not-listening' | 'unavailable';
+
+/**
+ * Whether a port is listening, from the parsed /openresty-status body. `response` is null when the request failed or was
+ * not JSON (a 401 -- the route is for the gateway's operator --, a 404, a refusal, no answer): then nothing was learned
+ * about the port, which is 'unavailable', never 'not-listening'. Only an explicit boolean says anything about the port.
+ */
+export function describePort(response: Record<string, unknown> | null | undefined, key: 'httpListening' | 'httpsListening'): PortView {
+  if (!response || typeof response !== 'object' || response.ok === false) return 'unavailable';
+  const value = response[key];
+  if (typeof value !== 'boolean') return 'unavailable';
+  return value ? 'listening' : 'not-listening';
 }

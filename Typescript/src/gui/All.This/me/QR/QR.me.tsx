@@ -40,6 +40,27 @@ const QR_INSET_RATIO = 0.015;
 // reads as one deliberate unit instead of an icon dropped in afterward.
 const GOLDEN_RATIO = 1.618;
 
+/**
+ * The exact size `<QRme variant="topbar">` will actually render at for a
+ * given `value`, capped at `maxDiameter` (default 40, matching
+ * `DIAMETER_BY_VARIANT.topbar` below) -- exported so a caller that places
+ * something else NEXT TO this badge (Namespace.tsx's search icon, sharing
+ * one flex row) can size that other thing to match exactly, instead of
+ * guessing a fixed number that drifts from whatever this badge actually
+ * renders at. Flagged live (2026-10-02): the badge sizing itself to its
+ * real achievable size (rather than a flat 40px guess) fixed the "air"
+ * inside the badge, but left the search icon's own fixed 40px visibly
+ * mismatched next to it ("no están a la par, no están cuadrados [iguales
+ * de tamaño]") -- this function is the single source of truth both sides
+ * now read from, so they can never drift apart again.
+ */
+export function resolveTopbarQrSize(value: string, maxDiameter: number = 40): number {
+  const moduleCount = getQrModuleCount(value, QR_ECC);
+  const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
+  const { size } = snapQrCellSize(totalModules, maxDiameter);
+  return size;
+}
+
 export type QRmeProps = {
   value: string;
   username?: string;
@@ -57,7 +78,7 @@ export type QRmeProps = {
   /**
    * Overrides the hover cursor QRme would otherwise pick on its own
    * (`clickFlip ? 'pointer' : 'default'`). Needed when a CALLER wraps this
-   * component in its own click handler (e.g. CleakerLanding's bubble,
+   * component in its own click handler (e.g. Namespace's bubble,
    * which toggles size rather than using QRme's own flip-to-avatar) --
    * without this, QRme's own root element still carries its
    * clickFlip-driven `cursor: 'default'`, which wins over the wrapper's
@@ -116,7 +137,7 @@ export type QRmeProps = {
    * `perimeterRootLabel`) is wrapped in a real link to this URL, opened
    * in a new tab -- the same "visit this .me" pattern the directory
    * search already uses (`buildCleakerNamespaceUrl` + `window.open`,
-   * see CleakerLanding.tsx's own `visitUser`), just reachable from your
+   * see Namespace.tsx's own `visitUser`), just reachable from your
    * own identity's QR too. Uses the theme's `secondary` color regardless
    * of whether this is set -- a username is its own kind of thing, not
    * tied to the root's connection-status color -- but only becomes an
@@ -131,7 +152,7 @@ export type QRmeProps = {
    * only (every other mount of this component, e.g. monad.ai.tsx's
    * decorative QR or the old Cleaker.tsx surface, keeps rendering exactly
    * as before). Exists because the namespace this QR encodes/displays is
-   * so far always GUESSED from `window.location` (see CleakerLanding.tsx's
+   * so far always GUESSED from `window.location` (see Namespace.tsx's
    * deriveNamespaceRootLabel) -- a guess that can silently diverge from
    * what a server actually resolves a given root string to (confirmed
    * live: "localhost" claims land under a monad's own configured root,
@@ -247,6 +268,21 @@ export default function QRme({
         : DIAMETER_BY_VARIANT[variant]
   );
   const isTopbar = variant === 'topbar';
+  // The 12px corner radius below (QR face / avatar face / their shared
+  // outer ring) is a FIXED px value, not scaled to `effectiveDiameter` --
+  // correct at the default ~125-163px size (a subtle corner-soften on a
+  // clearly square shape, see that Box's own "square, not circular"
+  // comment), but at the topbar variant's ~31-40px it's a much bigger
+  // proportion of the whole face and reads as circular instead of
+  // square-with-soft-corners -- flagged live (2026-10-02), confirmed by
+  // comparing both variants' actual rendered DOM. The scannability
+  // reasoning for staying square doesn't even apply here (topbar is
+  // already "never meant to be scanned"), so this is free to be smaller
+  // for that variant specifically -- kept in sync across all three faces
+  // below (QR face, its inner crop, avatar face) exactly like the
+  // existing 12px value already was, so the flip animation still agrees
+  // on one shape throughout.
+  const faceRadius = isTopbar ? '5px' : '12px';
   // The topbar variant is a small status badge, never meant to be scanned
   // (40px can't hold a legible QR at any content length) — it keeps its
   // own fixed cap, unaffected by value length. Every other variant grows
@@ -261,9 +297,38 @@ export default function QRme({
   // comment in QR.tsx for the confirmed real decode failure this caused).
   const { qrSize, effectiveDiameter, qrInset } = React.useMemo(() => {
     if (isTopbar) {
-      const diameter = Math.min(resolvedDiameter, 40);
-      const inset = Math.max(2, Math.round(diameter * 0.02));
-      return { qrSize: diameter - inset * 2, effectiveDiameter: diameter, qrInset: inset };
+      // The real remaining source of "air" (flagged live 2026-10-02, after
+      // the inset fixes above stopped helping): this branch used to just
+      // set `qrSize = diameter - inset*2` directly, as a flat guess
+      // disconnected from how many modules `value` actually needs. But
+      // <QR> (below) ALWAYS re-derives its own rendered size internally
+      // via `snapQrCellSize(totalModules, size)` (QR.tsx's own
+      // `renderedSize`, a whole-pixel-per-module snap) regardless of what
+      // `size` it's given -- with its default `cellFloor` of 1, that snap
+      // can come out SMALLER than requested whenever `totalModules`
+      // doesn't divide evenly into cells that reach the requested size
+      // (confirmed live: asked for 40, a real position-badge URL's module
+      // count snapped it down to 31). The crop box and ring around it
+      // still sized themselves to the ORIGINAL 40, so the actual QR
+      // pattern sat in the middle of a visibly bigger frame than it
+      // needed. Fixed by computing the SAME snap here, up front, with the
+      // SAME inputs <QR> will use internally -- `effectiveDiameter` (the
+      // whole badge, ring included) now adapts to whatever size is
+      // actually achievable for this value, instead of pinning the frame
+      // to 40 and hoping the inner QR happens to fill it.
+      const cappedDiameter = Math.min(resolvedDiameter, 40);
+      // Ring's own 1px border is the only separation needed between it
+      // and the QR pattern -- no scannability requirement applies here
+      // (this variant is never meant to be scanned), so no extra JS-level
+      // inset on top of that.
+      const inset = 0;
+      // `resolveTopbarQrSize()` (exported above) is the single source of
+      // truth for this calculation now -- a caller placing something else
+      // next to this badge (Namespace.tsx's search icon) reads the exact
+      // same function to size that other thing to match, instead of two
+      // independently-maintained copies of this math drifting apart.
+      const size = resolveTopbarQrSize(value, cappedDiameter - inset * 2);
+      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
     }
     const moduleCount = getQrModuleCount(value, QR_ECC);
     const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
@@ -272,11 +337,22 @@ export default function QRme({
     const { size } = snapQrCellSize(totalModules, requestedQrSize, MIN_PX_PER_MODULE);
     return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
   }, [value, resolvedDiameter, isTopbar]);
+  // The embedded wordmark's pixel cell size floor is NOT scaled to
+  // `qrSize` in practice: `qrSize / 100` is below 1.4 at every size this
+  // component actually renders (even the ~124px default case), so the
+  // `Math.max(1.4, ...)` floor always wins and the wordmark ends up the
+  // same absolute ~33x10px regardless of variant -- fine at ~124-163px
+  // (a legible, proportionate accent), but at the topbar's ~31-40px the
+  // SAME 33px-wide mark is wider than the QR face itself. Flagged live
+  // (2026-10-02) as "the .me mark is too big" on the small badge, confirmed
+  // by comparing both variants' actual rendered SVG dimensions (identical
+  // 33x10 in both). Given a dedicated, smaller floor for the topbar case.
+  const wordmarkPixelSize = isTopbar ? 0.9 : Math.max(1.4, qrSize / 100);
   const [hovered, setHovered] = React.useState(false);
   const [pinned, setPinned] = React.useState(defaultFace === 'avatar');
   const [editingRoot, setEditingRoot] = React.useState(false);
   const [rootDraft, setRootDraft] = React.useState(editableRootValue);
-  // Independent of `hovered`/hoverFlip above -- CleakerLanding (the only
+  // Independent of `hovered`/hoverFlip above -- Namespace (the only
   // real caller of editableRoot so far) sets hoverFlip=false, so that
   // state never turns true and would leave the edit icon permanently
   // invisible if reused here.
@@ -323,7 +399,7 @@ export default function QRme({
   // A plain online/offline dot at the very start of the perimeter label,
   // replacing the scarab glyph a caller used to prepend to the text
   // itself -- flagged live as no longer needed once Beatle's own visible
-  // icon was removed entirely (see CleakerLanding.tsx's headless
+  // icon was removed entirely (see Namespace.tsx's headless
   // useBeatle() call): the connection state this glyph used to gesture
   // at is exactly what `status` already carries, so it can just be drawn
   // as the real thing instead of a fixed icon that never actually
@@ -546,7 +622,7 @@ export default function QRme({
                     aria-label={`Open ${perimeterPrefixText}${perimeterRootText}`}
                     style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                     // Sits inside the QR's own click-to-expand region
-                    // (CleakerLanding wraps the whole bubble in a toggle) --
+                    // (Namespace wraps the whole bubble in a toggle) --
                     // without this, opening the link would ALSO flip
                     // expanded/collapsed underneath it.
                     onClick={(event) => event.stopPropagation()}
@@ -658,7 +734,7 @@ export default function QRme({
             // failed past a short username. A 12px radius (matching QR.tsx's
             // own internal corner rounding) softens the corners without
             // cutting anywhere near the finder patterns.
-            borderRadius: '12px',
+            borderRadius: faceRadius,
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             display: 'flex',
@@ -668,7 +744,13 @@ export default function QRme({
             border: '1px solid',
             borderColor: `${ringAccent}55`,
             boxShadow: isTopbar
-              ? `0 0 0 1px ${theme.palette.primary.main}22, 0 3px 8px rgba(0,0,0,0.14)`
+              // Same glow TREATMENT as the default QR face below (ring +
+              // blurred glow + drop shadow, same ringAccent status color),
+              // just scaled down to this variant's own ~40px size -- a
+              // flat, non-glowing 1px outline here read as a visibly
+              // DIFFERENT component next to the default's glow, not a
+              // small version of the same one. Flagged live (2026-10-02).
+              ? `0 0 0 1px ${ringAccent}, 0 0 5px 1px ${ringAccent}40, 0 3px 8px rgba(0,0,0,0.14)`
               : showingAvatar
                 ? `0 0 0 1px ${theme.palette.primary.main}22, 0 12px 22px rgba(0,0,0,0.18)`
                 // Dialed way back from the earlier "stronger" pass, which
@@ -689,10 +771,23 @@ export default function QRme({
           <Box
             sx={{
               position: 'absolute',
+              // `inset: qrInset` ALONE determines this box's size (it
+              // stretches to effectiveDiameter - 2*qrInset on each axis,
+              // which is exactly what qrSize already equals by
+              // construction) -- deliberately NOT also setting an explicit
+              // `width`/`height` here. Both together are over-constrained:
+              // confirmed live (2026-10-02) that a browser resolves that
+              // conflict by keeping `top`/`left` (from `inset`) and the
+              // explicit size, silently DROPPING `inset`'s `right`/`bottom`
+              // components -- the box ends up flush at the top-left with
+              // zero gap on the right/bottom instead of symmetric qrInset
+              // on all four sides. Invisible at the ~124px default size (a
+              // 1-2px discrepancy is under 2% of the total), glaring at
+              // the topbar variant's ~40px (the same 1-2px is 5%+) --
+              // flagged live as "no quedó simétrico al marco", confirmed
+              // by measuring this exact box's rendered rect before/after.
               inset: qrInset,
-              width: qrSize,
-              height: qrSize,
-              borderRadius: '12px',
+              borderRadius: faceRadius,
               overflow: 'hidden',
               bgcolor: 'background.paper',
               display: 'flex',
@@ -714,6 +809,19 @@ export default function QRme({
               // pixel-snapped (snapQrCellSize in QR.tsx) and the clip
               // removed — no evidence this specific value needs revisiting.
               quietZone={1}
+              // QR.tsx's own `cornerRadius` (clips the QR's OWN square,
+              // separate from this file's outer ring/`faceRadius` above)
+              // defaults to a FIXED 12px regardless of `size` -- fine at
+              // the default ~110-124px qrSize (compare that comment's own
+              // "this frame is square now" claim, true for the outer ring
+              // but never actually applied here to THIS inner clip), but
+              // at the topbar variant's ~31-36px qrSize the same 12px is
+              // roughly a third of the whole square, reading as a round
+              // blob with the frame's own background showing through at
+              // the four corners -- flagged live (2026-10-02), confirmed
+              // by scaling the rendered element up 5x for inspection.
+              // Scaled down to match the outer ring's own proportion.
+              cornerRadius={isTopbar ? 3 : 12}
               // No embed props at all here — QR.tsx's embedMode="negative-space"
               // turned out to still draw the bitmap back as a filled shape
               // (buildAsciiOverlayPath runs for both "negative-space" and
@@ -726,7 +834,7 @@ export default function QRme({
             />
             <PixelWordmark
               bitmap={ME_WORDMARK_EMBED_BITMAP}
-              pixelSize={Math.max(1.4, qrSize / 100)}
+              pixelSize={wordmarkPixelSize}
               // Widens the glyphs without redrawing the bitmap — cells are
               // wider than tall instead of square. Pushed further (1.5 -> 1.8).
               pixelAspect={1.8}
@@ -754,7 +862,7 @@ export default function QRme({
                 transform: 'translate(-50%, -50%)',
                 filter: Array.from(
                   { length: 4 },
-                  (_, i) => `drop-shadow(0 0 ${Math.max(1.4, qrSize / 100) * (i + 1) * 0.5}px ${qrBg})`,
+                  (_, i) => `drop-shadow(0 0 ${wordmarkPixelSize * (i + 1) * 0.5}px ${qrBg})`,
                 ).join(' '),
               }}
               data-gui-node-id={`${rootNodeId}.wordmark`}
@@ -769,7 +877,7 @@ export default function QRme({
             // Matches the QR face's own square shape (see that Box's doc
             // comment) — both faces of the same flip card, so they must
             // agree, not flip from circle to square mid-rotation.
-            borderRadius: '12px',
+            borderRadius: faceRadius,
             backfaceVisibility: 'hidden',
             WebkitBackfaceVisibility: 'hidden',
             transform: 'rotateY(180deg)',
@@ -876,7 +984,7 @@ export default function QRme({
               onChange={(event) => setRootDraft(event.target.value)}
               onBlur={commitRootEdit}
               onKeyDown={(event) => {
-                // Stopped unconditionally -- CleakerLanding's own bubble
+                // Stopped unconditionally -- Namespace's own bubble
                 // wrapper listens for Enter/Space at the document level to
                 // toggle expanded/collapsed, which would otherwise also
                 // fire while someone is simply typing a namespace in here.
@@ -938,7 +1046,17 @@ export default function QRme({
             }}
             data-gui-node-id={`${qrBase}.namespace.edit`}
           >
-            <Icon name="edit" fontSize="0.9rem" />
+            {/* `iconColor` explicit -- without it, Icon falls back to
+                inherited `color` (IconRegistry.tsx's own `color: iconColor`
+                style, undefined here means CSS inheritance), which this
+                button's own sx never sets either. Happened to read fine
+                against whatever this inherited in dark mode; invisible
+                against this button's own `background.paper` in light mode
+                -- flagged live (2026-10-02) as "en light mode no se ve".
+                Reuses the exact same color the inline edit INPUT already
+                uses a few lines below (theme.palette.text.primary), so
+                both pieces of this same editor agree. */}
+            <Icon name="edit" fontSize="0.9rem" iconColor={theme.palette.text.primary} />
           </Box>
         )
       )}

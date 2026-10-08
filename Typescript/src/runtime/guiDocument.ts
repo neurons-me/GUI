@@ -21,7 +21,7 @@ export type GuiDocumentNode = {
   note?: string;
   /**
    * Name of the component that implements this part -- content.landing
-   * (CleakerLanding). Resolved through the registry the app hands to
+   * (Namespace). Resolved through the registry the app hands to
    * renderGuiDocumentPage; the document never holds the component itself.
    */
   component?: string;
@@ -190,6 +190,21 @@ export function leftBarSlots(
     .forEach((e) => {
       if (e.requires === 'session' && !options.authenticated) return;
       const key = e.id.slice(prefix.length);
+      // `active` is NOT computed here on purpose (a 2026-10-02 attempt to
+      // do exactly that was reverted) -- this function's own output feeds
+      // TWO different paths downstream: `GUI`'s own `barSlots.start`/
+      // `.end` (recomputed every render, so a `currentPath` option would
+      // have worked there), AND `cleakerNavigationComposition.ts`'s
+      // `builtinScopeOf()`, which freezes its result into a MODULE-LEVEL
+      // CONSTANT (`BUILTIN_SCOPE`) computed once at import time -- any
+      // `active` value baked in here would never update on navigation for
+      // every item routed through that second path (confirmed live: Home/
+      // Netget, which reach the page via `barSlots.start`/`.end`, updated
+      // correctly; Users/Blockchain/URL, which reach it via
+      // `useCleakerRootSidebar`'s cached `resolved` array, never did).
+      // `active` is applied once, uniformly, AFTER both paths are merged
+      // back together -- see `GUI`'s own `topBarRightElements`-adjacent
+      // composition in Namespace.tsx (`withActiveLeftBarState`).
       const element = {
         type: 'link' as const,
         props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id },

@@ -2,6 +2,14 @@ import type { OpenSessionInput, OpenSessionResult } from '../types';
 import { readKernelString, writeKernelEntries } from '../internal';
 import { resolveSession } from './resolveSession';
 
+/**
+ * @deprecated (2026-10-01) Independently-implemented open/sign-in primitive,
+ * never actually called by the real `Cleaker` identity flow (that goes
+ * through `SeedSessionProvider`'s own `loginWithCredentials`/`open` —
+ * `createCleakerSession.ts`), and has zero internal consumers in this
+ * monorepo today. Kept exported, not removed, because it's part of this
+ * package's published root (`index.ts`). Do not wire this into new code.
+ */
 export function openCleakerSession(input: OpenSessionInput): OpenSessionResult {
   const namespace = String(input.namespace || '').trim();
   const profileUsername = readKernelString(input, 'username');

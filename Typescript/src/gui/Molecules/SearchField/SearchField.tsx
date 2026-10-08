@@ -18,7 +18,7 @@ import type { SearchFieldProps } from './SearchField.types';
 // `onQueryChange`/`onSelectResult` rather than owning any fetch or
 // filtering itself. What it searches over — a docs index, a users
 // directory, anything — is the caller's concern; this is the reusable UI
-// shell, extracted out of CleakerLanding.tsx (its first real consumer,
+// shell, extracted out of Namespace.tsx (its first real consumer,
 // which searches a live .me namespace directory) so it isn't one-off page
 // JSX. Not the same component as gui/All.This/SearchBar — that one fetches
 // and filters a flat JSON docs index itself and has no collapse/expand
@@ -32,6 +32,8 @@ export default function SearchField({
   placeholder = 'Search',
   emptyLabel,
   ariaLabel = 'Search',
+  onExpandedChange,
+  collapsedSize = 40,
   maxResults = 6,
   className,
   sx,
@@ -50,6 +52,7 @@ export default function SearchField({
     setExpanded(false);
     setFocused(false);
     onQueryChange('');
+    onExpandedChange?.(false);
   };
 
   const visibleResults = results.slice(0, maxResults);
@@ -64,15 +67,21 @@ export default function SearchField({
     >
       {!expanded ? (
         <IconButton
-          onClick={() => setExpanded(true)}
+          onClick={() => { setExpanded(true); onExpandedChange?.(true); }}
           aria-label={ariaLabel}
           data-gui-node-id={`${dataGuiNodeId}.toggle`}
           sx={{
-            width: 40,
-            height: 40,
+            width: collapsedSize,
+            height: collapsedSize,
             border: '1px solid',
             borderColor: 'divider',
-            borderRadius: '50%',
+            // Square (soft corners), not circular -- matches the position
+            // QRme badge this sits next to in Namespace.tsx's shared
+            // topbar row (same 5px radius QR.me.tsx's own topbar variant
+            // uses), flagged live (2026-10-02) as wanting one consistent
+            // shape language between the two, not a circle next to a
+            // square.
+            borderRadius: '5px',
             bgcolor: 'background.paper',
             color: 'text.secondary',
             '&:hover': { color: 'text.primary', borderColor: 'primary.main', bgcolor: 'action.hover' },
@@ -91,7 +100,7 @@ export default function SearchField({
             onFocus={() => setFocused(true)}
             onBlur={() => window.setTimeout(() => {
               setFocused(false);
-              if (!query.trim()) setExpanded(false);
+              if (!query.trim()) { setExpanded(false); onExpandedChange?.(false); }
             }, 120)}
             onKeyDown={(e) => { if (e.key === 'Escape') collapse(); }}
             fullWidth

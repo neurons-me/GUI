@@ -24,6 +24,21 @@ function buildAccessError(
   };
 }
 
+/**
+ * @deprecated (2026-10-01) This orchestrator has zero callers anywhere in
+ * this monorepo today, and its PIN-verification step was already provably
+ * unreachable before this deprecation: nothing ever registered
+ * `requestPinVerification` on `./ui/bridge.ts`'s UI bridge (the component
+ * that used to, `<AccessRequestHandler/>`, only ever registered the
+ * confirmation half), so any call with `requirePin` (the default) already
+ * failed closed with `PIN_REQUIRED`. `<AccessRequestHandler/>` is no longer
+ * mounted by the real `Cleaker` entry point — removing that mount does not
+ * change this function's fail-closed behavior: with no confirmation UI
+ * registered either, a call now fails even earlier, at the confirmation
+ * step (`CONFIRMATION_REQUIRED`), before it would ever reach the PIN check.
+ * Kept exported, not removed, because it's part of this package's
+ * published root (`index.ts`). Do not wire this into new code.
+ */
 export async function requestAccess(input: RequestAccessInput): Promise<AccessResponse> {
   const request = normalizeAccessRequest(input.request);
 
