@@ -126,12 +126,15 @@ export function createInternalStore() {
   };
 }
 
-function resolveNativeSubscribe(me: MeLike, opts: RenderMeOptions): MeSubscribeBridge | null {
-  if (typeof opts.subscribe === 'function') return opts.subscribe;
-  if (typeof (me as any)?.subscribe === 'function') {
-    return (path: string, callback: () => void) => (me as any).subscribe(path, callback);
-  }
-  return null;
+// Only an explicit bridge (opts.subscribe / MeRuntimeProvider's `subscribe`
+// prop) is used for external change notification. Do not duck-type
+// `me.subscribe`: the .me proxy turns any property name into a semantic path,
+// so `typeof me.subscribe === 'function'` is always true, and invoking it
+// commits a fact `subscribe = [path, callback]` to the kernel instead of
+// registering a listener (the callback never fires). Without a bridge,
+// subscribers are notified only by writes through this adapter or notify().
+function resolveNativeSubscribe(opts: RenderMeOptions): MeSubscribeBridge | null {
+  return typeof opts.subscribe === 'function' ? opts.subscribe : null;
 }
 
 function writeViaProxy(me: MeLike, path: string, value: any) {
@@ -202,7 +205,7 @@ export function writeMeValue(me: MeLike, target: string, body: any, opts: Render
 export function createMeRuntime(me: MeLike, opts: RenderMeOptions = {}): RuntimeAdapter & { __me?: MeLike; me?: MeLike } {
   const prefix = opts.pathPrefix ?? 'me/';
   const store = createInternalStore();
-  const nativeSubscribe = resolveNativeSubscribe(me, opts);
+  const nativeSubscribe = resolveNativeSubscribe(opts);
 
   const adapter: RuntimeAdapter & { __me?: MeLike; me?: MeLike } = {
     me,
