@@ -121,6 +121,8 @@ const VERACRUZ_ARGS = {
   basemap: VERACRUZ_BASEMAP,
   source: VERACRUZ_SOURCE,
   ariaLabel: 'Port of Veracruz (OpenStreetMap basemap)',
+  // Veracruz stories size pins in CSS px (decision 2026-10-08); the library default stays 'fit'
+  markerScale: 'screen' as const,
 };
 
 /**
@@ -182,7 +184,8 @@ function ThemeCell({ themeId, themeName, mode }: { themeId: string; themeName: s
         style={{ margin: 0, background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8, overflow: 'hidden' }}
       >
         <div style={{ height: 190 }}>
-          <OpenStreetMap {...VERACRUZ_ARGS} ariaLabel={`Veracruz in ${themeName} ${mode}`}>
+          {/* palette review grid: small cells keep the 'fit' size so pins don't crowd 190 px maps */}
+          <OpenStreetMap {...VERACRUZ_ARGS} markerScale="fit" ariaLabel={`Veracruz in ${themeName} ${mode}`}>
             <VeracruzMarkers />
           </OpenStreetMap>
         </div>

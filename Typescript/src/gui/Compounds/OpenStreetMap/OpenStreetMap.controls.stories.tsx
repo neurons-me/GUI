@@ -74,7 +74,7 @@ const meta: Meta<ControlsArgs> = {
         </div>
       ),
   ],
-  args: { live: true, layers: true, defaultLayersOpen: false, position: 'right', step: 2, maxZoom: 16, markerScale: 'fit', zoomPan: true },
+  args: { live: true, layers: true, defaultLayersOpen: false, position: 'right', step: 2, maxZoom: 16, markerScale: 'screen', zoomPan: true },
   argTypes: {
     position: { control: 'select', options: ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right'] },
     step: { control: { type: 'number', min: 1.1, max: 4, step: 0.1 } },
@@ -147,10 +147,10 @@ export const ZoomPan: Story = {
   },
 };
 
-/** markerScale="screen": marker sizes are CSS px, so a phone-sized map keeps readable pins. */
-export const ScreenSizedMarkers: Story = {
+/** markerScale="fit" (the library default): pins keep the size they have at the fit, so a phone-sized map shows small pins. */
+export const FitSizedMarkers: Story = {
   parameters: { osmFrame: false },
-  args: { markerScale: 'screen' },
+  args: { markerScale: 'fit' },
   render: (args) => (
     <div style={{ width: 360, height: 560 }}>
       <VeracruzControls {...args} />

@@ -14,8 +14,17 @@ import { VERACRUZ_FRAME, VERACRUZ_NODES } from './OpenStreetMap.veracruz.fixture
 
 const PROJ = createOsmProjection(VERACRUZ_FRAME);
 
-/** The seven Veracruz nodes as markers (geo from the fixture's map px). */
-export function VeracruzMarkers(): React.ReactElement {
+/** Kernel paths for the live second line (meta) of some Veracruz pins. */
+export const PIN_META_BIND: Record<string, string> = {
+  'n-port': 'pins.port',
+  'n-ship1': 'pins.ship1',
+  'n-ship2': 'pins.ship2',
+  'n-qimp': 'pins.qimp',
+  'n-yard': 'pins.yard',
+};
+
+/** The seven Veracruz nodes as markers (geo from the fixture's map px); `liveMeta` binds some metas to the kernel. */
+export function VeracruzMarkers({ liveMeta = false }: { liveMeta?: boolean } = {}): React.ReactElement {
   return React.createElement(
     React.Fragment,
     null,
@@ -24,6 +33,7 @@ export function VeracruzMarkers(): React.ReactElement {
       return React.createElement(OpenStreetMapMarker, {
         key: n.id, id: n.id, lat, lon, shape: n.shape, size: n.size, width: n.width, height: n.height,
         tone: n.tone, state: n.state, icon: n.icon, label: n.label, meta: n.meta, labelPlacement: n.place ?? 'right', labelOffset: n.gap,
+        bind: liveMeta && PIN_META_BIND[n.id] ? { meta: PIN_META_BIND[n.id] } : undefined,
       });
     }),
   );
@@ -36,6 +46,8 @@ export const SEED: Record<string, number | string> = {
   'trips.pending': 40, 'trips.done': 126, 'trips.unscheduled': 2,
   'flows.importRemaining': 96400, 'flows.exportRemaining': 31250, 'trucks.working': 102, 'trucks.fleet': 500,
   'trucks.balanced': 'yes', 'trucks.speed.avg': 31.4,
+  'pins.port': 'queue 14 · busy', 'pins.ship1': 'unloading · 96,400 t', 'pins.ship2': 'waiting · berth 4',
+  'pins.qimp': '14 queued', 'pins.yard': '102 trucks working',
 };
 
 export function useKernel(live: boolean) {
@@ -60,6 +72,10 @@ export function useKernel(live: boolean) {
       write('trucks.inQueue', 14 - (t % 4));
       write('trucks.working', 102 + (t % 7));
       write('trucks.speed.avg', Math.round((31.4 + Math.sin(t / 3) * 2) * 10) / 10);
+      write('pins.port', `queue ${14 - (t % 4)} · busy`);
+      write('pins.ship1', `unloading · ${Math.max(0, 96400 - t * 350).toLocaleString('en-US')} t`);
+      write('pins.qimp', `${14 - (t % 4)} queued`);
+      write('pins.yard', `${102 + (t % 7)} trucks working`);
     }, 1000);
     return () => clearInterval(id);
   }, [live, runtime]);

@@ -22,7 +22,7 @@ function VeracruzOverlays({ live, attribution, mono }: OverlayArgs) {
   const toggle = (key: string) => () => setOpen((k) => (k === key ? null : key));
   return (
     <MeRuntimeProvider me={me} runtime={runtime}>
-      <OpenStreetMap {...VERACRUZ_FRAME} basemap={VERACRUZ_BASEMAP} source={VERACRUZ_SOURCE} attribution={{ position: attribution }} ariaLabel="Port of Veracruz (OpenStreetMap basemap)">
+      <OpenStreetMap {...VERACRUZ_FRAME} basemap={VERACRUZ_BASEMAP} source={VERACRUZ_SOURCE} attribution={{ position: attribution }} ariaLabel="Port of Veracruz (OpenStreetMap basemap)" markerScale="screen">
         <VeracruzMarkers />
         <OpenStreetMap.Legend mono={mono} width={214} items={LEGEND_ITEMS} footer="kernel counts · 3 off-map (adapter)" />
         <OpenStreetMap.Overlay position="top-left" hideBelow={640} interactive={false}>
