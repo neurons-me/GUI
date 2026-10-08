@@ -1,4 +1,4 @@
-// CleakerIdentityCard — the real, production ".me" identity card: QR +
+// QRConnect — the real, production ".me" identity card: QR +
 // namespace label + username/secret sign-in fields + a ".me"-style submit
 // button, plus "New here? Register" / "Recover Account" links, and (once
 // authenticated) the signed-in identity readout + Sign out.
@@ -21,7 +21,7 @@
 // (a thin `me` → destination → `SeedSessionProvider` → `Namespace` wrapper;
 // see its own header comment) that composes THIS file as `Namespace.tsx`'s
 // Landing page, same as before. This file stays named
-// `CleakerIdentityCard` on purpose — it is not itself the public `Cleaker`
+// `QRConnect` on purpose — it is not itself the public `Cleaker`
 // entry point, it's the identity-flow UI `Cleaker` reaches via `Namespace`.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +33,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
-import { useCleakerConnection } from './useCleakerConnection';
+import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
@@ -137,7 +137,7 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // context's OWN in-flight/settled status, so the QR can wait for that
 // re-verification instead of reporting success the instant Beatle's own
 // (weaker) mesh resolution does.
-export type CleakerIdentityCardProps = DocumentPageProps & {
+export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
   /**
@@ -152,7 +152,7 @@ export type CleakerIdentityCardProps = DocumentPageProps & {
   probeDoor?: () => Promise<DoorLayers>;
 };
 
-const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -382,10 +382,10 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     : undefined;
 
   // The process of connecting (what the QR shows, what clicking it does, what is offered when it cannot be reached) is
-  // useCleakerConnection's; this card draws the QR and the way forward, and keeps the form. It is not rendered while
+  // useQRConnect's; this card draws the QR and the way forward, and keeps the form. It is not rendered while
   // registering or recovering, so nothing connects then.
   const qrActive = mode !== 'register' && mode !== 'recover';
-  const conn = useCleakerConnection({
+  const conn = useQRConnect({
     expression: namespaceRootLabel,
     onExpressionChange: setNamespaceOverride,
     localRoot: deriveNamespaceRootLabel(resolvedEndpoint),
@@ -459,7 +459,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           from here entirely rather than duplicated. */}
 
       {/* The QR is the one control for "where am I connected": clicking it runs its expression (see
-          useCleakerConnection). Skipped in register/recover mode: Claim renders its own, previewing the username typed
+          useQRConnect). Skipped in register/recover mode: Claim renders its own, previewing the username typed
           THERE, and RecoverAccount has no identity to preview yet. */}
       {qrActive && (
         <Box
@@ -790,4 +790,4 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   );
 };
 
-export default CleakerIdentityCard;
+export default QRConnect;

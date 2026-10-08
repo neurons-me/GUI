@@ -6,7 +6,7 @@
 // calls with its own `cleakerEndpoint` prop.
 //
 // Split out of Namespace.tsx specifically so the extracted identity card
-// (@/gui/All.This/Cleaker/CleakerIdentityCard.tsx) can depend on these
+// (@/gui/All.This/Cleaker/QRConnect.tsx) can depend on these
 // without creating a runtime import cycle with Namespace.tsx itself
 // (Namespace.tsx imports the card as the `Landing` page component; the card
 // needs `requireCleakerEndpoint`/`deriveNamespaceRootLabel`/`LANDING_ID`/

@@ -48,7 +48,7 @@
 //     src/gui/All.This/Cleaker/Cleaker.verify.stories.tsx
 // `MONAD_SELF_IDENTITY` MUST equal DISPOSABLE_ROOT_LABEL below, or the
 // register flow's claim fails with CLAIM_PERSIST_FAILED -- see
-// CleakerIdentityCard.verify.stories.tsx's own header comment for the full
+// QRConnect.verify.stories.tsx's own header comment for the full
 // root-cause trace. Claim persistence itself already respects
 // ME_STATE_DIR automatically (modules/monad/Typescript/src/claim/
 // manager.ts's getClaimStorePaths()).
@@ -200,7 +200,7 @@ RegisterThroughCleaker.play = async ({ canvasElement }: { canvasElement: HTMLEle
 
   // Real signed-in view, reached entirely through Cleaker's own internal
   // wiring -- confirms the whole chain (Cleaker -> SeedSessionProvider ->
-  // Namespace -> CleakerIdentityCard's own claim/backup flow -> real monad)
+  // Namespace -> QRConnect's own claim/backup flow -> real monad)
   // is live end-to-end.
   await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
 

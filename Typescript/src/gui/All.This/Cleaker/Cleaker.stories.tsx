@@ -10,17 +10,17 @@
 // itself -- confusing to browse, flagged live (2026-10-02): the folder
 // named after the public component didn't show the public component.
 //
-// `CleakerIdentityCard` (the identity-flow UI `<Cleaker>` composes
+// `QRConnect` (the identity-flow UI `<Cleaker>` composes
 // internally via `Namespace.tsx`) has its own, separate verification file
-// ("Verify/CleakerIdentityCard") but no showcase of its own here on
+// ("Verify/QRConnect") but no showcase of its own here on
 // purpose -- it is an internal implementation piece, not a second public
 // entry point. If you're looking for "how do I use the identity surface",
-// the answer is always `<Cleaker>`, never `CleakerIdentityCard` directly.
+// the answer is always `<Cleaker>`, never `QRConnect` directly.
 import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
 import Cleaker from "./Cleaker";
-import { ConnectionSeamsContext, type ConnectionSeams } from "./useCleakerConnection";
+import { ConnectionSeamsContext, type ConnectionSeams } from "./useQRConnect";
 import type { useBeatle } from "@/gui/All.This/NRP/Beatle/useBeatle";
 
 const meta: Meta<typeof Cleaker> = {

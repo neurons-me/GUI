@@ -1,12 +1,12 @@
-// Verification artifact for the CleakerIdentityCard extraction
-// (src/gui/All.This/Cleaker/CleakerIdentityCard.tsx, extracted from the
+// Verification artifact for the QRConnect extraction
+// (src/gui/All.This/Cleaker/QRConnect.tsx, extracted from the
 // inline `CleakerLandingHome` that used to live in
 // src/react/session/Namespace.tsx). KEPT in the diff on purpose — a prior
 // pass deleted this file after reporting results, which made the
 // verification unreproducible; this file is the reproducible artifact.
 //
 // Mounts <Namespace> (the real production shell: GUI -> DOCUMENT_PAGES
-// .Landing -> CleakerIdentityCard) the same way the real
+// .Landing -> QRConnect) the same way the real
 // `RegisterWithRecoveryPhrase` story in Cleaker.stories.tsx does, but
 // against a genuinely DISPOSABLE monad -- never local.cleaker/local.netget
 // (those are real, persistent, already-running ambient infrastructure on
@@ -21,7 +21,7 @@
 // Run it with (from Typescript/, after starting a disposable monad -- see
 // this extraction's handoff report for the exact command):
 //   npx vitest run --project=storybook \
-//     src/gui/All.This/Cleaker/CleakerIdentityCard.verify.stories.tsx
+//     src/gui/All.This/Cleaker/QRConnect.verify.stories.tsx
 import * as React from "react";
 import type { Meta } from "@storybook/react";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
@@ -38,7 +38,7 @@ const DISPOSABLE_ORIGIN = "http://127.0.0.1:18322";
 const DISPOSABLE_ROOT_LABEL = "disposable-test.local";
 
 const meta: Meta = {
-  title: "Verify/CleakerIdentityCard",
+  title: "Verify/QRConnect",
   parameters: { layout: "fullscreen" },
 };
 
@@ -78,7 +78,7 @@ function fillRecoveryWords(canvasElement: HTMLElement, words: string[]) {
 
 // Once authenticated via the register/recover paths, `mode` stays
 // 'register'/'recover' (it is only ever reset to 'signin' on the
-// authenticated -> unauthenticated falling edge -- see CleakerIdentityCard's
+// authenticated -> unauthenticated falling edge -- see QRConnect's
 // own wasAuthenticatedRef effect), which means its own QR bubble (and the
 // full namespace that would otherwise be drawn around its perimeter) is
 // suppressed the whole time -- confirmed live by inspecting the rendered
@@ -96,7 +96,7 @@ function readIdentityLabel(canvasElement: HTMLElement): string {
 
 function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: string) {
   // The actual regression this component's registrationComplete/
-  // recoveryComplete guards exist for (see CleakerIdentityCard's own doc
+  // recoveryComplete guards exist for (see QRConnect's own doc
   // comments): `authenticated` flips true the INSTANT claim()/open()
   // succeeds, before Claim/RecoverAccount's own post-claim step has
   // run. If that guard ever regresses, the authenticated branch (Sign out
@@ -108,9 +108,9 @@ function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: s
   expect(canvas.queryByRole('button', { name: /Sign out/i }), `${context}: must not already show the authenticated view`).toBeNull();
 }
 
-// Full-journey live verification against the extracted CleakerIdentityCard,
+// Full-journey live verification against the extracted QRConnect,
 // mounted the same way production does (Namespace -> GUI -> DOCUMENT_PAGES
-// .Landing -> CleakerIdentityCard), on a disposable monad: register a REAL
+// .Landing -> QRConnect), on a disposable monad: register a REAL
 // throwaway namespace, confirm the backup step is actually reached (not
 // skipped by the authenticated flip) and functional, reach the
 // authenticated session, sign out; recover using the SAME captured phrase,

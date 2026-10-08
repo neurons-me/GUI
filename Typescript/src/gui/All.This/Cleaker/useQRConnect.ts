@@ -1,4 +1,4 @@
-// The process of connecting, as one hook of the Cleaker flow (CleakerIdentityCard is the only caller): what the QR
+// The process of connecting, as one hook of the Cleaker flow (QRConnect is the only caller): what the QR
 // shows, what clicking it does, and what the person is offered when it cannot be reached. There is no second
 // component for it: the QR is drawn by QRme, the card is the flow.
 //
@@ -81,7 +81,7 @@ const STATE_LABEL: Record<ResolutionState, string> = {
   disconnected: '',
 };
 
-export function useCleakerConnection({
+export function useQRConnect({
   expression,
   onExpressionChange,
   localRoot = null,

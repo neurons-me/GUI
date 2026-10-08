@@ -9,7 +9,7 @@
 // `Namespace.tsx`'s own real rendering logic (the production identity-
 // landing shell — QR/sign-in/register/recover/users/blockchain/url/
 // keychain, already live), `SeedSessionProvider` (the real session/claim/
-// open/logout machinery), `CleakerIdentityCard`/`Claim`/`RecoverAccount`
+// open/logout machinery), `QRConnect`/`Claim`/`RecoverAccount`
 // (the real identity-flow UI `Namespace.tsx` already mounts as its Landing
 // page). This file does none of that work itself — it is a thin
 // destination-derivation + wiring layer, nothing more.
@@ -22,7 +22,7 @@
 // call, and `src/factory.ts`'s identical write) becomes `cleakerEndpoint`.
 // That is the full extent of what `me` does here. It is NEVER "logged in",
 // and nothing below this derivation (`SeedSessionProvider`, `Namespace`,
-// `CleakerIdentityCard`) ever receives or operates on this `me` object —
+// `QRConnect`) ever receives or operates on this `me` object —
 // confirmed by grep: zero `useMe()`/`useMeValue`/`MeLike`-prop references
 // anywhere in `Namespace.tsx`'s real code; every identity/session read in
 // the tree this component renders goes exclusively through
@@ -55,7 +55,7 @@
 // ends up feeding BOTH `SeedSessionProvider`'s transport and `Namespace`'s
 // content resolution, and because the namespace a real claim/open actually
 // authenticates against is itself derived from this same `cleakerEndpoint`
-// (traced through `CleakerIdentityCard.tsx` -> `documentPages.ts`'s
+// (traced through `QRConnect.tsx` -> `documentPages.ts`'s
 // `deriveNamespaceRootLabel`). That tracing is accurate, but the
 // conclusion drawn from it overstated what it proves: a shared
 // CONFIGURATION value (the destination string) is not the same claim as a
@@ -93,7 +93,7 @@
 //
 // THIS REPLACES THE OLDER `Cleaker.tsx`/`CleakerComposer.tsx` THAT USED TO
 // LIVE IN THIS DIRECTORY (2026-10-01 retirement — both already independently
-// flagged legacy in this codebase's own history; see `CleakerIdentityCard
+// flagged legacy in this codebase's own history; see `QRConnect
 // .tsx`'s 2026-09-29 comment). Two real, distinct capabilities existed only
 // in that old code and do NOT exist here. Both were investigated in full
 // before this retirement (not assumed) and explicitly decided, not silently

@@ -42,7 +42,7 @@ import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useDoorLayers, probeDoorLayers, type DoorLayers } from './doorLayers';
-import { ConnectionSeamsContext } from '@/gui/All.This/Cleaker/useCleakerConnection';
+import { ConnectionSeamsContext } from '@/gui/All.This/Cleaker/useQRConnect';
 import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -53,7 +53,7 @@ import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetup
 import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
-import CleakerIdentityCard from '@/gui/All.This/Cleaker/CleakerIdentityCard';
+import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1330,7 +1330,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
-  // Same derivation CleakerIdentityCard/CleakerUsersView already use for
+  // Same derivation QRConnect/CleakerUsersView already use for
   // "which namespace is this page" -- the explicit `cleakerEndpoint` prop,
   // never the session's own namespace, so signing in or out can't move it,
   // and never window.location either (see requireCleakerEndpoint's own
@@ -1725,7 +1725,7 @@ const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: s
 
 // Components the GUI document may name (`component`), by that name.
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
-  Landing: CleakerIdentityCard,
+  Landing: QRConnect,
   Users: CleakerUsersView,
   Blockchain: CleakerBlockchainView,
   Url: CleakerUrlView,
