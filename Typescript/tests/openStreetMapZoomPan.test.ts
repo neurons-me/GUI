@@ -7,7 +7,7 @@ import { themeTokens } from '../src/gui/Theme/styles/theme.tokens';
 import OpenStreetMap from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap';
 import { markerTransform } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMapMarker';
 import { drawOsmCanvasFrame } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMapCanvas';
-import { osmKeyAction, osmWheelZoomFactor } from '../src/gui/Compounds/OpenStreetMap/gestures';
+import { osmIsMac, osmKeyAction, osmWheelAction, osmWheelZoomFactor } from '../src/gui/Compounds/OpenStreetMap/gestures';
 import {
   OSM_STROKE_ZOOM_EXPONENT,
   clampOsmViewState,
@@ -119,6 +119,23 @@ function gestureMapping() {
   assert.equal(osmKeyAction('a'), null);
 }
 
+function cooperativeWheel() {
+  // default (and `wheel: true`): cooperative
+  assert.equal(osmWheelAction({}, false), 'hint', 'plain wheel over an unfocused map: page scrolls, hint shows');
+  assert.equal(osmWheelAction({ ctrlKey: true }, false), 'zoom', 'Ctrl + wheel zooms (also trackpad pinch)');
+  assert.equal(osmWheelAction({ metaKey: true }, false), 'zoom', '⌘ + wheel zooms');
+  assert.equal(osmWheelAction({}, true), 'zoom', 'once the map has focus / was clicked, the wheel zooms');
+  assert.equal(osmWheelAction({}, false, 'greedy'), 'zoom', "'greedy' always zooms");
+  assert.equal(osmWheelAction({ ctrlKey: true }, true, false), 'none', 'wheel off');
+  assert.equal(osmIsMac({ platform: 'MacIntel' }), true);
+  assert.equal(osmIsMac({ userAgentData: { platform: 'macOS' } }), true);
+  assert.equal(osmIsMac({ platform: 'Linux x86_64' }), false);
+  assert.equal(osmIsMac(undefined), false);
+  const html = render(null);
+  assert.match(html, /<div class="gui-osm__hint" role="status" aria-live="polite"[^>]*><\/div>/, 'hint live region present and empty until needed');
+  assert.doesNotMatch(render(null, { zoomPan: { wheel: false } }), /gui-osm__hint/, 'no hint without wheel zoom');
+}
+
 function rootIsFocusableAndTouchReady() {
   const on = render(null);
   assert.match(on, /<div class="gui-osm"[^>]*tabindex="0" role="region" aria-label="OpenStreetMap" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown \+ - 0"/);
@@ -152,6 +169,7 @@ markersRenderFullAtAnyZoom();
 basemapStrokesGrowGently();
 boundsKeepTheMapInView();
 gestureMapping();
+cooperativeWheel();
 rootIsFocusableAndTouchReady();
 canvasGetsZoomAndMarkerScale();
 console.log('openStreetMapZoomPan.test.ts: all assertions passed');

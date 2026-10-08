@@ -14,9 +14,11 @@ import { LEGEND_ITEMS, VeracruzMarkers, useKernel } from './OpenStreetMap.story.
 // them, Enter / Space to press, Escape closes the layer panel. At a zoom limit
 // a button stays focusable and reports aria-disabled.
 //
-// Zoom / pan (S5b.1): wheel or trackpad pinch zooms about the pointer, drag
-// pans, two fingers pinch, double-click zooms in (shift: out), and the focused
-// map takes arrows / + / − / 0. Only the geometry zooms: markers and labels
+// Zoom / pan (S5b.1): Ctrl/⌘ + wheel, or the wheel once the map has focus
+// (click or Tab), zooms about the pointer; a plain wheel over an unfocused map
+// scrolls the page and shows a short hint. Trackpad / touch pinch zoom, drag
+// pans, double-click zooms in (shift: out), and the focused map takes arrows /
+// + / − / 0. Only the geometry zooms: markers and labels
 // keep their on-screen size (`markerScale`: 'fit' = their size at zoom 1,
 // 'screen' = CSS px), basemap lines grow gently, the view stays on the map.
 
@@ -134,7 +136,7 @@ export const Narrow: Story = {
 };
 
 /**
- * Zoom / pan with constant-size markers: scroll or pinch on the map, drag it,
+ * Zoom / pan with constant-size markers: Ctrl/⌘ + scroll (or click the map, then scroll), pinch, drag,
  * or focus it and use the arrow keys / + / − / 0. Kernel values stay live.
  * Starts zoomed in on the terminal so the effect is visible right away.
  */

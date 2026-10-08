@@ -1,6 +1,8 @@
 /*
  * GUI.OpenStreetMap — zoom / pan gestures on the map root:
- *   wheel (and trackpad pinch, which arrives as ctrl+wheel) zooms about the pointer,
+ *   wheel zooms about the pointer, cooperatively by default: only with Ctrl/⌘ held
+ *   or once the map has focus (click / Tab); otherwise the page scrolls and the map
+ *   shows a hint. Trackpad pinch arrives as ctrl+wheel, so it always zooms,
  *   drag pans (after a 4 px threshold, so marker clicks still work),
  *   two pointers pinch-zoom and pan, double-click zooms in (shift: out),
  *   keyboard on the focused map: arrows pan, + / − zoom, 0 resets.
@@ -10,8 +12,14 @@
 import * as React from 'react';
 import type { OsmViewport } from './context';
 
+export type OsmWheelMode = 'cooperative' | 'greedy';
+
 export type OsmGestureOptions = {
-  wheel?: boolean;
+  /**
+   * Wheel zoom. 'cooperative' (default, also `true`): with Ctrl/⌘ held or once the
+   * map has focus; otherwise the page scrolls and a hint shows. 'greedy': always.
+   */
+  wheel?: boolean | OsmWheelMode;
   drag?: boolean;
   pinch?: boolean;
   doubleClick?: boolean;
@@ -28,6 +36,23 @@ export function osmWheelZoomFactor(deltaY: number, deltaMode = 0, ctrlKey = fals
   // trackpad pinch (ctrl+wheel) sends small deltas: zoom faster per px
   const k = ctrlKey ? 0.01 : 0.002;
   return Math.exp(-Math.max(-600, Math.min(600, px)) * k);
+}
+
+/**
+ * What a wheel event does: 'zoom' the map, show the 'hint' (and let the page
+ * scroll), or 'none' (wheel zoom off).
+ */
+export function osmWheelAction(e: { ctrlKey?: boolean; metaKey?: boolean }, engaged: boolean, mode: boolean | OsmWheelMode = 'cooperative'): 'zoom' | 'hint' | 'none' {
+  if (mode === false) return 'none';
+  if (mode === 'greedy') return 'zoom';
+  return e.ctrlKey || e.metaKey || engaged ? 'zoom' : 'hint';
+}
+
+/** Platform modifier name for the wheel hint. */
+export function osmIsMac(nav: { platform?: string; userAgent?: string; userAgentData?: { platform?: string } } | undefined): boolean {
+  if (!nav) return false;
+  const p = nav.userAgentData?.platform || nav.platform || nav.userAgent || '';
+  return /mac|iphone|ipad|ipod/i.test(p);
 }
 
 /** Key → view action, or null when the key is not a map key. */
@@ -52,8 +77,12 @@ export function useOsmGestures(
   viewportRef: React.MutableRefObject<OsmViewport>,
   enabled: boolean,
   options: OsmGestureOptions = {},
+  onWheelHint?: () => void,
 ) {
   const { wheel = true, drag = true, pinch = true, doubleClick = true, keyboard = true } = options;
+  const wheelMode: boolean | OsmWheelMode = wheel === true ? 'cooperative' : wheel;
+  const hintRef = React.useRef(onWheelHint);
+  hintRef.current = onWheelHint;
   React.useEffect(() => {
     const el = rootRef.current;
     if (!el || !enabled) return undefined;
@@ -81,8 +110,24 @@ export function useOsmGestures(
     };
     const onOverlay = (t: EventTarget | null) => t instanceof win.Element && t !== el && Boolean(t.closest(OVERLAY_SELECTOR)) && el.contains(t);
 
+    // cooperative wheel: engaged after a press inside the map or while focus is inside it
+    let pressed = false;
+    const engaged = () => pressed || el.contains(doc.activeElement);
+    const onDocPointerDown = (e: PointerEvent) => {
+      pressed = e.target instanceof win.Node && el.contains(e.target);
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (!(e.relatedTarget instanceof win.Node) || !el.contains(e.relatedTarget)) pressed = false;
+    };
+
     const onWheel = (e: WheelEvent) => {
-      if (!wheel || onOverlay(e.target)) return;
+      if (onOverlay(e.target)) return;
+      const action = osmWheelAction(e, engaged(), wheelMode);
+      if (action === 'none') return;
+      if (action === 'hint') {
+        hintRef.current?.();
+        return; // the page scrolls
+      }
       e.preventDefault();
       pend.factor *= osmWheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey);
       pend.at = local(e);
@@ -190,6 +235,8 @@ export function useOsmGestures(
     };
 
     el.addEventListener('wheel', onWheel, { passive: false });
+    doc.addEventListener('pointerdown', onDocPointerDown, true);
+    el.addEventListener('focusout', onFocusOut);
     el.addEventListener('pointerdown', onPointerDown);
     el.addEventListener('pointermove', onPointerMove);
     el.addEventListener('pointerup', onPointerUp);
@@ -200,6 +247,8 @@ export function useOsmGestures(
     return () => {
       if (raf) win.cancelAnimationFrame(raf);
       el.removeEventListener('wheel', onWheel);
+      doc.removeEventListener('pointerdown', onDocPointerDown, true);
+      el.removeEventListener('focusout', onFocusOut);
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);
@@ -209,5 +258,5 @@ export function useOsmGestures(
       el.removeEventListener('keydown', onKeyDown);
       el.removeAttribute('data-osm-dragging');
     };
-  }, [rootRef, viewportRef, enabled, wheel, drag, pinch, doubleClick, keyboard]);
+  }, [rootRef, viewportRef, enabled, wheelMode, drag, pinch, doubleClick, keyboard]);
 }

@@ -50,7 +50,7 @@ import OpenStreetMapChip from './OpenStreetMapChip';
 import OpenStreetMapControls from './OpenStreetMapControls';
 import { osmLayerLabel, useOsmLayersState, useOsmViewState, type OsmLayersProps, type OsmViewProps } from './viewport';
 import type { OsmMarkerDefaults, OsmMarkerScaleMode, OsmViewport } from './context';
-import { useOsmGestures, type OsmGestureOptions } from './gestures';
+import { osmIsMac, useOsmGestures, type OsmGestureOptions } from './gestures';
 import { osmLayerKind, osmLayerPaint, osmPaletteCssVars, useOsmPalette, type OsmLayerKind, type OsmPalette } from './mapPalette';
 
 export type OsmBasemapLayerStyle = {
@@ -359,7 +359,22 @@ function OpenStreetMapRoot({
     return createOsmTransform(projection, { ...v, zoom, markerScale: osmMarkerScale(markerScaleMode, v, zoom) });
   }, [projection, fit, viewState, isFit, zoom, markerScaleMode]);
   const gestures: OsmGestureOptions | null = zoomPan === false ? null : zoomPan === true ? {} : zoomPan;
-  useOsmGestures(rootRef, viewportRef, Boolean(gestures), gestures ?? undefined);
+  // cooperative wheel hint ("Ctrl + scroll to zoom"), shown briefly
+  const [wheelHint, setWheelHint] = React.useState(false);
+  const [isMac, setIsMac] = React.useState(false);
+  const hintTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    setIsMac(osmIsMac(typeof navigator !== 'undefined' ? (navigator as any) : undefined));
+    return () => {
+      if (hintTimer.current) clearTimeout(hintTimer.current);
+    };
+  }, []);
+  const showWheelHint = React.useCallback(() => {
+    setWheelHint(true);
+    if (hintTimer.current) clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setWheelHint(false), 1500);
+  }, []);
+  useOsmGestures(rootRef, viewportRef, Boolean(gestures), gestures ?? undefined, showWheelHint);
   const keyboardNav = Boolean(gestures) && gestures?.keyboard !== false;
   const touchPan = Boolean(gestures) && (gestures?.drag !== false || gestures?.pinch !== false);
   const viewBox = isFit ? projection.viewBox : osmViewBox(projection, fit, viewState);
@@ -526,6 +541,31 @@ function OpenStreetMapRoot({
             {attribution?.extra ? <> · {attribution.extra}</> : null}
           </div>
         </div>
+        {gestures && gestures.wheel !== false ? (
+          <div
+            className="gui-osm__hint"
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 3,
+              pointerEvents: 'none',
+              padding: wheelHint ? '6px 12px' : 0,
+              borderRadius: 4,
+              background: wheelHint ? palette.overlay.background : 'transparent',
+              border: wheelHint ? `1px solid ${palette.overlay.border}` : 'none',
+              color: palette.overlay.strong,
+              font: '12px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+              opacity: wheelHint ? 1 : 0,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {wheelHint ? `${isMac ? '⌘' : 'Ctrl'} + scroll to zoom` : ''}
+          </div>
+        ) : null}
       </div>
     </OpenStreetMapContext.Provider>
   );
