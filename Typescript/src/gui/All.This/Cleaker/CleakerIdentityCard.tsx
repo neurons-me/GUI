@@ -39,6 +39,7 @@ import { useMeLauncherView } from '@/react/session/MeLauncher';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import RecoverAccount from '@/react/session/RecoverAccount';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
+import { remoteRootFor } from '@/react/session/remoteRoot';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
@@ -219,6 +220,24 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     [namespaceOverride, resolvedEndpoint],
   );
 
+  // The root this page's monad has CONFIRMED (sharedRootStatus, from a live probe of its /__surface) is a space
+  // that runtime declared for itself, so a one-label root (`localhost`) is a valid namespace for this channel.
+  // Until one is confirmed there is no such context and the two-label rule applies as before. Once confirmed it
+  // STAYS the declared context: a later re-verification passes through 'checking', and tying the context to the
+  // live status would drop it then, reopen the channel without it, and flip the ring back and forth.
+  const [confirmedRoot, setConfirmedRoot] = useState<string | null>(null);
+  useEffect(() => {
+    if (sharedRootStatus === 'confirmed' && namespaceRootLabel) setConfirmedRoot(namespaceRootLabel);
+  }, [sharedRootStatus, namespaceRootLabel]);
+  const declaredForBeatle = useMemo(() => (confirmedRoot ? [confirmedRoot] : []), [confirmedRoot]);
+
+  // A typed root that is not this page's own is another host: the browser's own runtime asks THAT host
+  // (`wss://<root>/nrp`), whether or not this page's own door is up. See react/session/remoteRoot.ts.
+  const remoteRoot = useMemo(
+    () => remoteRootFor(namespaceOverride, { localRoot: deriveNamespaceRootLabel(resolvedEndpoint), confirmedRoot }),
+    [namespaceOverride, resolvedEndpoint, confirmedRoot],
+  );
+
   // Real crypto capability of the page THIS component is actually running
   // on right now — not a string check on "https" (that misses the
   // legitimate localhost/127.0.0.1 exception, and says nothing about
@@ -297,13 +316,16 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // a beat before the sidebar/netget context that's supposed to match it
   // actually does, exactly the drift this was corrected to close.
   const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
+  // The door's state (off / still being read) and the shared context's re-verification are facts about THIS
+  // page's own gateway. A root that is another host (remoteRoot) is answered by that host alone, so neither
+  // applies to it: its channel decides.
   const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' =
-    doorOff ? 'off'
-    : doorChecking ? 'checking'
+    !remoteRoot && doorOff ? 'off'
+    : !remoteRoot && doorChecking ? 'checking'
     : beatleState === 'error' || beatleState === 'invalid' ? 'error'
     : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
     : beatleState === 'connected' || beatleState === 'streaming'
-      ? (sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
+      ? (remoteRoot ? 'confirmed' : sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
       : 'idle';
   // Built from qrStatus (the COMBINED value above), never from beatleState alone — that was the actual
   // bug (found live, 2026-09-22): after a real disconnect, sharedRootStatus flipped qrStatus (the ring) to
@@ -339,11 +361,14 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     // own doc comment below). Only handles the common case (a bare
     // namespace leaf, e.g. typing "cleaker.me") -- a union/overlay/path
     // expression isn't "which root," so it's left alone here.
+    // A remote host answering over its own door says nothing about this page's shared context (sidebar,
+    // /netget), which is served by this page's own gateway: it is not moved there.
+    if (remoteRoot) return;
     const ast = channel.expression?.ast;
     if (ast?.kind === 'namespace' && ast.value) {
       onBeatleNamespaceResolved?.(ast.value);
     }
-  }, [onBeatleNamespaceResolved]);
+  }, [onBeatleNamespaceResolved, remoteRoot]);
 
   const qrValue = defaultQrValue;
 
@@ -469,24 +494,15 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // channel now opens on its own, the moment there's an expression to open
   // (mount, and again whenever beatleExpression itself changes), rather
   // than waiting on a tap that had nowhere left to live.
-  const beatleResolverWs = useMemo(() => makeDefaultResolvers()[0].ws, []);
-  // The root this page's monad has CONFIRMED (sharedRootStatus, from a live probe of its /__surface) is a space
-  // that runtime declared for itself, so a one-label root (`localhost`) is a valid namespace for this channel.
-  // Until one is confirmed there is no such context and the two-label rule applies as before. Once confirmed it
-  // STAYS the declared context: a later re-verification passes through 'checking', and tying the context to the
-  // live status would drop it then, reopen the channel without it, and flip the ring back and forth.
-  const [confirmedRoot, setConfirmedRoot] = useState<string | null>(null);
-  useEffect(() => {
-    if (sharedRootStatus === 'confirmed' && namespaceRootLabel) setConfirmedRoot(namespaceRootLabel);
-  }, [sharedRootStatus, namespaceRootLabel]);
-  const declaredForBeatle = useMemo(() => (confirmedRoot ? [confirmedRoot] : []), [confirmedRoot]);
+  const beatleResolverWs = useMemo(() => makeDefaultResolvers(remoteRoot ?? undefined)[0].ws, [remoteRoot]);
   const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs, undefined, { declaredSpaces: declaredForBeatle });
   // Same mode gate the QR bubble itself uses (it isn't even rendered in
   // register/recover mode -- see that Box's own doc comment) -- nothing
   // on screen would reflect this channel's status there, so there's no
   // reason to open one.
   // Nothing answers here (doorOff): there is no channel to open until something does.
-  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && !doorOff && !doorChecking;
+  // The door gates only this page's own gateway: a remote root is opened directly and does not wait for it.
+  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && (!!remoteRoot || (!doorOff && !doorChecking));
   useEffect(() => {
     if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
     // openBeatleChannel is stable (useBeatle's own useCallback) except
