@@ -457,7 +457,17 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // (mount, and again whenever beatleExpression itself changes), rather
   // than waiting on a tap that had nowhere left to live.
   const beatleResolverWs = useMemo(() => makeDefaultResolvers()[0].ws, []);
-  const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs);
+  // The root this page's monad has CONFIRMED (sharedRootStatus, from a live probe of its /__surface) is a space
+  // that runtime declared for itself, so a one-label root (`localhost`) is a valid namespace for this channel.
+  // Until one is confirmed there is no such context and the two-label rule applies as before. Once confirmed it
+  // STAYS the declared context: a later re-verification passes through 'checking', and tying the context to the
+  // live status would drop it then, reopen the channel without it, and flip the ring back and forth.
+  const [confirmedRoot, setConfirmedRoot] = useState<string | null>(null);
+  useEffect(() => {
+    if (sharedRootStatus === 'confirmed' && namespaceRootLabel) setConfirmedRoot(namespaceRootLabel);
+  }, [sharedRootStatus, namespaceRootLabel]);
+  const declaredForBeatle = useMemo(() => (confirmedRoot ? [confirmedRoot] : []), [confirmedRoot]);
+  const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs, undefined, { declaredSpaces: declaredForBeatle });
   // Same mode gate the QR bubble itself uses (it isn't even rendered in
   // register/recover mode -- see that Box's own doc comment) -- nothing
   // on screen would reflect this channel's status there, so there's no
@@ -467,8 +477,10 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
     // openBeatleChannel is stable (useBeatle's own useCallback) except
     // when beatleResolverWs changes, which never happens post-mount here.
+    // declaredForBeatle: the channel is opened again once the root is confirmed, since only then is a
+    // one-label root a valid namespace for it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beatleAutoConnectReady, beatleExpression]);
+  }, [beatleAutoConnectReady, beatleExpression, declaredForBeatle]);
   useEffect(() => {
     setBeatleState(beatleChannel.state);
     if (beatleChannel.state === 'connected') handleBeatleConnect(beatleChannel);
