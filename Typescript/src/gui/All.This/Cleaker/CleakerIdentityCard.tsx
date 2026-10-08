@@ -30,7 +30,7 @@ import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
-import QRme from '@/gui/All.This/me/QR/QR.me';
+import QRConnect, { type QRConnectState } from '@/gui/All.This/me/QR/QRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
@@ -38,14 +38,8 @@ import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import RecoverAccount from '@/react/session/RecoverAccount';
-import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
-import { remoteRootFor } from '@/react/session/remoteRoot';
-import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
-import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
 import type { DoorLayers } from '@/react/session/doorLayers';
-import { connectTrace, layerEntries, doorIsUp } from '@/react/session/connectTrace';
-import ConnectFailure from './ConnectFailure';
 import {
   requireCleakerEndpoint,
   deriveNamespaceRootLabel,
@@ -124,24 +118,6 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // "view mode," the dominant thing on the page instead of one element among
 // several. Kept modest rather than huge — a QR this clean scans fine well
 // below full-viewport size.
-const QR_DIAMETER_DEFAULT = 125;
-const QR_DIAMETER_EXPANDED = 214;
-
-// Spanish-language mirror of Beatle.tsx's own (English, internal) STATE_LABEL
-// -- not exported from there, and this page's other status copy ("No se
-// pudo conectar a…") is already Spanish, so this stays consistent with it
-// rather than pulling in Beatle's English wording.
-const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
-  idle: '',
-  parsing: 'Parsing…',
-  connecting: 'Connecting…',
-  resolving: 'Resolving…',
-  connected: 'Connected',
-  streaming: 'Streaming',
-  error: 'Could not connect',
-  invalid: 'Invalid domain',
-  disconnected: '',
-};
 
 // Local extensions of NamespaceProps/DocumentPageProps (like the removed
 // `destination` prop before them), not a change to those shared, exported
@@ -183,7 +159,6 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   const seedSessionCtx = useOptionalSeedSession();
   const activeSession = seedSessionCtx?.session ?? null;
   const ownUsername = String(activeSession?.semanticNamespace || '').split('.')[0] || '';
-  const [expanded, setExpanded] = useState(false);
   // Sign in / Register are two distinct, explicit forms now (see
   // SeedSessionProvider.tsx's openExistingNamespace — signing in no longer
   // silently claims an unrecognized username). This just toggles which one
@@ -223,30 +198,11 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     [namespaceOverride, resolvedEndpoint],
   );
 
-  // The root this page's monad has CONFIRMED (sharedRootStatus, from a live probe of its /__surface) is a space
-  // that runtime declared for itself, so a one-label root (`localhost`) is a valid namespace for this channel.
-  // Until one is confirmed there is no such context and the two-label rule applies as before. Once confirmed it
-  // STAYS the declared context: a later re-verification passes through 'checking', and tying the context to the
-  // live status would drop it then, reopen the channel without it, and flip the ring back and forth.
-  const [confirmedRoot, setConfirmedRoot] = useState<string | null>(null);
-  useEffect(() => {
-    if (sharedRootStatus === 'confirmed' && namespaceRootLabel) setConfirmedRoot(namespaceRootLabel);
-  }, [sharedRootStatus, namespaceRootLabel]);
-  const declaredForBeatle = useMemo(() => (confirmedRoot ? [confirmedRoot] : []), [confirmedRoot]);
-
-  // A typed root that is not this page's own is another host: the browser's own runtime asks THAT host
-  // (`wss://<root>/nrp`), whether or not this page's own door is up. See react/session/remoteRoot.ts.
-  const remoteRoot = useMemo(
-    () => remoteRootFor(namespaceOverride, { localRoot: deriveNamespaceRootLabel(resolvedEndpoint), confirmedRoot }),
-    [namespaceOverride, resolvedEndpoint, confirmedRoot],
-  );
-
-  // Clicking a QR that is not connected EXECUTES its expression: the door is read again (or the remote host asked
-  // again) and every step is recorded in connectTrace. If it still cannot be reached, ConnectFailure offers the
-  // ways forward. `attempting` is the yellow ring while it runs.
-  const [attempting, setAttempting] = useState(false);
-  const [failureShown, setFailureShown] = useState(false);
-  const [probedLayers, setProbedLayers] = useState<DoorLayers | null>(null);
+  // The QR owns the process of connecting (QRConnect): this page composes it, and listens for what it reports.
+  const [qr, setQr] = useState<QRConnectState>({ status: 'idle', remoteRoot: null, failureShown: false });
+  const remoteRoot = qr.remoteRoot;
+  // QRConnect is not rendered while registering or recovering, so what it last reported does not apply then.
+  const qrActive = mode !== 'register' && mode !== 'recover';
 
   // Real crypto capability of the page THIS component is actually running
   // on right now — not a string check on "https" (that misses the
@@ -308,78 +264,6 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     }
   }, [resolvedEndpoint, username]);
 
-  // Beatle's own connection state (idle/parsing/connecting/resolving/
-  // connected/streaming/error/invalid/disconnected) drives the QR's
-  // status -- no second, independent check for the "is Beatle talking to
-  // something" part. Beatle already shows this itself (its scarab dot +
-  // state label, right above); this only means the QR recolors in sync
-  // with it instead of staying visually disconnected from the one real
-  // signal already on screen.
-  //
-  // BUT Beatle's own "connected" only means netget's mesh resolver found
-  // something -- it does NOT mean the shared confirmed context (sidebar,
-  // /netget) has actually moved there yet. A genuine connect triggers a
-  // SEPARATE re-verification (see handleBeatleConnect below,
-  // onBeatleNamespaceResolved, verifiedCleakerRoot.ts's promote()); while
-  // that's still in flight, sharedRootStatus stays 'checking', and the QR
-  // must keep showing "checking" too -- otherwise it would report success
-  // a beat before the sidebar/netget context that's supposed to match it
-  // actually does, exactly the drift this was corrected to close.
-  const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
-  // The door's state (off / still being read) and the shared context's re-verification are facts about THIS
-  // page's own gateway. A root that is another host (remoteRoot) is answered by that host alone, so neither
-  // applies to it: its channel decides.
-  const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' =
-    attempting ? 'checking'
-    : !remoteRoot && doorOff ? 'off'
-    : !remoteRoot && doorChecking ? 'checking'
-    : beatleState === 'error' || beatleState === 'invalid' ? 'error'
-    : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
-    : beatleState === 'connected' || beatleState === 'streaming'
-      ? (remoteRoot ? 'confirmed' : sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
-      : 'idle';
-  // Built from qrStatus (the COMBINED value above), never from beatleState alone — that was the actual
-  // bug (found live, 2026-09-22): after a real disconnect, sharedRootStatus flipped qrStatus (the ring) to
-  // 'error', but this line kept reading beatleState directly, which Beatle's own WebSocket still called
-  // 'connected' — ring and label describing the same widget differently. One effective state now drives
-  // both; Beatle's own finer-grained labels (Parsing…/Connecting…/Resolving…) still show during the
-  // 'checking' bucket, since qrStatus collapses several beatleStates into it.
-  const qrStatusLabel = qrStatus === 'idle' ? ''
-    : qrStatus === 'off' ? 'No .me here'
-    : qrStatus === 'error' ? 'Could not connect'
-    : qrStatus === 'confirmed' ? 'Connected'
-    : (BEATLE_STATE_LABEL[beatleState] || 'Checking…');
-
-  // USED TO also override the QR's own encoded value with whatever
-  // Beatle resolved (a `beatleResolvedUrl` state, permanently replacing
-  // defaultQrValue once set) -- that made sense back when Beatle was a
-  // visible, manually-typed switcher: you'd type a genuinely different
-  // destination and the QR would deliberately follow it there. Now that
-  // Beatle is headless and auto-connects to `beatleExpression` on its
-  // own (see that hook above), it resolves the bare ROOT, not whatever
-  // username is currently being typed into the sign-in form -- so that
-  // override was firing on every page load and permanently freezing the
-  // QR at the root's address, silently killing the "QR previews the
-  // username you're typing" behavior (flagged live: "el QR ya no cambia
-  // según el username que pongas"). There's no longer a user action that
-  // means "follow this other destination instead," so the QR now just
-  // always reflects defaultQrValue, and handleBeatleConnect only handles
-  // the shared-context promotion below.
-  const handleBeatleConnect = useCallback((channel: NamespaceChannel) => {
-    // Beatle resolving is NOT the same fact as the shared context moving --
-    // that only happens if a fresh probeCleakerRoot independently confirms
-    // whatever namespace Beatle just resolved (see onBeatleNamespaceResolved's
-    // own doc comment below). Only handles the common case (a bare
-    // namespace leaf, e.g. typing "cleaker.me") -- a union/overlay/path
-    // expression isn't "which root," so it's left alone here.
-    // A remote host answering over its own door says nothing about this page's shared context (sidebar,
-    // /netget), which is served by this page's own gateway: it is not moved there.
-    if (remoteRoot) return;
-    const ast = channel.expression?.ast;
-    if (ast?.kind === 'namespace' && ast.value) {
-      onBeatleNamespaceResolved?.(ast.value);
-    }
-  }, [onBeatleNamespaceResolved, remoteRoot]);
 
   const qrValue = defaultQrValue;
 
@@ -494,102 +378,6 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     ? buildCleakerNamespaceUrl(resolvedEndpoint, authenticatedHandle)
     : undefined;
 
-  // Headless Beatle -- the exact same useBeatle()/channel machinery the
-  // visible <Beatle> component wraps (see CleakerUrlView's own use of it
-  // in Namespace.tsx), called directly instead of through that component.
-  // Flagged live, twice, as still showing SOMETHING under the QR no matter
-  // how small ("porque sigues poniendo al escarabajo") after a
-  // bar-with-text, then an icon-only bubble, both still duplicated what
-  // the QR's own perimeter already displays. "Solo queremos el QR" is
-  // literal: no separate control, icon, or box of any kind -- so the
-  // channel now opens on its own, the moment there's an expression to open
-  // (mount, and again whenever beatleExpression itself changes), rather
-  // than waiting on a tap that had nowhere left to live.
-  const beatleResolverWs = useMemo(() => makeDefaultResolvers(remoteRoot ?? undefined)[0].ws, [remoteRoot]);
-  const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs, undefined, { declaredSpaces: declaredForBeatle });
-  // Same mode gate the QR bubble itself uses (it isn't even rendered in
-  // register/recover mode -- see that Box's own doc comment) -- nothing
-  // on screen would reflect this channel's status there, so there's no
-  // reason to open one.
-  // Nothing answers here (doorOff): there is no channel to open until something does.
-  // The door gates only this page's own gateway: a remote root is opened directly and does not wait for it.
-  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk && (!!remoteRoot || (!doorOff && !doorChecking));
-  useEffect(() => {
-    if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
-    // openBeatleChannel is stable (useBeatle's own useCallback) except
-    // when beatleResolverWs changes, which never happens post-mount here.
-    // declaredForBeatle: the channel is opened again once the root is confirmed, since only then is a
-    // one-label root a valid namespace for it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beatleAutoConnectReady, beatleExpression, declaredForBeatle]);
-  useEffect(() => {
-    setBeatleState(beatleChannel.state);
-    if (beatleChannel.state === 'connected') handleBeatleConnect(beatleChannel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beatleChannel.state]);
-
-  // ── Executing the QR's expression ────────────────────────────────────────────────────────────────────────────
-  // A remote root: the channel's own outcome is the result. It is recorded as it lands, and the way forward is
-  // offered when it cannot be reached.
-  useEffect(() => {
-    if (!remoteRoot) return;
-    const state = beatleChannel.state;
-    if (state === 'connected' || state === 'streaming') {
-      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'ok', detail: `wss://${remoteRoot}/nrp` });
-      setFailureShown(false);
-    } else if (state === 'error' || state === 'invalid') {
-      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'error', detail: String(beatleChannel.error || state) });
-      setFailureShown(true);
-    } else if (state === 'disconnected') {
-      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'off', detail: 'the connection closed' });
-      setFailureShown(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteRoot, beatleChannel.state]);
-
-  // This page's own door came up (it is polled): there is nothing left to offer a way around.
-  useEffect(() => {
-    if (!remoteRoot && !doorOff && !doorChecking) setFailureShown(false);
-  }, [remoteRoot, doorOff, doorChecking]);
-
-  const runExpression = useCallback(async () => {
-    if (attempting) return;
-    const expression = namespaceRootLabel;
-    setFailureShown(false);
-    if (remoteRoot) {
-      connectTrace.record({ expression, step: 'execute', outcome: 'info', detail: `asking ${remoteRoot} directly` });
-      openBeatleChannel(beatleExpression);
-      return;
-    }
-    setAttempting(true);
-    connectTrace.record({ expression, step: 'execute', outcome: 'info', detail: "reading this page's own door" });
-    try {
-      if (!probeDoor) {
-        connectTrace.record({ expression, step: 'door', outcome: 'error', detail: 'this page cannot read its door' });
-        setFailureShown(true);
-        return;
-      }
-      const layers = await probeDoor();
-      setProbedLayers(layers);
-      layerEntries(expression, layers).forEach((entry) => connectTrace.record(entry));
-      if (!doorIsUp(layers)) setFailureShown(true);
-    } catch (error) {
-      connectTrace.record({ expression, step: 'door', outcome: 'error', detail: error instanceof Error ? error.message : String(error) });
-      setFailureShown(true);
-    } finally {
-      setAttempting(false);
-    }
-  }, [attempting, namespaceRootLabel, remoteRoot, openBeatleChannel, beatleExpression, probeDoor]);
-
-  // The QR not connected: clicking it runs its expression. Connected (or still checking), it keeps toggling its size.
-  const activateQr = () => {
-    if (qrStatus === 'off' || (remoteRoot && qrStatus === 'error')) {
-      void runExpression();
-      return;
-    }
-    setExpanded((value) => !value);
-  };
-
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
@@ -642,97 +430,38 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           the real Layout/LeftBar around this whole route tree. Removed
           from here entirely rather than duplicated. */}
 
-      {/* Bubble — QRme: the QR itself is the bubble, not a plain icon with
-          a separate QR shown below. Click toggles size, not the
-          avatar-flip QRme normally offers (hoverFlip/clickFlip off here —
-          this bubble has no avatar image to flip to on a page nobody's
-          signed into yet, and the click gesture is worth more spent on
-          "make it scannable" than a flip animation). Skipped in register
-          mode — Claim renders its own (previewing the username being
-          typed THERE, not this form's, which stays empty while it's not
-          the active one) so a person doesn't see two bubbles stacked.
-          Same reasoning covers recover mode — RecoverAccount has no
-          identity to preview yet (it's what's being recovered, not typed
-          fresh), so there's nothing meaningful for this bubble to show. */}
+      {/* The QR is the one control for "where am I connected" and QRConnect owns that whole process (execute on click,
+          the channel, the failure card and its three ways forward). It is skipped in register/recover mode: Claim renders
+          its own, previewing the username typed THERE, and RecoverAccount has no identity to preview yet. This page only
+          composes it and listens for the state it reports. */}
       {mode !== 'register' && mode !== 'recover' && (
-        <Box
-          role="button"
-          tabIndex={0}
+        <QRConnect
+          expression={namespaceRootLabel}
+          onExpressionChange={setNamespaceOverride}
+          // Editable only pre-auth -- once a real session is open, the namespace is whatever that session actually
+          // claimed/opened, not a guess left to edit further.
+          editable={!authenticated}
+          failureEnabled={!authenticated}
+          localRoot={deriveNamespaceRootLabel(resolvedEndpoint)}
+          door={{ off: doorOff, checking: doorChecking, layers: doorLayers, probe: probeDoor }}
+          sharedRootStatus={sharedRootStatus}
+          onLocalResolved={onBeatleNamespaceResolved}
+          channelExpression={beatleExpression}
+          channelEnabled={secureContextOk}
+          qrValue={qrValue}
+          username={username || undefined}
+          perimeterLabel={perimeterLabel}
+          perimeterHandleHref={perimeterHandleHref}
+          location={typeof window !== 'undefined' ? window.location.origin : undefined}
+          onStateChange={setQr}
           data-gui-node-id={`${nodeId}.qr`}
-          aria-label={qrStatus === 'off' || (remoteRoot && qrStatus === 'error') ? `Connect to ${namespaceRootLabel}` : expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
-          onClick={activateQr}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              activateQr();
-            }
-          }}
-          // A mouse click must not leave a rectangular focus box around the bubble and its label (it read as
-          // something outside the QR); keyboard focus keeps a visible ring.
-          sx={{ cursor: 'pointer', display: 'inline-flex', '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 4, borderRadius: 2 } }}
-        >
-          <QRme
-            value={qrValue}
-            username={username || undefined}
-            diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
-            hoverFlip={false}
-            clickFlip={false}
-            // clickFlip is off (no flip-to-avatar here), but this bubble
-            // IS clickable -- the wrapping Box above toggles expanded/
-            // collapsed. Without this override, QRme's own root element
-            // still carries its clickFlip-tied `cursor: 'default'`, which
-            // wins over the wrapper's `cursor: 'pointer'` and silently
-            // kills the hand cursor on hover ("manita como de push").
-            cursor="pointer"
-            status={qrStatus}
-            statusLabel={qrStatusLabel}
-            // The namespace/expression itself draws AROUND the QR's own
-            // perimeter (see QR.me.tsx's own doc comment on
-            // perimeterLabel) instead of sitting in a separate caption
-            // box well below it -- flagged live as reading like two
-            // disconnected things. Stays visible whether collapsed or
-            // expanded -- this is the one that must always ring the
-            // QR.me itself (corrected live: an earlier pass hid this
-            // one instead of addressing Beatle's own field below, which
-            // was backwards -- this is "the right one to keep").
-            perimeterLabel={perimeterLabel}
-            perimeterRootLabel={namespaceRootLabel}
-            perimeterHandleHref={perimeterHandleHref}
-            // Editable only pre-auth -- once a real session is open, the
-            // namespace is whatever that session actually claimed/opened,
-            // not a guess left to edit further.
-            editableRoot={!authenticated}
-            editableRootValue={namespaceRootLabel}
-            onEditableRootChange={setNamespaceOverride}
-            data-gui-node-id={`${nodeId}.qr.code`}
-            style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-          />
-        </Box>
+        />
       )}
 
-      {/* No visible Beatle here at all, in any form -- a full text bar,
-          then an icon-only bubble, both still read as a second thing
-          duplicating the QR ("porque sigues poniendo al escarabajo").
-          "Solo queremos el QR" is literal: the channel itself still
-          opens (see the headless useBeatle() call above, right next to
-          handleBeatleConnect), it just no longer needs a visible control
-          to do it -- it connects on its own the moment there's an
-          expression to open. */}
-
-      {doorChecking && !remoteRoot ? null : failureShown && !authenticated ? (
-        // Nothing here asks the person to know what a layer is: one sentence and three ways forward. The layers, the
-        // trace and the way to start the environment are behind "Namespace diagnosis".
-        <ConnectFailure
-          expression={namespaceRootLabel}
-          layers={remoteRoot ? null : (probedLayers ?? doorLayers ?? null)}
-          trace={connectTrace.entries().filter((entry) => entry.expression === namespaceRootLabel)}
-          location={typeof window !== 'undefined' ? window.location.origin : undefined}
-          onConnectPublic={() => { setFailureShown(false); setNamespaceOverride('cleaker.me'); }}
-          onTryNamespace={(root) => { setFailureShown(false); setNamespaceOverride(root.trim().toLowerCase()); }}
-          onDismiss={() => setFailureShown(false)}
-          data-gui-node-id={`${nodeId}.connect-failure`}
-        />
-      ) : (remoteRoot ? qrStatus !== 'confirmed' : doorOff) ? (
+      {doorChecking && !remoteRoot ? null : qrActive && qr.failureShown && !authenticated ? (
+        // The "Unable to connect" card is QRConnect's, right under the QR: nothing else is offered meanwhile.
+        null
+      ) : (remoteRoot ? qr.status !== 'confirmed' : doorOff) ? (
         // Grey QR (or one still connecting to another host), nothing else: it is the way in. Clicking it executes its
         // expression. Once another host answers, the person is offered "Hello, I am…" there, whether or not this
         // page's own door is up.
