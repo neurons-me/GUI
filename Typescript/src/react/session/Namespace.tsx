@@ -9,7 +9,7 @@
 // a demo with a fake local hash; this wires the same shape to the real
 // session (useMeLauncherView(), the same claim/open flow MeLauncher uses).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Routes, Route, Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { RouterProvider } from '@/Router/Router';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
@@ -41,7 +41,7 @@ import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
-import { useDoorLayers } from './doorLayers';
+import { useDoorLayers, type DoorLayers } from './doorLayers';
 import DoorLayersPanel, { doorBlocks } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -1678,8 +1678,28 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           {/* Every page is declared by the GUI document and rendered through the
               same renderer mount(spec) uses. */}
           {documentPageRoutes}
+          {/* A path the document does not declare: where a browser lands when nginx's own failure page (a 502 at
+              /gateway-identity, a monad that is not registered) has been turned into this entry point. While the
+              layers are being read, or while one is off, it says which and what was asked for; when everything is
+              up there is nothing at this path, so it goes to the way in. */}
+          <Route
+            path="*"
+            element={<UnknownPath layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} />}
+          />
         </Routes>
       </Layout>
+    </Box>
+  );
+};
+
+// What a path that is none of the document's pages shows. See the catch-all route in the shell.
+const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: string }> = ({ layers, namespace, location }) => {
+  const asked = useLocation().pathname;
+  const reading = layers.backend === 'checking' || layers.monad === 'checking';
+  if (!reading && !doorBlocks(layers, 'both')) return <Navigate to="/" replace />;
+  return (
+    <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
+      <DoorLayersPanel layers={layers} namespace={namespace} location={location} asked={asked} data-gui-node-id="GUI.content.unknown" />
     </Box>
   );
 };

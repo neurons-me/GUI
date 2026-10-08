@@ -17,6 +17,8 @@ export type DoorLayersPanelProps = {
   namespace?: string;
   /** The location this page was served from (read-only: a place, not a namespace). */
   location?: string;
+  /** The path that was asked for, when this panel stands where that path would have been (an entry point). */
+  asked?: string;
   sx?: any;
   'data-gui-node-id'?: string;
 };
@@ -69,7 +71,7 @@ function Command({ text }: { text: string }) {
   );
 }
 
-export default function DoorLayersPanel({ layers, namespace, location, sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
+export default function DoorLayersPanel({ layers, namespace, location, asked, sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
   const backendDown = layers.backend === 'off';
   const monadDown = layers.monad === 'off';
   const title = backendDown
@@ -94,13 +96,14 @@ export default function DoorLayersPanel({ layers, namespace, location, sx, 'data
         <Row name="monad" detail="netget's own .me, through /apps/netget" state={layers.monad} reason={layers.monadReason} />
       </Box>
 
-      {(namespace || location) && (
+      {(namespace || location || asked) && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             Where you are
           </Typography>
           {namespace && <Typography variant="body2">namespace: <strong>{namespace}</strong></Typography>}
           {location && <Typography variant="body2">location: <strong>{location}</strong></Typography>}
+          {asked && asked !== '/' && <Typography variant="body2">you asked for: <strong>{asked}</strong></Typography>}
         </Box>
       )}
 
