@@ -1,6 +1,6 @@
 import * as React from 'react';
-import type { OsmTransform } from './projection';
-import type { OsmPalette } from './mapPalette';
+import type { OsmTransform, OsmUserView } from './projection';
+import type { OsmLayerKind, OsmMarkerTone, OsmPalette } from './mapPalette';
 
 export type OpenStreetMapContextValue = {
   /** Transform as of the last render (re-renders when the container resizes). */
@@ -19,6 +19,46 @@ export type OpenStreetMapContextValue = {
   getDock(position: OsmOverlayPosition): HTMLElement | null;
   /** True after the docks mounted (re-renders portalled overlays once). */
   docksReady: boolean;
+  /** Zoom / pan state and actions (buttons, keyboard, gestures). */
+  viewport: OsmViewport;
+  /** Basemap layers and their visibility (layer toggle). */
+  layers: OsmLayersState;
+  /** Defaults for markers that do not set these props themselves. */
+  markerDefaults: OsmMarkerDefaults;
+};
+
+export type OsmViewSource = 'button' | 'keyboard' | 'wheel' | 'drag' | 'pinch' | 'reset' | 'api';
+
+export type OsmViewport = {
+  zoom: number;
+  minZoom: number;
+  maxZoom: number;
+  /** The view is the plain fit (zoom 1, frame centre). */
+  isFit: boolean;
+  view: OsmUserView;
+  setView(view: Partial<OsmUserView>, source?: OsmViewSource): void;
+  /** Zoom by a factor around a container point (CSS px; default the centre). */
+  zoomBy(factor: number, source?: OsmViewSource, at?: { x: number; y: number }): void;
+  /** Move the map content by (dx, dy) CSS px (a drag). */
+  panBy(dx: number, dy: number, source?: OsmViewSource): void;
+  /** Centre the view on a point (S5b.2 uses this for edge pins). */
+  panTo(lat: number, lon: number, source?: OsmViewSource): void;
+  reset(source?: OsmViewSource): void;
+};
+
+export type OsmLayerInfo = { id: string; kind: OsmLayerKind; label: string };
+
+export type OsmLayersState = {
+  list: OsmLayerInfo[];
+  hidden: ReadonlySet<string>;
+  setHidden(ids: string[]): void;
+  toggle(id: string): void;
+};
+
+export type OsmMarkerDefaults = {
+  shape?: 'circle' | 'square' | 'triangle' | 'rect' | 'icon';
+  size?: number;
+  tone?: OsmMarkerTone;
 };
 
 export type OsmOverlayPosition =

@@ -143,7 +143,7 @@ function useStableProvenance(provenance: GuiNodeProvenance | undefined): GuiNode
 }
 
 export default function OpenStreetMapMarker(props: OsmMarkerProps) {
-  const { transform: map, palette } = useOpenStreetMapContext();
+  const { transform: map, palette, markerDefaults } = useOpenStreetMapContext();
   const v = useBoundProps(props);
   const provenance = useStableProvenance(props.provenance);
   useRegisterGuiNode(props.nodeId, 'OpenStreetMap.Marker', undefined, provenance);
@@ -151,9 +151,10 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
   const lon = toNumber(v.lon);
   if (v.visible === false || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
-  const shape: OsmMarkerShape = (v.shape as OsmMarkerShape) || 'circle';
-  const size = Number.isFinite(toNumber(v.size)) ? toNumber(v.size) : 10;
-  const tone = (v.tone as OsmMarkerTone | undefined) || undefined;
+  const shape: OsmMarkerShape = (v.shape as OsmMarkerShape) || markerDefaults?.shape || 'circle';
+  const size = Number.isFinite(toNumber(v.size)) ? toNumber(v.size) : markerDefaults?.size ?? 10;
+  // a default tone does not override an explicit colour (legacy look)
+  const tone = (v.tone as OsmMarkerTone | undefined) || (v.color ? undefined : markerDefaults?.tone) || undefined;
   const state = ((v.state as OsmMarkerState | undefined) || 'default') as OsmMarkerState;
   const toneColor = osmToneColor(palette, tone);
   const explicitColor = (v.color as string) || undefined;

@@ -34,6 +34,8 @@ import {
   createOsmProjection,
   createOsmTransform,
   fitOsmView,
+  osmViewBox,
+  zoomOsmView,
   type OsmBBox,
   type OsmProjectionKind,
   type OsmTransform,
@@ -43,6 +45,9 @@ import OpenStreetMapCanvas from './OpenStreetMapCanvas';
 import OpenStreetMapOverlay from './OpenStreetMapOverlay';
 import OpenStreetMapLegend, { OpenStreetMapLegendRow } from './OpenStreetMapLegend';
 import OpenStreetMapChip from './OpenStreetMapChip';
+import OpenStreetMapControls from './OpenStreetMapControls';
+import { osmLayerLabel, useOsmLayersState, useOsmViewState, type OsmLayersProps, type OsmViewProps } from './viewport';
+import type { OsmMarkerDefaults } from './context';
 import { osmLayerKind, osmLayerPaint, osmPaletteCssVars, useOsmPalette, type OsmLayerKind, type OsmPalette } from './mapPalette';
 
 export type OsmBasemapLayerStyle = {
@@ -62,6 +67,8 @@ export type OsmBasemapLayer = {
    * 'custom' (or an unknown id) keeps the layer's own style.
    */
   kind?: OsmLayerKind;
+  /** Name in the layer toggle. Default: by kind ("Primary roads", "Water", …), else the id. */
+  label?: string;
   style?: OsmBasemapLayerStyle;
   /** SVG path data, already projected into the map frame (map pixels). */
   paths?: string[];
@@ -88,7 +95,7 @@ export type OsmSourceMeta = {
 
 export type OsmAttributionPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
 
-export type OpenStreetMapProps = {
+export type OpenStreetMapProps = OsmViewProps & OsmLayersProps & {
   /** Geographic bounds the basemap was projected from. */
   bbox: OsmBBox;
   /** Map frame size in map pixels (the basemap's viewBox). Default 1200×800. */
@@ -111,6 +118,8 @@ export type OpenStreetMapProps = {
   ariaLabel?: string;
   /** Upper bound for the canvas device-pixel ratio. Default 2. */
   maxDpr?: number;
+  /** Defaults for markers that leave shape / size / tone unset. */
+  markerDefaults?: OsmMarkerDefaults;
   /** Space between the map edge and docked overlays (CSS px). Default 10. */
   overlayInset?: number;
   /** Space between docks, and between overlays in one dock (CSS px). Default 8. */
@@ -129,7 +138,17 @@ export type OpenStreetMapProps = {
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
-const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette }: { layers: OsmBasemapLayer[]; palette: OsmPalette | null }) {
+/** A layer's geometry; memoised so view / visibility changes only touch the layer's <g>. */
+const OsmLayerShapes = React.memo(function OsmLayerShapes({ layer }: { layer: OsmBasemapLayer }) {
+  return (
+    <>
+      {(layer.paths ?? []).map((d, i) => <path key={`p${i}`} d={d} />)}
+      {(layer.circles ?? []).map((c, i) => <circle key={`c${i}`} cx={c.cx} cy={c.cy} r={c.r} />)}
+    </>
+  );
+});
+
+const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette, hidden }: { layers: OsmBasemapLayer[]; palette: OsmPalette | null; hidden: ReadonlySet<string> }) {
   return (
     <g className="gui-osm__basemap">
       {layers.map((layer) => {
@@ -148,9 +167,9 @@ const OsmBasemapLayers = React.memo(function OsmBasemapLayers({ layers, palette 
             opacity={paint ? undefined : s.opacity}
             strokeLinecap={s.strokeLinecap}
             strokeLinejoin={s.strokeLinejoin}
+            display={hidden.has(layer.id) ? 'none' : undefined}
           >
-            {(layer.paths ?? []).map((d, i) => <path key={`p${i}`} d={d} />)}
-            {(layer.circles ?? []).map((c, i) => <circle key={`c${i}`} cx={c.cx} cy={c.cy} r={c.r} />)}
+            <OsmLayerShapes layer={layer} />
           </g>
         );
       })}
@@ -168,7 +187,7 @@ type OsmOverlayDocks = Partial<Record<OsmOverlayPosition, React.ReactNode[]>>;
  * siblings from different groups stay unique. Components mark themselves as
  * HTML overlays with a static `osmSlot = 'overlay'` (Overlay, Legend, Chip).
  */
-function partitionLayers(children: React.ReactNode, svg: React.ReactNode[], canvas: React.ReactNode[], docks: OsmOverlayDocks, prefix = '') {
+function partitionLayers(children: React.ReactNode, svg: React.ReactNode[], canvas: React.ReactNode[], docks: OsmOverlayDocks, prefix = '', flags: { interactive: boolean } = { interactive: false }) {
   React.Children.toArray(children).forEach((child) => {
     if (!React.isValidElement(child)) {
       svg.push(child);
@@ -177,7 +196,7 @@ function partitionLayers(children: React.ReactNode, svg: React.ReactNode[], canv
     const keyed = prefix ? React.cloneElement(child, { key: `${prefix}/${child.key ?? ''}` }) : child;
     const slot = (child.type as { osmSlot?: string } | null)?.osmSlot;
     if (child.type === React.Fragment) {
-      partitionLayers((child.props as { children?: React.ReactNode }).children, svg, canvas, docks, `${prefix}${child.key ?? ''}`);
+      partitionLayers((child.props as { children?: React.ReactNode }).children, svg, canvas, docks, `${prefix}${child.key ?? ''}`, flags);
     } else if (child.type === OpenStreetMapCanvas) {
       canvas.push(keyed);
     } else if (slot === 'overlay') {
@@ -186,9 +205,11 @@ function partitionLayers(children: React.ReactNode, svg: React.ReactNode[], canv
       const position = requested && OSM_OVERLAY_POSITIONS.includes(requested) ? requested : fallback;
       (docks[position] ??= []).push(keyed);
     } else {
+      if (typeof (child.props as { onClick?: unknown }).onClick === 'function') flags.interactive = true;
       svg.push(keyed);
     }
   });
+  return flags;
 }
 
 /**
@@ -237,7 +258,11 @@ function dockRowStyle(row: 'top' | 'middle' | 'bottom', gap: number): React.CSSP
   };
 }
 
-const DOCK_CSS = '.gui-osm__dock:empty{display:none}';
+const DOCK_CSS = [
+  '.gui-osm__dock:empty{display:none}',
+  '.gui-osm-control:hover:not([aria-disabled=true]){border-color:var(--gui-osm-overlay-accent)}',
+  '.gui-osm-control:focus-visible{outline:2px solid var(--gui-osm-overlay-accent);outline-offset:2px;position:relative;z-index:1}',
+].join('');
 
 function readDpr(maxDpr: number) {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -257,6 +282,15 @@ function OpenStreetMapRoot({
   background,
   ariaLabel = 'OpenStreetMap',
   maxDpr = 2,
+  view,
+  defaultView,
+  onViewChange,
+  minZoom,
+  maxZoom,
+  hiddenLayers,
+  defaultHiddenLayers,
+  onLayersChange,
+  markerDefaults,
   overlayInset = 10,
   overlayGap = 8,
   onTransformChange,
@@ -289,10 +323,25 @@ function OpenStreetMapRoot({
     return () => ro.disconnect();
   }, [maxDpr]);
 
+  const fit = React.useMemo(() => fitOsmView(projection, size.w, size.h, size.dpr), [projection, size]);
+  const { state: viewState, viewport } = useOsmViewState(projection, fit, { view, defaultView, onViewChange, minZoom, maxZoom });
+  const isFit = viewport.isFit;
   const transform = React.useMemo(
-    () => createOsmTransform(projection, fitOsmView(projection, size.w, size.h, size.dpr)),
-    [projection, size]
+    () => createOsmTransform(projection, isFit ? fit : zoomOsmView(fit, viewState)),
+    [projection, fit, viewState, isFit]
   );
+  const viewBox = isFit ? projection.viewBox : osmViewBox(projection, fit, viewState);
+  const layerList = React.useMemo(
+    () => (basemap?.layers ?? []).map((l) => {
+      const kind = osmLayerKind(l);
+      return { id: l.id, kind, label: osmLayerLabel(l, kind) };
+    }),
+    [basemap?.layers],
+  );
+  const layers = useOsmLayersState(layerList, { hiddenLayers, defaultHiddenLayers, onLayersChange });
+  const mdKey = markerDefaults ? `${markerDefaults.shape ?? ''}|${markerDefaults.size ?? ''}|${markerDefaults.tone ?? ''}` : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const markerDefaultsValue = React.useMemo<OsmMarkerDefaults>(() => ({ ...(markerDefaults ?? {}) }), [mdKey]);
   const transformRef = React.useRef(transform);
   transformRef.current = transform;
   const palette = useOsmPalette();
@@ -303,8 +352,8 @@ function OpenStreetMapRoot({
   useIsoLayoutEffect(() => setDocksReady(true), []);
   const getDock = React.useCallback((position: OsmOverlayPosition) => dockEls.current[position] ?? null, []);
   const contextValue = React.useMemo(
-    () => ({ transform, transformRef, palette, paletteRef, getDock, docksReady }),
-    [transform, palette, getDock, docksReady],
+    () => ({ transform, transformRef, palette, paletteRef, getDock, docksReady, viewport, layers, markerDefaults: markerDefaultsValue }),
+    [transform, palette, getDock, docksReady, viewport, layers, markerDefaultsValue],
   );
   const themed = basemapStyle !== 'source';
 
@@ -315,7 +364,7 @@ function OpenStreetMapRoot({
   const svgChildren: React.ReactNode[] = [];
   const canvasLayers: React.ReactNode[] = [];
   const docks: OsmOverlayDocks = {};
-  partitionLayers(children, svgChildren, canvasLayers, docks);
+  const { interactive } = partitionLayers(children, svgChildren, canvasLayers, docks);
 
   const license = source?.license ?? OSM_ATTRIBUTION.license;
   const metadata = {
@@ -353,19 +402,22 @@ function OpenStreetMapRoot({
         data-osm-projection={projection.kind}
         data-osm-frame={`${projection.width}x${projection.height}+${projection.pad}`}
         data-osm-basemap-style={themed ? 'theme' : 'source'}
+        data-osm-zoom={isFit ? undefined : Math.round(viewState.zoom * 1000) / 1000}
         style={{ ...cssVars, position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: bg, ...style }}
       >
         <svg
           className="gui-osm__svg"
-          viewBox={projection.viewBox}
+          viewBox={viewBox}
           preserveAspectRatio="xMidYMid meet"
-          role="img"
+          // markers you can click make the map a group of controls, not a picture
+          role={interactive ? 'group' : 'img'}
+          aria-roledescription={interactive ? 'map' : undefined}
           aria-label={ariaLabel}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
         >
           <metadata>{JSON.stringify(metadata)}</metadata>
           {bg ? <rect className="gui-osm__background" width={projection.width} height={projection.height} fill={bg} /> : null}
-          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} palette={themed ? palette : null} /> : null}
+          {basemap?.layers?.length ? <OsmBasemapLayers layers={basemap.layers} palette={themed ? palette : null} hidden={layers.hidden} /> : null}
           <g className="gui-osm__overlay">
             <OsmSvgScopeContext.Provider value={true}>{svgChildren}</OsmSvgScopeContext.Provider>
           </g>
@@ -440,6 +492,7 @@ type OpenStreetMapComponent = typeof OpenStreetMapRoot & {
   Legend: typeof OpenStreetMapLegend;
   LegendRow: typeof OpenStreetMapLegendRow;
   Chip: typeof OpenStreetMapChip;
+  Controls: typeof OpenStreetMapControls;
   useMap: typeof useOpenStreetMap;
   usePalette: typeof useOpenStreetMapPalette;
 };
@@ -451,6 +504,7 @@ const OpenStreetMap = Object.assign(OpenStreetMapRoot, {
   Legend: OpenStreetMapLegend,
   LegendRow: OpenStreetMapLegendRow,
   Chip: OpenStreetMapChip,
+  Controls: OpenStreetMapControls,
   useMap: useOpenStreetMap,
   usePalette: useOpenStreetMapPalette,
 }) as OpenStreetMapComponent;

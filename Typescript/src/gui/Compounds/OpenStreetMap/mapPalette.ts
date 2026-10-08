@@ -362,6 +362,8 @@ export function osmPaletteCssVars(palette: OsmPalette): Record<string, string> {
     '--gui-osm-overlay-border': palette.overlay.border,
     '--gui-osm-overlay-text': palette.overlay.text,
     '--gui-osm-overlay-strong': palette.overlay.strong,
+    '--gui-osm-overlay-accent': palette.overlay.accent,
+    '--gui-osm-overlay-muted': palette.overlay.muted,
     ...Object.fromEntries(Object.entries(palette.tones).map(([k, v]) => [`--gui-osm-tone-${k}`, v])),
     ...Object.fromEntries(Object.entries(palette.domain).map(([k, v]) => [`--gui-osm-tone-${k}`, v])),
   };
