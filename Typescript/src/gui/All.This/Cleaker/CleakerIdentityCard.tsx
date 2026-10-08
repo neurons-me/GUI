@@ -44,7 +44,8 @@ import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
 import type { DoorLayers } from '@/react/session/doorLayers';
-import DoorLayersPanel from '../netget/Door/DoorLayersPanel';
+import { connectTrace, layerEntries, doorIsUp } from '@/react/session/connectTrace';
+import ConnectFailure from './ConnectFailure';
 import {
   requireCleakerEndpoint,
   deriveNamespaceRootLabel,
@@ -163,9 +164,11 @@ export type CleakerIdentityCardProps = DocumentPageProps & {
   doorOff?: boolean;
   /** The layers have not been read yet: neither the form nor the panel is shown until they are. */
   doorChecking?: boolean;
+  /** Reads the door's layers now (the same reading that decides doorOff), for executing the QR's expression. */
+  probeDoor?: () => Promise<DoorLayers>;
 };
 
-const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -237,6 +240,13 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     () => remoteRootFor(namespaceOverride, { localRoot: deriveNamespaceRootLabel(resolvedEndpoint), confirmedRoot }),
     [namespaceOverride, resolvedEndpoint, confirmedRoot],
   );
+
+  // Clicking a QR that is not connected EXECUTES its expression: the door is read again (or the remote host asked
+  // again) and every step is recorded in connectTrace. If it still cannot be reached, ConnectFailure offers the
+  // ways forward. `attempting` is the yellow ring while it runs.
+  const [attempting, setAttempting] = useState(false);
+  const [failureShown, setFailureShown] = useState(false);
+  const [probedLayers, setProbedLayers] = useState<DoorLayers | null>(null);
 
   // Real crypto capability of the page THIS component is actually running
   // on right now — not a string check on "https" (that misses the
@@ -320,7 +330,8 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
   // page's own gateway. A root that is another host (remoteRoot) is answered by that host alone, so neither
   // applies to it: its channel decides.
   const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' =
-    !remoteRoot && doorOff ? 'off'
+    attempting ? 'checking'
+    : !remoteRoot && doorOff ? 'off'
     : !remoteRoot && doorChecking ? 'checking'
     : beatleState === 'error' || beatleState === 'invalid' ? 'error'
     : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
@@ -517,6 +528,68 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beatleChannel.state]);
 
+  // ── Executing the QR's expression ────────────────────────────────────────────────────────────────────────────
+  // A remote root: the channel's own outcome is the result. It is recorded as it lands, and the way forward is
+  // offered when it cannot be reached.
+  useEffect(() => {
+    if (!remoteRoot) return;
+    const state = beatleChannel.state;
+    if (state === 'connected' || state === 'streaming') {
+      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'ok', detail: `wss://${remoteRoot}/nrp` });
+      setFailureShown(false);
+    } else if (state === 'error' || state === 'invalid') {
+      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'error', detail: String(beatleChannel.error || state) });
+      setFailureShown(true);
+    } else if (state === 'disconnected') {
+      connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'off', detail: 'the connection closed' });
+      setFailureShown(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteRoot, beatleChannel.state]);
+
+  // This page's own door came up (it is polled): there is nothing left to offer a way around.
+  useEffect(() => {
+    if (!remoteRoot && !doorOff && !doorChecking) setFailureShown(false);
+  }, [remoteRoot, doorOff, doorChecking]);
+
+  const runExpression = useCallback(async () => {
+    if (attempting) return;
+    const expression = namespaceRootLabel;
+    setFailureShown(false);
+    if (remoteRoot) {
+      connectTrace.record({ expression, step: 'execute', outcome: 'info', detail: `asking ${remoteRoot} directly` });
+      openBeatleChannel(beatleExpression);
+      return;
+    }
+    setAttempting(true);
+    connectTrace.record({ expression, step: 'execute', outcome: 'info', detail: "reading this page's own door" });
+    try {
+      if (!probeDoor) {
+        connectTrace.record({ expression, step: 'door', outcome: 'error', detail: 'this page cannot read its door' });
+        setFailureShown(true);
+        return;
+      }
+      const layers = await probeDoor();
+      setProbedLayers(layers);
+      layerEntries(expression, layers).forEach((entry) => connectTrace.record(entry));
+      if (!doorIsUp(layers)) setFailureShown(true);
+    } catch (error) {
+      connectTrace.record({ expression, step: 'door', outcome: 'error', detail: error instanceof Error ? error.message : String(error) });
+      setFailureShown(true);
+    } finally {
+      setAttempting(false);
+    }
+  }, [attempting, namespaceRootLabel, remoteRoot, openBeatleChannel, beatleExpression, probeDoor]);
+
+  // The QR not connected: clicking it runs its expression. Connected (or still checking), it keeps toggling its size.
+  const activateQr = () => {
+    if (qrStatus === 'off' || (remoteRoot && qrStatus === 'error')) {
+      void runExpression();
+      return;
+    }
+    setExpanded((value) => !value);
+  };
+
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     await onEnter();
@@ -585,12 +658,12 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           role="button"
           tabIndex={0}
           data-gui-node-id={`${nodeId}.qr`}
-          aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
-          onClick={() => setExpanded((value) => !value)}
+          aria-label={qrStatus === 'off' || (remoteRoot && qrStatus === 'error') ? `Connect to ${namespaceRootLabel}` : expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
+          onClick={activateQr}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
-              setExpanded((value) => !value);
+              activateQr();
             }
           }}
           // A mouse click must not leave a rectangular focus box around the bubble and its label (it read as
@@ -645,16 +718,22 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           to do it -- it connects on its own the moment there's an
           expression to open. */}
 
-      {doorChecking ? null : doorOff && doorLayers ? (
-        // The QR is the way in even with nothing behind it, and what is missing is already known: so under it goes the
-        // short answer (what is off, one line of layers) and the action, not an invitation to click for the answer.
-        <DoorLayersPanel
-          variant="compact"
-          layers={doorLayers}
-          namespace={namespaceRootLabel}
+      {doorChecking && !remoteRoot ? null : failureShown && !authenticated ? (
+        // Nothing here asks the person to know what a layer is: one sentence and three ways forward. The layers, the
+        // trace and the way to start the environment are behind "Namespace diagnosis".
+        <ConnectFailure
+          expression={namespaceRootLabel}
+          layers={remoteRoot ? null : (probedLayers ?? doorLayers ?? null)}
+          trace={connectTrace.entries().filter((entry) => entry.expression === namespaceRootLabel)}
           location={typeof window !== 'undefined' ? window.location.origin : undefined}
-          data-gui-node-id={`${nodeId}.off`}
+          onConnectPublic={() => { setFailureShown(false); setNamespaceOverride('cleaker.me'); }}
+          onTryNamespace={(root) => { setFailureShown(false); setNamespaceOverride(root.trim().toLowerCase()); }}
+          onDismiss={() => setFailureShown(false)}
+          data-gui-node-id={`${nodeId}.connect-failure`}
         />
+      ) : doorOff ? (
+        // Grey QR, nothing else: it is the way in. Clicking it executes its expression.
+        null
       ) : authenticated
       && (mode !== 'register' || registrationComplete)
       && (mode !== 'recover' || recoveryComplete) ? (

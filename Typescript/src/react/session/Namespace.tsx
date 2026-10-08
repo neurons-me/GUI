@@ -41,7 +41,7 @@ import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
-import { useDoorLayers, type DoorLayers } from './doorLayers';
+import { useDoorLayers, probeDoorLayers, type DoorLayers } from './doorLayers';
 import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -1554,7 +1554,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking }
+            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin }) }
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,

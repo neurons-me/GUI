@@ -57,36 +57,17 @@ export function nextCommand(layers: DoorLayers): string | null {
   return null;
 }
 
-/**
- * Bootstrap: do the next missing step. A page that nginx serves cannot start a process by itself, so this asks the
- * gateway to (POST /bootstrap, a loopback-only control action) and, when that route is not installed on this door
- * (the answer is anything but JSON `{ ok: true }`), gives the exact command instead, copied, so the button is never a
- * dead end. The layers are polled by the shell, so whatever comes up flips the page without a reload.
- */
 /** Is a layer a page needs still being read? Until it is, the page must not render: it would print its own error for a moment. */
 export function doorPending(layers: DoorLayers, needs: DoorNeeds = 'monad'): boolean {
   const wanted: Array<'backend' | 'monad'> = needs === 'both' ? ['backend', 'monad'] : [needs];
   return wanted.some((layer) => layers[layer] === 'checking');
 }
 
-function BootstrapAction({ command, origin }: { command: string; origin?: string }) {
+// A page that nginx serves cannot start a process on the machine, and no route does it: the honest action is to put the
+// exact command in the clipboard and show it. (Starting it for real needs the service the environment installs, not a button.)
+function BootstrapAction({ command }: { command: string; origin?: string }) {
   const [note, setNote] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const run = async () => {
-    setBusy(true);
-    setNote(null);
-    try {
-      const response = await fetch(`${(origin || '').replace(/\/+$/, '')}/bootstrap`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
-      const body = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => null) : null;
-      if (response.ok && body && body.ok === true) {
-        setNote('Starting… this page updates by itself.');
-        return;
-      }
-    } catch {
-      // no route, nothing listening: fall through to the command
-    } finally {
-      setBusy(false);
-    }
+  const copy = async () => {
     try { await navigator.clipboard?.writeText(command); } catch { /* the command is on screen either way */ }
     setNote(`Run this in a terminal (copied): ${command}`);
   };
@@ -95,16 +76,14 @@ function BootstrapAction({ command, origin }: { command: string; origin?: string
       <Box
         component="button"
         type="button"
-        data-gui-node-id="GUI.content.off.bootstrap"
-        onClick={run}
-        disabled={busy}
+        data-gui-node-id="GUI.content.off.start-command"
+        onClick={copy}
         sx={{
           px: 2.5, py: 0.75, borderRadius: 1.5, border: '1px solid', borderColor: 'primary.main', bgcolor: 'transparent',
-          color: 'primary.main', fontWeight: 700, fontSize: '0.85rem', cursor: busy ? 'default' : 'pointer',
-          '&:hover': busy ? {} : { bgcolor: 'action.hover' },
+          color: 'primary.main', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' },
         }}
       >
-        Bootstrap
+        Copy start command
       </Box>
       {note && <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 360 }}>{note}</Typography>}
     </Box>
