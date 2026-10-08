@@ -42,7 +42,7 @@ import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useDoorLayers, type DoorLayers } from './doorLayers';
-import DoorLayersPanel, { doorBlocks } from '@/gui/All.This/netget/Door/DoorLayersPanel';
+import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
@@ -1539,7 +1539,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       // same on every route -- instead of each page printing its own error for the same missing thing. The
       // landing is exempt: it is the way in, and shows the panel itself next to the QR.
       const blocked = entry.id !== LANDING_ID && entry.needs && doorBlocks(doorLayers, entry.needs);
-      const element = blocked ? (
+      // Until the layer the page needs has been read, the page is not rendered at all (it would show its own
+      // "HTTP 404" for the moment it takes to find out).
+      const waiting = entry.id !== LANDING_ID && entry.needs && !blocked && doorPending(doorLayers, entry.needs);
+      const element = waiting ? (
+        <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
+      ) : blocked ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
           <DoorLayersPanel layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} data-gui-node-id={`${entry.id}.off`} />
         </Box>

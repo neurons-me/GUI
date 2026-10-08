@@ -577,7 +577,9 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
               setExpanded((value) => !value);
             }
           }}
-          sx={{ cursor: 'pointer', display: 'inline-flex' }}
+          // A mouse click must not leave a rectangular focus box around the bubble and its label (it read as
+          // something outside the QR); keyboard focus keeps a visible ring.
+          sx={{ cursor: 'pointer', display: 'inline-flex', '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 4, borderRadius: 2 } }}
         >
           <QRme
             value={qrValue}
@@ -628,24 +630,15 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           expression to open. */}
 
       {doorChecking ? null : doorOff && doorLayers ? (
-        // The QR is the way in even with nothing behind it: it is clickable, and the layers panel is what it opens,
-        // not something stacked under it. Closed, the Home is the grey QR and one line saying what to do with it.
-        expanded ? (
-          <DoorLayersPanel
-            layers={doorLayers}
-            namespace={namespaceRootLabel}
-            location={typeof window !== 'undefined' ? window.location.origin : undefined}
-            data-gui-node-id={`${nodeId}.off`}
-          />
-        ) : (
-          <Typography
-            variant="body2"
-            data-gui-node-id={`${nodeId}.off.hint`}
-            sx={{ color: 'text.secondary', textAlign: 'center', mt: 1.5 }}
-          >
-            No .me answers here. Click the QR to see what is missing.
-          </Typography>
-        )
+        // The QR is the way in even with nothing behind it, and what is missing is already known: so under it goes the
+        // short answer (what is off, one line of layers) and the action, not an invitation to click for the answer.
+        <DoorLayersPanel
+          variant="compact"
+          layers={doorLayers}
+          namespace={namespaceRootLabel}
+          location={typeof window !== 'undefined' ? window.location.origin : undefined}
+          data-gui-node-id={`${nodeId}.off`}
+        />
       ) : authenticated
       && (mode !== 'register' || registrationComplete)
       && (mode !== 'recover' || recoveryComplete) ? (

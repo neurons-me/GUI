@@ -19,6 +19,12 @@ export type DoorLayersPanelProps = {
   location?: string;
   /** The path that was asked for, when this panel stands where that path would have been (an entry point). */
   asked?: string;
+  /**
+   * `compact`: a title, the three layers on one line and the action (the Home when nothing answers: the grey QR is
+   * the way in and this is all that sits under it). `full` (default): each layer with why it is in that state, and
+   * where you are (the page that stands in for a route).
+   */
+  variant?: 'compact' | 'full';
   sx?: any;
   'data-gui-node-id'?: string;
 };
@@ -37,10 +43,82 @@ const STATE_COLOR: Record<LayerState, string> = {
   error: 'error.main',
 };
 
-/** Does the layer a page needs fail the page? ('checking' does not: nothing is known yet.) */
+/** Does the layer a page needs fail the page? ('checking' does not: nothing is known yet; see doorPending.) */
 export function doorBlocks(layers: DoorLayers, needs: DoorNeeds = 'monad'): boolean {
   const wanted: Array<'backend' | 'monad'> = needs === 'both' ? ['backend', 'monad'] : [needs];
   return wanted.some((layer) => layers[layer] === 'off' || layers[layer] === 'error');
+}
+
+
+/** The one command that starts the next missing layer, or null when nothing is missing that a command can start. */
+export function nextCommand(layers: DoorLayers): string | null {
+  if (layers.backend === 'off') return 'netget backend-start';
+  if (layers.monad === 'off') return 'monads on netget';
+  return null;
+}
+
+/**
+ * Bootstrap: do the next missing step. A page that nginx serves cannot start a process by itself, so this asks the
+ * gateway to (POST /bootstrap, a loopback-only control action) and, when that route is not installed on this door
+ * (the answer is anything but JSON `{ ok: true }`), gives the exact command instead, copied, so the button is never a
+ * dead end. The layers are polled by the shell, so whatever comes up flips the page without a reload.
+ */
+/** Is a layer a page needs still being read? Until it is, the page must not render: it would print its own error for a moment. */
+export function doorPending(layers: DoorLayers, needs: DoorNeeds = 'monad'): boolean {
+  const wanted: Array<'backend' | 'monad'> = needs === 'both' ? ['backend', 'monad'] : [needs];
+  return wanted.some((layer) => layers[layer] === 'checking');
+}
+
+function BootstrapAction({ command, origin }: { command: string; origin?: string }) {
+  const [note, setNote] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const run = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch(`${(origin || '').replace(/\/+$/, '')}/bootstrap`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: '{}' });
+      const body = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => null) : null;
+      if (response.ok && body && body.ok === true) {
+        setNote('Starting… this page updates by itself.');
+        return;
+      }
+    } catch {
+      // no route, nothing listening: fall through to the command
+    } finally {
+      setBusy(false);
+    }
+    try { await navigator.clipboard?.writeText(command); } catch { /* the command is on screen either way */ }
+    setNote(`Run this in a terminal (copied): ${command}`);
+  };
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75 }}>
+      <Box
+        component="button"
+        type="button"
+        data-gui-node-id="GUI.content.off.bootstrap"
+        onClick={run}
+        disabled={busy}
+        sx={{
+          px: 2.5, py: 0.75, borderRadius: 1.5, border: '1px solid', borderColor: 'primary.main', bgcolor: 'transparent',
+          color: 'primary.main', fontWeight: 700, fontSize: '0.85rem', cursor: busy ? 'default' : 'pointer',
+          '&:hover': busy ? {} : { bgcolor: 'action.hover' },
+        }}
+      >
+        Bootstrap
+      </Box>
+      {note && <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 360 }}>{note}</Typography>}
+    </Box>
+  );
+}
+
+
+function Dot({ name, state }: { name: string; state: LayerState }) {
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
+      <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: STATE_COLOR[state], flexShrink: 0 }} />
+      <Typography variant="caption" sx={{ color: state === 'up' ? 'text.primary' : 'text.secondary' }}>{name}</Typography>
+    </Box>
+  );
 }
 
 function Row({ name, detail, state, reason }: { name: string; detail: string; state: LayerState; reason?: string }) {
@@ -71,7 +149,7 @@ function Command({ text }: { text: string }) {
   );
 }
 
-export default function DoorLayersPanel({ layers, namespace, location, asked, sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
+export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
   const backendDown = layers.backend === 'off';
   const monadDown = layers.monad === 'off';
   const title = backendDown
@@ -82,13 +160,34 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, sx
         ? 'A layer answered with an error'
         : 'Checking what is behind this door…';
 
+  const command = nextCommand(layers);
+  const shortTitle = backendDown ? "netget's gateway service is off" : monadDown ? 'No .me answers here' : title;
+
+  if (variant === 'compact') {
+    return (
+      <Box
+        data-gui-node-id={nodeId}
+        data-gui-component="DoorLayers"
+        sx={{ width: '100%', maxWidth: 360, mx: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.25, mt: 1.5, ...sx }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'center' }}>{shortTitle}</Typography>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Dot name="nginx" state={layers.nginx} />
+          <Dot name="backend" state={layers.backend} />
+          <Dot name="monad" state={layers.monad} />
+        </Box>
+        {command && <BootstrapAction command={command} origin={location} />}
+      </Box>
+    );
+  }
+
   return (
     <Box
       data-gui-node-id={nodeId}
       data-gui-component="DoorLayers"
-      sx={{ width: '100%', maxWidth: 520, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 2, p: { xs: 2, sm: 3 }, ...sx }}
+      sx={{ width: '100%', maxWidth: 440, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 1.75, p: { xs: 2, sm: 2.5 }, ...sx }}
     >
-      <Typography variant="h6" sx={{ fontWeight: 700 }}>{title}</Typography>
+      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{title}</Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
         <Row name="nginx" detail="serving this page" state={layers.nginx} />
@@ -107,16 +206,7 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, sx
         </Box>
       )}
 
-      {backendDown && (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Start the gateway service with <Command text="netget backend-start" />; it brings its monad up too.
-        </Typography>
-      )}
-      {!backendDown && monadDown && (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          The gateway service is up but its monad is not. Start it with <Command text="monads on netget" />.
-        </Typography>
-      )}
+      {command && <BootstrapAction command={command} origin={location} />}
     </Box>
   );
 }
