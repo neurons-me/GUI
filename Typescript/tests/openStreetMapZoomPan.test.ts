@@ -7,7 +7,7 @@ import { themeTokens } from '../src/gui/Theme/styles/theme.tokens';
 import OpenStreetMap from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap';
 import { markerTransform } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMapMarker';
 import { drawOsmCanvasFrame } from '../src/gui/Compounds/OpenStreetMap/OpenStreetMapCanvas';
-import { osmIsMac, osmKeyAction, osmWheelAction, osmWheelZoomFactor } from '../src/gui/Compounds/OpenStreetMap/gestures';
+import { osmIsMac, osmIsPinchWheel, osmKeyAction, osmWheelAction, osmWheelZoomFactor } from '../src/gui/Compounds/OpenStreetMap/gestures';
 import {
   OSM_STROKE_ZOOM_EXPONENT,
   clampOsmViewState,
@@ -110,6 +110,9 @@ function gestureMapping() {
   near(osmWheelZoomFactor(3, 1), osmWheelZoomFactor(48, 0), 'line mode = 16 px per line');
   assert.ok(osmWheelZoomFactor(10, 0, true) < osmWheelZoomFactor(10, 0, false), 'trackpad pinch (ctrl+wheel) zooms faster per px');
   assert.ok(osmWheelZoomFactor(1e6) > 0.2, 'one huge wheel event is bounded');
+  near(osmWheelZoomFactor(-100, 0, true), osmWheelZoomFactor(-100), 'Ctrl + mouse wheel notch zooms at the wheel rate (not 5× faster)');
+  near(osmWheelZoomFactor(-3, 1, true), osmWheelZoomFactor(-3, 1), 'Ctrl + line-mode wheel = mouse wheel');
+  assert.ok(osmIsPinchWheel(8, true) && !osmIsPinchWheel(100, true) && !osmIsPinchWheel(8, false), 'pinch = ctrl + small delta');
   assert.deepEqual(osmKeyAction('ArrowLeft'), { pan: [64, 0] }, 'left arrow shows what is left (content moves right)');
   assert.deepEqual(osmKeyAction('ArrowDown', true), { pan: [0, -192] }, 'shift pans 3×');
   assert.deepEqual(osmKeyAction('+'), { zoom: 2 });

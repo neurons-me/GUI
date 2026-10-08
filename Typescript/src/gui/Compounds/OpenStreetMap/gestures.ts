@@ -33,9 +33,19 @@ export const OSM_KEY_ZOOM = 2;
 /** Wheel delta (any deltaMode) → zoom factor. */
 export function osmWheelZoomFactor(deltaY: number, deltaMode = 0, ctrlKey = false): number {
   const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 400 : deltaY;
-  // trackpad pinch (ctrl+wheel) sends small deltas: zoom faster per px
-  const k = ctrlKey ? 0.01 : 0.002;
+  // trackpad pinch (ctrl+wheel) sends small deltas: zoom faster per px. A mouse
+  // wheel with Ctrl held (the cooperative-wheel gesture) sends notch-sized deltas
+  // (≈ 100 px): those zoom at the plain wheel rate, not 5× faster.
+  const k = deltaMode === 0 && osmIsPinchWheel(px, ctrlKey) ? 0.01 : 0.002; // (pinch is always pixel mode)
   return Math.exp(-Math.max(-600, Math.min(600, px)) * k);
+}
+
+/** Below this |delta| (px), a ctrl+wheel event is treated as a trackpad pinch. */
+export const OSM_PINCH_WHEEL_MAX = 50;
+
+/** ctrl+wheel with a small pixel delta = trackpad pinch (Chrome / Safari / Firefox synthesize ctrlKey). */
+export function osmIsPinchWheel(px: number, ctrlKey: boolean): boolean {
+  return ctrlKey && Math.abs(px) < OSM_PINCH_WHEEL_MAX;
 }
 
 /**
@@ -131,7 +141,7 @@ export function useOsmGestures(
       e.preventDefault();
       pend.factor *= osmWheelZoomFactor(e.deltaY, e.deltaMode, e.ctrlKey);
       pend.at = local(e);
-      pend.src = e.ctrlKey ? 'pinch' : 'wheel';
+      pend.src = osmIsPinchWheel(e.deltaMode === 0 ? e.deltaY : 1e3, e.ctrlKey) ? 'pinch' : 'wheel';
       schedule();
     };
 
