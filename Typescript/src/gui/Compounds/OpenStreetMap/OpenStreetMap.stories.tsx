@@ -1,17 +1,25 @@
+import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import { ThemeProvider } from '@mui/material/styles';
+import { makeMuiTheme } from '@/gui/Theme/fromTokens';
+import { themeTokens } from '@/gui/Theme/styles/theme.tokens';
+import { GuiThemes } from '@/gui/Theme/utils/catalog';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmBasemap } from './OpenStreetMap';
+import type { OsmMarkerShape, OsmMarkerLabelPlacement } from './OpenStreetMapMarker';
 import { createOsmProjection } from './projection';
+import { buildOsmPalette, contrast, type OsmMarkerState, type OsmMarkerTone } from './mapPalette';
 import { VERACRUZ_BASEMAP, VERACRUZ_FRAME, VERACRUZ_SOURCE } from './OpenStreetMap.veracruz.fixture';
 
 // Demo frame only: two hand-written strokes stand in for a project's
 // pre-projected basemap (a real page passes the layers its own generator made).
+// Their colours come from the theme (layer ids → kinds); the styles below only
+// carry stroke widths and caps.
 const BBOX = { south: 19.192, west: -96.142, north: 19.205, east: -96.122 };
 const DEMO_BASEMAP: OsmBasemap = {
-  background: '#0b0d10',
   layers: [
-    { id: 'roads', style: { stroke: '#505860', strokeWidth: 2, opacity: 0.8, strokeLinecap: 'round' }, paths: ['M24,700 L600,400 L1176,120', 'M300,24 L420,776'] },
-    { id: 'places', style: { fill: '#2a3038' }, circles: [{ cx: 600, cy: 400, r: 3 }] },
+    { id: 'roads-primary', style: { strokeWidth: 2, strokeLinecap: 'round' }, paths: ['M24,700 L600,400 L1176,120', 'M300,24 L420,776'] },
+    { id: 'places', circles: [{ cx: 600, cy: 400, r: 3 }] },
   ],
 };
 
@@ -20,14 +28,17 @@ const meta: Meta<typeof OpenStreetMap> = {
   component: OpenStreetMap,
   tags: ['autodocs'],
   // No <Theme> here: the global preview decorator already provides it, so the
-  // toolbar's Mode (light/dark) reaches these stories. (The map's own colours
-  // are still fixed at this stage; see the Veracruz story.)
+  // toolbar's Mode (light/dark) drives these stories. Stories that set
+  // `parameters.osmFrame: false` size themselves.
   decorators: [
-    (Story: any) => (
-      <div style={{ height: 420, width: '100%' }}>
+    (Story: any, ctx: any) =>
+      ctx.parameters?.osmFrame === false ? (
         <Story />
-      </div>
-    ),
+      ) : (
+        <div style={{ height: 420, width: '100%' }}>
+          <Story />
+        </div>
+      ),
   ],
   args: {
     bbox: BBOX,
@@ -45,10 +56,11 @@ type Story = StoryObj<typeof OpenStreetMap>;
 export const Markers: Story = {
   render: (args) => (
     <OpenStreetMap {...args}>
-      <OpenStreetMap.Marker lat={19.1985} lon={-96.132} shape="circle" size={20} color="#7eb8c9" label="circle" meta="fixed lat/lon" />
-      <OpenStreetMap.Marker lat={19.202} lon={-96.137} shape="square" size={16} color="#7a9a7a" label="square" />
-      <OpenStreetMap.Marker lat={19.195} lon={-96.126} shape="triangle" size={18} color="#c9b87e" label="triangle" labelPlacement="left" />
-      <OpenStreetMap.Marker lat={19.2} lon={-96.127} shape="icon" icon="directions_boat" size={22} color="#7eb8c9" label="GUI.Icon" />
+      <OpenStreetMap.Marker lat={19.1985} lon={-96.132} shape="circle" size={20} tone="primary" label="circle" meta="tone=primary" />
+      <OpenStreetMap.Marker lat={19.202} lon={-96.137} shape="square" size={16} tone="success" label="square" meta="tone=success" />
+      <OpenStreetMap.Marker lat={19.195} lon={-96.126} shape="triangle" size={18} tone="warning" label="triangle" meta="tone=warning" labelPlacement="left" />
+      <OpenStreetMap.Marker lat={19.2} lon={-96.127} shape="icon" icon="directions_boat" size={22} tone="info" label="GUI.Icon" meta="tone=info" />
+      <OpenStreetMap.Marker lat={19.1955} lon={-96.137} shape="circle" size={14} color="#c9b87e" label="color=#c9b87e" meta="explicit colour (legacy)" />
     </OpenStreetMap>
   ),
 };
@@ -57,9 +69,9 @@ export const CanvasLayer: Story = {
   render: (args) => (
     <OpenStreetMap {...args}>
       <OpenStreetMap.Canvas
-        onFrame={({ ctx, now, project }) => {
+        onFrame={({ ctx, now, project, palette }) => {
           const p = project(19.1985 + 0.004 * Math.sin(now / 900), -96.132 + 0.006 * Math.cos(now / 900));
-          ctx.fillStyle = '#e58fc0';
+          ctx.fillStyle = palette.tones.secondary;
           ctx.beginPath();
           ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
           ctx.fill();
@@ -72,42 +84,26 @@ export const CanvasLayer: Story = {
 // Real data: a trimmed copy of the Veracruz port basemap (build_basemap.py
 // output, © OpenStreetMap contributors, ODbL) with the port page's main nodes.
 // Node positions are the page's map pixels, unprojected with the map's own
-// projection, exactly as port-gui.js does.
+// projection, exactly as port-gui.js does. Tones replace the page's
+// `.node.ship / .train / .port / .yard / .queue` CSS, states its `.busy / .done / .hl`.
 const VERACRUZ_PROJ = createOsmProjection(VERACRUZ_FRAME);
-const VERACRUZ_NODES = [
-  { id: 'n-port', x: 600.0, y: 255.4, shape: 'circle', size: 28, gap: 7, icon: 'anchor', color: '#7eb8c9', label: 'VERACRUZ', meta: 'port' },
-  { id: 'n-ship1', x: 801.6, y: 168.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[1] coffee', meta: 'unloading' },
-  { id: 'n-ship2', x: 888.0, y: 284.3, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[2] sugar', meta: 'unloading' },
-  { id: 'n-ship3', x: 945.6, y: 382.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', color: '#6a9bb0', label: 'SHIP[3] TEU', meta: 'unloading' },
-  { id: 'n-train', x: 340.8, y: 342.2, shape: 'rect', width: 36, height: 16, gap: 5, place: 'left', icon: 'train', color: '#b0a06a', label: 'TRAIN[1]', meta: 'loading' },
-  { id: 'n-yard', x: 513.6, y: 457.8, shape: 'square', size: 28, gap: 7, icon: 'warehouse', color: '#7a9a7a', label: 'CARGO YARD · CEDIS A', meta: 'pool' },
-] as const;
+type VeracruzNode = {
+  id: string; x: number; y: number; shape: OsmMarkerShape; size?: number; width?: number; height?: number;
+  gap: number; place?: OsmMarkerLabelPlacement; icon: string; tone: OsmMarkerTone; state?: OsmMarkerState; label: string; meta: string;
+};
+const VERACRUZ_NODES: VeracruzNode[] = [
+  { id: 'n-port', x: 600.0, y: 255.4, shape: 'circle', size: 28, gap: 7, icon: 'anchor', tone: 'port', state: 'highlight', label: 'VERACRUZ', meta: 'port.busy = true' },
+  { id: 'n-ship1', x: 801.6, y: 168.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'busy', label: 'SHIP[1] coffee', meta: 'unloading' },
+  { id: 'n-ship2', x: 888.0, y: 284.3, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', label: 'SHIP[2] sugar', meta: 'waiting' },
+  { id: 'n-ship3', x: 945.6, y: 382.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'done', label: 'SHIP[3] TEU', meta: 'done' },
+  { id: 'n-train', x: 340.8, y: 342.2, shape: 'rect', width: 36, height: 16, gap: 5, place: 'left', icon: 'train', tone: 'train', label: 'TRAIN[1]', meta: 'loading' },
+  { id: 'n-qimp', x: 686.4, y: 313.2, shape: 'circle', size: 24, gap: 4, icon: 'local_shipping', tone: 'queue', label: 'Q.IMPORT', meta: '3 queued' },
+  { id: 'n-yard', x: 513.6, y: 457.8, shape: 'square', size: 28, gap: 7, icon: 'warehouse', tone: 'yard', label: 'CARGO YARD · CEDIS A', meta: 'pool' },
+];
 
-/**
- * The real Veracruz port basemap with a few of the port page's markers.
- *
- * Expected at this stage: the map keeps the generator's dark colours in both
- * Mode settings (light/dark). Only the page around it follows the theme. Theme
- * tokens for the basemap, markers and attribution are the next step.
- */
-export const Veracruz: Story = {
-  args: {
-    ...VERACRUZ_FRAME,
-    basemap: VERACRUZ_BASEMAP,
-    source: VERACRUZ_SOURCE,
-    ariaLabel: 'Port of Veracruz (OpenStreetMap basemap)',
-  },
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Real data: a trimmed copy of the Veracruz port basemap (build_basemap.py output, © OpenStreetMap contributors, ODbL), about 12 KB, story-only. ' +
-          'Markers are placed at the port page\'s node positions. The map colours do not follow the theme yet, so it stays dark in light mode. That is expected for now.',
-      },
-    },
-  },
-  render: (args) => (
-    <OpenStreetMap {...args}>
+function VeracruzMarkers() {
+  return (
+    <>
       {VERACRUZ_NODES.map((n) => {
         const { lat, lon } = VERACRUZ_PROJ.unproject(n.x, n.y);
         return (
@@ -117,19 +113,118 @@ export const Veracruz: Story = {
             lat={lat}
             lon={lon}
             shape={n.shape}
-            size={'size' in n ? n.size : undefined}
-            width={'width' in n ? n.width : undefined}
-            height={'height' in n ? n.height : undefined}
-            color={n.color}
+            size={n.size}
+            width={n.width}
+            height={n.height}
+            tone={n.tone}
+            state={n.state}
             icon={n.icon}
-            iconColor={n.color}
             label={n.label}
             meta={n.meta}
-            labelPlacement={'place' in n ? n.place : 'right'}
+            labelPlacement={n.place ?? 'right'}
             labelOffset={n.gap}
           />
         );
       })}
+    </>
+  );
+}
+
+const VERACRUZ_ARGS = {
+  ...VERACRUZ_FRAME,
+  basemap: VERACRUZ_BASEMAP,
+  source: VERACRUZ_SOURCE,
+  ariaLabel: 'Port of Veracruz (OpenStreetMap basemap)',
+};
+
+/**
+ * The real Veracruz port basemap with the port page's main nodes, in the
+ * colours of the theme in scope: switch the toolbar Mode to see light / dark.
+ * Tones: port, ship, train, queue, yard. States: highlight (port), busy (SHIP[1]), done (SHIP[3]).
+ */
+export const Veracruz: Story = {
+  args: VERACRUZ_ARGS,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Real data: a trimmed copy of the Veracruz port basemap (build_basemap.py output, © OpenStreetMap contributors, ODbL), about 12 KB, story-only. ' +
+          'Basemap, markers and attribution take their colours from the theme (derived from existing tokens) and follow the toolbar Mode.',
+      },
+    },
+  },
+  render: (args) => (
+    <OpenStreetMap {...args}>
+      <VeracruzMarkers />
     </OpenStreetMap>
+  ),
+};
+
+// ── one theme, picked by args (independent of the toolbar / persisted theme) ──
+const THEME_IDS = GuiThemes.map((t) => t.themeId ?? '').filter(Boolean);
+const muiThemeFor = (themeId: string, mode: 'light' | 'dark') => {
+  const manifest = GuiThemes.find((t) => t.themeId === themeId) ?? GuiThemes[0];
+  return makeMuiTheme(themeTokens, (manifest.mode as any)?.[mode] ?? {}, mode);
+};
+
+type ThemedArgs = React.ComponentProps<typeof OpenStreetMap> & { themeId: string; mode: 'light' | 'dark' };
+
+/** The Veracruz map in one catalog theme and mode, chosen with the controls below. */
+export const ThemePicker: StoryObj<ThemedArgs> = {
+  args: { ...VERACRUZ_ARGS, themeId: 'neurons.me', mode: 'light' } as ThemedArgs,
+  argTypes: {
+    themeId: { control: 'select', options: THEME_IDS },
+    mode: { control: 'inline-radio', options: ['light', 'dark'] },
+  },
+  render: ({ themeId, mode, ...args }) => (
+    <ThemeProvider theme={muiThemeFor(themeId, mode)}>
+      <OpenStreetMap {...(args as any)}>
+        <VeracruzMarkers />
+      </OpenStreetMap>
+    </ThemeProvider>
+  ),
+};
+
+function ThemeCell({ themeId, themeName, mode }: { themeId: string; themeName: string; mode: 'light' | 'dark' }) {
+  const theme = React.useMemo(() => muiThemeFor(themeId, mode), [themeId, mode]);
+  const pal = React.useMemo(() => buildOsmPalette(theme), [theme]);
+  const minTone = Math.min(...Object.values(pal.domain).map((c) => contrast(c, pal.land)));
+  return (
+    <ThemeProvider theme={theme}>
+      <figure
+        data-theme-cell={`${themeId}/${mode}`}
+        style={{ margin: 0, background: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 8, overflow: 'hidden' }}
+      >
+        <div style={{ height: 190 }}>
+          <OpenStreetMap {...VERACRUZ_ARGS} ariaLabel={`Veracruz in ${themeName} ${mode}`}>
+            <VeracruzMarkers />
+          </OpenStreetMap>
+        </div>
+        <figcaption style={{ font: '11px/1.4 system-ui, sans-serif', padding: '4px 8px', color: theme.palette.text.primary }}>
+          <b>{themeName}</b> · {mode}
+          <span style={{ color: theme.palette.text.secondary }}>
+            {' '}· label {contrast(pal.label, pal.land).toFixed(1)}:1 · tones ≥ {minTone.toFixed(1)}:1
+          </span>
+        </figcaption>
+      </figure>
+    </ThemeProvider>
+  );
+}
+
+/**
+ * All 8 catalog themes × light / dark, each map under its own theme (MUI
+ * ThemeProvider built with the same makeMuiTheme as <Theme>). Captions show
+ * label and marker-tone contrast against the land colour.
+ */
+export const ThemesGrid: Story = {
+  parameters: { osmFrame: false, layout: 'fullscreen' },
+  render: () => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, padding: 10 }}>
+      {GuiThemes.flatMap((t) =>
+        (['light', 'dark'] as const).map((mode) => (
+          <ThemeCell key={`${t.themeId}/${mode}`} themeId={t.themeId ?? ''} themeName={t.themeName ?? ''} mode={mode} />
+        )),
+      )}
+    </div>
   ),
 };
