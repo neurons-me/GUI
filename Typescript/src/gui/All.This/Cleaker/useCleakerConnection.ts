@@ -1,24 +1,21 @@
-// QRConnect -- the QR as the one control for "where am I connected": it shows an expression (a root namespace),
-// executes it when clicked, and says what happened. A page only composes it and listens (`onStateChange`); the
-// process lives here:
+// The process of connecting, as one hook of the Cleaker flow (CleakerIdentityCard is the only caller): what the QR
+// shows, what clicking it does, and what the person is offered when it cannot be reached. There is no second
+// component for it: the QR is drawn by QRme, the card is the flow.
 //
 //   idle / off (grey) --click--> checking (loader) --> connected  (ink)
 //                                                  \-> failed     (cross) --> "Unable to connect" + three ways forward
 //
 // Two doors, decided by the expression:
 //   * this page's own root (or a loopback / local.* alias, or the root its monad confirmed): the page's own gateway
-//     answers, and only while its door is up (`door`). The result is re-verified into the shared context
+//     answers, and only while its door is up. The result is re-verified into the shared context
 //     (`sharedRootStatus`, `onLocalResolved`).
 //   * any other host: the browser's own runtime asks THAT host directly, `wss://<root>/nrp`, whether or not this
 //     page's door is up (react/session/remoteRoot.ts). Nothing is signed or written here, and the shared context is
 //     not moved to it.
-// Every step is recorded in connectTrace. The channel hook is injectable (`useChannel`) so stories and tests can show
-// every state without a network.
+// Every step is recorded in connectTrace. The channel hook can be replaced through `ConnectionSeams` so a story or a
+// test can show every state without a network.
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Box from '@/gui/Atoms/Box/Box';
-import QRme from './QR.me';
-import ConnectFailure from '@/gui/All.This/Cleaker/ConnectFailure';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import type { ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -27,18 +24,10 @@ import { connectTrace, layerEntries, doorIsUp } from '@/react/session/connectTra
 import type { DoorLayers } from '@/react/session/doorLayers';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
 
-export type QRConnectStatus = 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
-
-export type QRConnectState = {
-  status: QRConnectStatus;
-  /** The expression when it is another host (asked directly), else null. */
-  remoteRoot: string | null;
-  /** The "Unable to connect" card is on screen. */
-  failureShown: boolean;
-};
+export type ConnectionStatus = 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
 
 /** What is known about this page's own door, and how to read it again. */
-export type QRConnectDoor = {
+export type CleakerDoor = {
   /** Nothing answers behind this page. */
   off: boolean;
   /** Still being read for the first time. */
@@ -48,42 +37,37 @@ export type QRConnectDoor = {
   probe?: () => Promise<DoorLayers>;
 };
 
-export type QRConnectProps = {
+/**
+ * What a story or a test may replace so every state can be shown without a network. Production passes nothing:
+ * the channel is Beatle's and the door is read with the page's own fetch.
+ */
+export type ConnectionSeams = {
+  /** The channel hook (same signature as useBeatle, same identity for the life of the mount). */
+  useChannel?: typeof useBeatle;
+  /** The fetch the door's layers are read with. */
+  fetchImpl?: typeof fetch;
+};
+
+export const ConnectionSeamsContext = React.createContext<ConnectionSeams>({});
+
+export type CleakerConnectionInput = {
   /** The root being looked at and executed. */
   expression: string;
   onExpressionChange?: (root: string) => void;
-  /** Whether the person may type another root straight into the QR's label. */
-  editable?: boolean;
   /** The root this page itself is served as (a root equal to it is never "another host"). */
   localRoot?: string | null;
-  door?: QRConnectDoor;
+  door: CleakerDoor;
   /** The shared context's own verification of the local root (the sidebar, /netget); only the local door waits on it. */
-  sharedRootStatus?: CleakerRootStatus;
+  sharedRootStatus: CleakerRootStatus;
   /** A LOCAL channel resolved this namespace (the page may re-verify its shared context onto it). */
   onLocalResolved?: (namespace: string) => void;
-  /** What the channel opens when it differs from what is shown (e.g. the whole identity once signed in). Default: the expression. */
+  /** What the channel opens when it differs from what is shown (e.g. the whole identity once signed in). */
   channelExpression?: string;
-  /** False while nothing should connect (registering, recovering). Default true. */
-  channelEnabled?: boolean;
-  /** False once a session is open: the failure card is not offered then. Default true. */
-  failureEnabled?: boolean;
-  /** The channel hook. Default: Beatle's. Replace to drive every state in a story or a test. Must keep the same identity. */
-  useChannel?: typeof useBeatle;
-  /** What the QR encodes and the name previewed on it. */
-  qrValue: string;
-  username?: string;
-  /** The text drawn around the QR when it is not simply the expression (a handle being typed, a signed-in identity). */
-  perimeterLabel?: string;
-  perimeterHandleHref?: string;
-  /** Where the page was served from (shown in the diagnosis). */
-  location?: string;
-  onStateChange?: (state: QRConnectState) => void;
-  'data-gui-node-id'?: string;
+  /** False while nothing should connect (registering, recovering, no secure context). */
+  channelEnabled: boolean;
+  /** False once a session is open: the failure card is not offered then. */
+  failureEnabled: boolean;
 };
-
-// Small by default (a badge, not something to scan across a room); click grows it to a size worth holding a camera up to.
-const QR_DIAMETER_DEFAULT = 125;
-const QR_DIAMETER_EXPANDED = 214;
 
 const STATE_LABEL: Record<ResolutionState, string> = {
   idle: '',
@@ -97,31 +81,20 @@ const STATE_LABEL: Record<ResolutionState, string> = {
   disconnected: '',
 };
 
-const secureContext = () => typeof window !== 'undefined'
-  && window.isSecureContext === true
-  && typeof window.crypto?.subtle === 'object'
-  && window.crypto.subtle !== null;
-
-export default function QRConnect({
+export function useCleakerConnection({
   expression,
   onExpressionChange,
-  editable = true,
   localRoot = null,
-  door = { off: false, checking: false },
-  sharedRootStatus = 'confirmed',
+  door,
+  sharedRootStatus,
   onLocalResolved,
   channelExpression,
-  channelEnabled = true,
-  failureEnabled = true,
-  useChannel = useBeatle,
-  qrValue,
-  username,
-  perimeterLabel,
-  perimeterHandleHref,
-  location,
-  onStateChange,
-  'data-gui-node-id': nodeId = 'QRConnect',
-}: QRConnectProps) {
+  channelEnabled,
+  failureEnabled,
+}: CleakerConnectionInput) {
+  const seams = React.useContext(ConnectionSeamsContext);
+  const useChannel = seams.useChannel ?? useBeatle;
+
   const [expanded, setExpanded] = useState(false);
   const [attempting, setAttempting] = useState(false);
   const [failureShown, setFailureShown] = useState(false);
@@ -144,7 +117,7 @@ export default function QRConnect({
   const { channel, open } = useChannel(resolverWs, undefined, { declaredSpaces });
   const channelState: ResolutionState = channel.state;
   const toOpen = channelExpression ?? expression;
-  const ready = channelEnabled && secureContext() && (!!remoteRoot || (!door.off && !door.checking));
+  const ready = channelEnabled && (!!remoteRoot || (!door.off && !door.checking));
   useEffect(() => {
     if (ready && toOpen) open(toOpen);
     // `open` changes only with the resolver, which changes together with `remoteRoot` (and so with `toOpen`).
@@ -185,7 +158,7 @@ export default function QRConnect({
   // ── The status the QR shows ───────────────────────────────────────────────────────────────────────────────────
   // The door's state and the shared context's re-verification are facts about THIS page's own gateway. Another host is
   // answered by that host alone, so neither applies to it: its channel decides.
-  const status: QRConnectStatus =
+  const status: ConnectionStatus =
     attempting ? 'checking'
     : !remoteRoot && door.off ? 'off'
     : !remoteRoot && door.checking ? 'checking'
@@ -199,12 +172,6 @@ export default function QRConnect({
     : status === 'error' ? 'Could not connect'
     : status === 'confirmed' ? 'Connected'
     : (STATE_LABEL[channelState] || 'Checking…');
-
-  const showFailure = failureShown && failureEnabled;
-  useEffect(() => {
-    onStateChange?.({ status, remoteRoot, failureShown: showFailure });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, remoteRoot, showFailure]);
 
   // ── Executing the expression ─────────────────────────────────────────────────────────────────────────────────
   const execute = useCallback(async () => {
@@ -247,60 +214,19 @@ export default function QRConnect({
     onExpressionChange?.(root.trim().toLowerCase());
   };
 
-  return (
-    <Box
-      data-gui-node-id={nodeId}
-      data-gui-component="QRConnect"
-      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5, width: '100%' }}
-    >
-      <Box
-        role="button"
-        tabIndex={0}
-        data-gui-node-id={`${nodeId}.qr`}
-        aria-label={executes ? `Connect to ${expression}` : expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
-        onClick={activate}
-        onKeyDown={(event: React.KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            activate();
-          }
-        }}
-        // A mouse click must not leave a rectangular focus box around the bubble and its label; keyboard focus keeps a ring.
-        sx={{ cursor: 'pointer', display: 'inline-flex', '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 4, borderRadius: 2 } }}
-      >
-        <QRme
-          value={qrValue}
-          username={username || undefined}
-          diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
-          hoverFlip={false}
-          clickFlip={false}
-          cursor="pointer"
-          status={status}
-          statusLabel={statusLabel}
-          perimeterLabel={perimeterLabel ?? expression}
-          perimeterRootLabel={expression}
-          perimeterHandleHref={perimeterHandleHref}
-          editableRoot={editable}
-          editableRootValue={expression}
-          onEditableRootChange={onExpressionChange}
-          data-gui-node-id={`${nodeId}.qr.code`}
-          style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-        />
-      </Box>
-
-      {showFailure && (
-        // One sentence and three ways forward. The layers, the trace and the way to start the environment are behind "Diagnosis".
-        <ConnectFailure
-          expression={expression}
-          layers={remoteRoot ? null : (probedLayers ?? door.layers ?? null)}
-          trace={connectTrace.entries().filter((entry) => entry.expression === expression)}
-          location={location}
-          onConnectPublic={() => changeExpression('cleaker.me')}
-          onTryNamespace={changeExpression}
-          onDismiss={() => setFailureShown(false)}
-          data-gui-node-id={`${nodeId}.connect-failure`}
-        />
-      )}
-    </Box>
-  );
+  return {
+    status,
+    statusLabel,
+    remoteRoot,
+    /** The "Unable to connect" card is to be shown. */
+    failureShown: failureShown && failureEnabled,
+    /** Clicking the QR runs the expression (rather than toggling its size). */
+    executes,
+    expanded,
+    activate,
+    changeExpression,
+    dismissFailure: () => setFailureShown(false),
+    /** The layers read when the QR was clicked, else what the page already knew. */
+    layers: remoteRoot ? null : (probedLayers ?? door.layers ?? null),
+  };
 }

@@ -105,18 +105,18 @@ export async function probeDoorLayers(input: {
  * Probes the layers now and every `intervalMs`, so a door that comes up (or goes down) changes on screen without a
  * reload. `enabled: false` stops probing and keeps the last reading.
  */
-export function useDoorLayers(input: { origin: string; monadTransport: string; intervalMs?: number; enabled?: boolean }): DoorLayers {
-  const { origin, monadTransport, intervalMs = 5000, enabled = true } = input;
+export function useDoorLayers(input: { origin: string; monadTransport: string; intervalMs?: number; enabled?: boolean; fetchImpl?: typeof fetch }): DoorLayers {
+  const { origin, monadTransport, intervalMs = 5000, enabled = true, fetchImpl } = input;
   const [layers, setLayers] = React.useState<DoorLayers>(DOOR_LAYERS_CHECKING);
   React.useEffect(() => {
     if (!enabled || !origin || !monadTransport) return undefined;
     let alive = true;
     const run = () => {
-      probeDoorLayers({ origin, monadTransport }).then((next) => { if (alive) setLayers(next); });
+      probeDoorLayers({ origin, monadTransport, fetchImpl }).then((next) => { if (alive) setLayers(next); });
     };
     run();
     const timer = setInterval(run, intervalMs);
     return () => { alive = false; clearInterval(timer); };
-  }, [origin, monadTransport, intervalMs, enabled]);
+  }, [origin, monadTransport, intervalMs, enabled, fetchImpl]);
   return layers;
 }

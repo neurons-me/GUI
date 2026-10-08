@@ -20,6 +20,8 @@ import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
 import Cleaker from "./Cleaker";
+import { ConnectionSeamsContext, type ConnectionSeams } from "./useCleakerConnection";
+import type { useBeatle } from "@/gui/All.This/NRP/Beatle/useBeatle";
 
 const meta: Meta<typeof Cleaker> = {
   title: "All.This/Cleaker",
@@ -49,5 +51,76 @@ export const WithExplicitDestination: Story = {
     <Theme>
       <Cleaker cleakerEndpoint="http://local.cleaker" netgetMonadOrigin="http://local.netget/apps/netget" />
     </Theme>
+  ),
+};
+
+// ── The whole way in, with no network ──────────────────────────────────────────────────────────────────────────
+// A grey QR is the starting point when nothing answers. Clicking it runs its expression; if it cannot be reached the
+// card says so and offers three ways forward:
+//
+//   grey QR --click--> loader --> "Unable to connect"
+//     Connect to cleaker.me      --> loader --> connected --> "Hello, I am…" (sign in / register / recover)
+//     Try another namespace      --> type one that does not exist --> the cross, and the same card again
+//     Diagnosis                  --> the layers, where you are, the start command and the trace
+//
+// Only the network is replaced (ConnectionSeams): this page's own door answers "nothing" to every reading, and the
+// channel answers for cleaker.me and for no one else. Everything else is the real <Cleaker>. Open the console to read
+// each step (`[qr] …`), or `globalThis['GUI-QR-TRACE'].entries()`.
+
+type Channel = ReturnType<typeof useBeatle>;
+
+/** A stand-in for Beatle's channel hook: `answers(host)` says what each host does; "hang" never finishes. */
+function mockChannel(answers: (host: string) => "connect" | "error" | "hang", delayMs = 900): typeof useBeatle {
+  return ((endpoint: string) => {
+    const [channel, setChannel] = React.useState<Channel["channel"]>({ expression: null, resolved: [], state: "idle" });
+    const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const open = React.useCallback((raw: string) => {
+      if (timer.current) clearTimeout(timer.current);
+      const host = endpoint.replace(/^wss?:\/\//, "").replace(/\/.*$/, "");
+      const outcome = answers(host);
+      setChannel({ expression: null, resolved: [], state: "connecting" });
+      if (outcome === "hang") return;
+      timer.current = setTimeout(() => {
+        setChannel(outcome === "connect"
+          ? ({ expression: { raw, ast: { kind: "namespace", value: raw } }, resolved: [`https://${host}/${raw}`], state: "connected" } as unknown as Channel["channel"])
+          : { expression: null, resolved: [], state: "error", error: "WebSocket error" });
+      }, delayMs);
+    }, [endpoint]);
+    React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+    return { channel, open, send: () => undefined, disconnect: () => undefined };
+  }) as unknown as typeof useBeatle;
+}
+
+// Every reading of this page's own door gets a page back (what a server with nothing behind it does): backend off, monad off.
+const nothingBehind: typeof fetch = async () => new Response("<!doctype html><title>no</title>", { status: 200, headers: { "content-type": "text/html" } });
+
+const NOTHING_ANSWERS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: mockChannel((host) => (host === "cleaker.me" ? "connect" : "error")),
+};
+const NEVER_ANSWERS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: mockChannel(() => "hang"),
+};
+
+/** Nothing answers behind this page. Click the grey QR and walk every option. */
+export const NothingAnswers: Story = {
+  render: () => (
+    <ConnectionSeamsContext.Provider value={NOTHING_ANSWERS}>
+      <Theme>
+        <Cleaker cleakerEndpoint={typeof window !== "undefined" ? window.location.origin : "http://localhost"} />
+      </Theme>
+    </ConnectionSeamsContext.Provider>
+  ),
+};
+
+/** Another host that never finishes answering: the loader, for as long as it takes. */
+export const Trying: Story = {
+  render: () => (
+    <ConnectionSeamsContext.Provider value={NEVER_ANSWERS}>
+      <Theme>
+        <Cleaker cleakerEndpoint={typeof window !== "undefined" ? window.location.origin : "http://localhost"} />
+      </Theme>
+    </ConnectionSeamsContext.Provider>
   ),
 };

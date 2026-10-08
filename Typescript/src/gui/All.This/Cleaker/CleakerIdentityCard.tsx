@@ -30,7 +30,10 @@ import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
-import QRConnect, { type QRConnectState } from '@/gui/All.This/me/QR/QRConnect';
+import QRme from '@/gui/All.This/me/QR/QR.me';
+import ConnectFailure from './ConnectFailure';
+import { connectTrace } from '@/react/session/connectTrace';
+import { useCleakerConnection } from './useCleakerConnection';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
@@ -46,6 +49,11 @@ import {
   LANDING_ID,
   type DocumentPageProps,
 } from '@/react/session/documentPages';
+
+// Small by default (a badge, not something meant to be scanned from across a room); click grows it to a size worth
+// holding a camera up to.
+const QR_DIAMETER_DEFAULT = 125;
+const QR_DIAMETER_EXPANDED = 214;
 
 const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
 type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
@@ -198,11 +206,6 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     [namespaceOverride, resolvedEndpoint],
   );
 
-  // The QR owns the process of connecting (QRConnect): this page composes it, and listens for what it reports.
-  const [qr, setQr] = useState<QRConnectState>({ status: 'idle', remoteRoot: null, failureShown: false });
-  const remoteRoot = qr.remoteRoot;
-  // QRConnect is not rendered while registering or recovering, so what it last reported does not apply then.
-  const qrActive = mode !== 'register' && mode !== 'recover';
 
   // Real crypto capability of the page THIS component is actually running
   // on right now — not a string check on "https" (that misses the
@@ -378,6 +381,31 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
     ? buildCleakerNamespaceUrl(resolvedEndpoint, authenticatedHandle)
     : undefined;
 
+  // The process of connecting (what the QR shows, what clicking it does, what is offered when it cannot be reached) is
+  // useCleakerConnection's; this card draws the QR and the way forward, and keeps the form. It is not rendered while
+  // registering or recovering, so nothing connects then.
+  const qrActive = mode !== 'register' && mode !== 'recover';
+  const conn = useCleakerConnection({
+    expression: namespaceRootLabel,
+    onExpressionChange: setNamespaceOverride,
+    localRoot: deriveNamespaceRootLabel(resolvedEndpoint),
+    door: { off: doorOff, checking: doorChecking, layers: doorLayers, probe: probeDoor },
+    sharedRootStatus,
+    onLocalResolved: onBeatleNamespaceResolved,
+    channelExpression: beatleExpression,
+    channelEnabled: qrActive && secureContextOk,
+    // Once a session is open the namespace is whatever it claimed/opened: no way around to offer.
+    failureEnabled: !authenticated,
+  });
+  const remoteRoot = conn.remoteRoot;
+
+  // The username field takes the focus when the form is shown (it used to be `autoFocus`, which focuses synchronously
+  // while the form is being committed: after a click that is also what showed the form, that crashed under Storybook's
+  // act() wrapper). A stable ref callback runs on mount only, and focusing on the next frame is the same for the person.
+  const focusWhenShown = useCallback((element: HTMLInputElement | null) => {
+    if (element) requestAnimationFrame(() => element.focus());
+  }, []);
+
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
@@ -430,38 +458,67 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
           the real Layout/LeftBar around this whole route tree. Removed
           from here entirely rather than duplicated. */}
 
-      {/* The QR is the one control for "where am I connected" and QRConnect owns that whole process (execute on click,
-          the channel, the failure card and its three ways forward). It is skipped in register/recover mode: Claim renders
-          its own, previewing the username typed THERE, and RecoverAccount has no identity to preview yet. This page only
-          composes it and listens for the state it reports. */}
-      {mode !== 'register' && mode !== 'recover' && (
-        <QRConnect
-          expression={namespaceRootLabel}
-          onExpressionChange={setNamespaceOverride}
-          // Editable only pre-auth -- once a real session is open, the namespace is whatever that session actually
-          // claimed/opened, not a guess left to edit further.
-          editable={!authenticated}
-          failureEnabled={!authenticated}
-          localRoot={deriveNamespaceRootLabel(resolvedEndpoint)}
-          door={{ off: doorOff, checking: doorChecking, layers: doorLayers, probe: probeDoor }}
-          sharedRootStatus={sharedRootStatus}
-          onLocalResolved={onBeatleNamespaceResolved}
-          channelExpression={beatleExpression}
-          channelEnabled={secureContextOk}
-          qrValue={qrValue}
-          username={username || undefined}
-          perimeterLabel={perimeterLabel}
-          perimeterHandleHref={perimeterHandleHref}
-          location={typeof window !== 'undefined' ? window.location.origin : undefined}
-          onStateChange={setQr}
+      {/* The QR is the one control for "where am I connected": clicking it runs its expression (see
+          useCleakerConnection). Skipped in register/recover mode: Claim renders its own, previewing the username typed
+          THERE, and RecoverAccount has no identity to preview yet. */}
+      {qrActive && (
+        <Box
+          role="button"
+          tabIndex={0}
           data-gui-node-id={`${nodeId}.qr`}
+          aria-label={conn.executes ? `Connect to ${namespaceRootLabel}` : conn.expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
+          onClick={conn.activate}
+          onKeyDown={(event: React.KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              conn.activate();
+            }
+          }}
+          // A mouse click must not leave a rectangular focus box around the bubble and its label (it read as
+          // something outside the QR); keyboard focus keeps a visible ring.
+          sx={{ cursor: 'pointer', display: 'inline-flex', '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 4, borderRadius: 2 } }}
+        >
+          <QRme
+            value={qrValue}
+            username={username || undefined}
+            diameter={conn.expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
+            hoverFlip={false}
+            clickFlip={false}
+            cursor="pointer"
+            status={conn.status}
+            statusLabel={conn.statusLabel}
+            perimeterLabel={perimeterLabel}
+            perimeterRootLabel={namespaceRootLabel}
+            perimeterHandleHref={perimeterHandleHref}
+            // Editable only pre-auth -- once a real session is open, the namespace is whatever that session actually
+            // claimed/opened, not a guess left to edit further.
+            editableRoot={!authenticated}
+            editableRootValue={namespaceRootLabel}
+            onEditableRootChange={setNamespaceOverride}
+            data-gui-node-id={`${nodeId}.qr.code`}
+            style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+          />
+        </Box>
+      )}
+
+      {qrActive && conn.failureShown && (
+        // One sentence and three ways forward. The layers, the trace and the way to start the environment are behind "Diagnosis".
+        <ConnectFailure
+          expression={namespaceRootLabel}
+          layers={conn.layers}
+          trace={connectTrace.entries().filter((entry) => entry.expression === namespaceRootLabel)}
+          location={typeof window !== 'undefined' ? window.location.origin : undefined}
+          onConnectPublic={() => conn.changeExpression('cleaker.me')}
+          onTryNamespace={conn.changeExpression}
+          onDismiss={conn.dismissFailure}
+          data-gui-node-id={`${nodeId}.connect-failure`}
         />
       )}
 
-      {doorChecking && !remoteRoot ? null : qrActive && qr.failureShown && !authenticated ? (
+      {doorChecking && !remoteRoot ? null : qrActive && conn.failureShown ? (
         // The "Unable to connect" card is QRConnect's, right under the QR: nothing else is offered meanwhile.
         null
-      ) : (remoteRoot ? qr.status !== 'confirmed' : doorOff) ? (
+      ) : (remoteRoot ? conn.status !== 'confirmed' : doorOff) ? (
         // Grey QR (or one still connecting to another host), nothing else: it is the way in. Clicking it executes its
         // expression. Once another host answers, the person is offered "Hello, I am…" there, whether or not this
         // page's own door is up.
@@ -617,7 +674,7 @@ const CleakerIdentityCard: React.FC<CleakerIdentityCardProps> = ({ sx, cleakerEn
                 value={credentialsForm.username}
                 onChange={(e) => credentialsForm.setUsername(e.target.value)}
                 disabled={pending || !secureContextOk}
-                autoFocus
+                inputRef={focusWhenShown}
                 fullWidth
               />
               <TextField

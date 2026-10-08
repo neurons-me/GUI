@@ -42,6 +42,7 @@ import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useDoorLayers, probeDoorLayers, type DoorLayers } from './doorLayers';
+import { ConnectionSeamsContext } from '@/gui/All.This/Cleaker/useCleakerConnection';
 import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
@@ -1388,9 +1389,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // What is behind this door, layer by layer. Distinct from verifiedRoot: that one answers "is the root confirmed",
   // this one answers WHICH layer (nginx / backend / monad) is missing when it is not, and tells "nothing there"
   // (off, grey) from "something answered and refused" (error, red) by who produced the response.
+  // A story or a test may give the reading its own fetch (ConnectionSeams); production passes nothing.
+  const connectionSeams = React.useContext(ConnectionSeamsContext);
   const doorLayers = useDoorLayers({
     origin: typeof window !== 'undefined' ? window.location.origin : '',
     monadTransport: verifiedRoot.transportOrigin,
+    fetchImpl: connectionSeams.fetchImpl,
   });
   const monadOff = doorLayers.monad === 'off';
   const monadChecking = doorLayers.monad === 'checking';
@@ -1554,7 +1558,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin }) }
+            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) }
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,
