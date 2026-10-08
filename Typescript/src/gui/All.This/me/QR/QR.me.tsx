@@ -615,7 +615,30 @@ export default function QRme({
               transform={`translate(${perimeterInset}, ${perimeterInset})`}
             />
           </defs>
-          <circle cx={statusDotCx} cy={statusDotCy} r={statusDotRadius} fill={statusDotColor} />
+          {status === 'error' ? (
+            // A cross, not a red dot: a red circle read as the theme control. "No", drawn.
+            <g stroke={statusDotColor} strokeWidth={Math.max(1.4, statusDotRadius * 0.55)} strokeLinecap="round" data-gui-status-glyph="error">
+              <line x1={statusDotCx - statusDotRadius} y1={statusDotCy - statusDotRadius} x2={statusDotCx + statusDotRadius} y2={statusDotCy + statusDotRadius} />
+              <line x1={statusDotCx - statusDotRadius} y1={statusDotCy + statusDotRadius} x2={statusDotCx + statusDotRadius} y2={statusDotCy - statusDotRadius} />
+            </g>
+          ) : status === 'checking' ? (
+            // A loader, not a yellow dot: something is being tried right now.
+            <circle
+              cx={statusDotCx}
+              cy={statusDotCy}
+              r={statusDotRadius * 0.9}
+              fill="none"
+              stroke={statusDotColor}
+              strokeWidth={Math.max(1.4, statusDotRadius * 0.5)}
+              strokeLinecap="round"
+              strokeDasharray={`${statusDotRadius * 0.9 * 2 * Math.PI * 0.3} ${statusDotRadius * 0.9 * 2 * Math.PI}`}
+              data-gui-status-glyph="loading"
+            >
+              <animateTransform attributeName="transform" type="rotate" from={`0 ${statusDotCx} ${statusDotCy}`} to={`360 ${statusDotCx} ${statusDotCy}`} dur="0.8s" repeatCount="indefinite" />
+            </circle>
+          ) : (
+            <circle cx={statusDotCx} cy={statusDotCy} r={statusDotRadius} fill={statusDotColor} />
+          )}
           <text ref={perimeterTextRef} fontFamily="monospace" fontSize={perimeterFontSize}>
             <textPath href={`#${pathId}`} startOffset={perimeterTextStartOffset}>
               {perimeterPrefixText && (

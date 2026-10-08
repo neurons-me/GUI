@@ -60,17 +60,18 @@ export default function ConnectFailure({ expression, layers, trace = [], locatio
       data-gui-component="ConnectFailure"
       role="group"
       aria-label={`Unable to connect to ${expression}`}
-      sx={{ width: '100%', maxWidth: view === 'diagnosis' ? 460 : 320, mx: 'auto', mt: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 1 }}
+      sx={{ width: '100%', maxWidth: view === 'diagnosis' ? 460 : 320, mx: 'auto', mt: -1.25, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0.75 }}
     >
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'center' }}>
-        Unable to connect to {expression}
+      {/* The namespace is already drawn around the QR (in red); this only says what happened. */}
+      <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'center', width: '100%' }}>
+        Unable to connect
       </Typography>
 
       {view === 'menu' && (
         <>
           {!publicIsThis && <ActionButton primary label={`Connect to ${PUBLIC_NAMESPACE}`} nodeId={`${nodeId}.public`} onClick={onConnectPublic} />}
           <ActionButton label="Try another namespace" nodeId={`${nodeId}.another`} onClick={() => setView('another')} />
-          <ActionButton label="Namespace diagnosis" nodeId={`${nodeId}.diagnosis`} onClick={() => setView('diagnosis')} />
+          <ActionButton label="Diagnosis" nodeId={`${nodeId}.diagnosis`} onClick={() => setView('diagnosis')} />
         </>
       )}
 
