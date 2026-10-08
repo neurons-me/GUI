@@ -6,7 +6,10 @@
  * map-specific tokens: the 8 catalog themes need no manifest changes.
  *
  *   land          background.default
- *   water         mix(land → info.main)            line 45 % (light 60 %), area 18 % (light 26 %)
+ *   water         mix(land → info.main)            line 45 % (light 60 %), area 18 % (light 26 %);
+ *                 a line under 2.25:1 on land (most light modes, CherryByte dark) is pushed
+ *                 further toward info.main (then text.primary) until it reaches 2.25:1, and
+ *                 the area becomes 35 % (light) / 40 % (dark) of that line: subtle, same hue
  *   roads         mix(land → text.primary)         primary 42 %, secondary 32 %, tertiary 24 %, minor 15 %
  *   places        mix(land → text.secondary) 50 %
  *   label / meta  text.primary / text.secondary    (≥ 4.5:1 on land, nudged toward text.primary if needed)
@@ -17,6 +20,9 @@
  *                 when two would look alike (ΔE76 < 15, e.g. a theme whose primary = info),
  *                 the later one takes its next candidate (secondary, …) or, failing that,
  *                 a darker/lighter variant of its own colour
+ *   accent        theme.custom.accent (the manifest's `color.accent`) replaces primary for the
+ *                 primary / port / highlight roles when primary is under 3:1 on land and the
+ *                 accent contrasts better (PrinceOfDarkness dark, Seafoam dark)
  *   states        busy = warning, done = success, highlight = primary (+ glow)
  *   attribution   background.paper @ 85 % / text.secondary
  *
@@ -62,6 +68,8 @@ export type OsmPalette = {
   meta: string;
   halo: string;
   tones: Record<OsmBaseTone, string>;
+  /** The theme accent when it took over the primary role, else null. */
+  accent: string | null;
   /** Domain aliases resolved to distinct colours for this theme. */
   domain: Record<OsmDomainTone, string>;
   states: { busy: string; done: string; highlight: string; glow: string };
@@ -184,6 +192,22 @@ function resolveDomainTones(tones: Record<OsmBaseTone, string>, land: string, te
   return out;
 }
 
+/** Minimum contrast of water lines on land (non-text, decorative but should read as water). */
+export const OSM_WATER_MIN_CONTRAST = 2.25;
+
+function waterColors(land: string, info: string, text: string, light: boolean): { water: string; waterArea: string } {
+  const lineT = light ? 0.6 : 0.45;
+  let water = mix(land, info, lineT);
+  if (contrast(water, land) >= OSM_WATER_MIN_CONTRAST) {
+    return { water, waterArea: mix(land, info, light ? 0.26 : 0.18) };
+  }
+  for (let t = lineT + 0.05; t <= 1.0001 && contrast(water, land) < OSM_WATER_MIN_CONTRAST; t += 0.05) {
+    water = mix(land, info, Math.min(1, t));
+  }
+  water = ensureContrast(water, land, OSM_WATER_MIN_CONTRAST, text);
+  return { water, waterArea: mix(land, water, light ? 0.35 : 0.4) };
+}
+
 /** Build the map palette from a (GUI-built) MUI theme. Pure; safe on the server. */
 export function buildOsmPalette(theme: Theme): OsmPalette {
   const p = theme.palette;
@@ -192,8 +216,12 @@ export function buildOsmPalette(theme: Theme): OsmPalette {
   const textPrimary = flatten(p.text.primary, land);
   const textSecondary = flatten(p.text.secondary, land);
   const tone = (c: string) => ensureContrast(c, land, 3, textPrimary);
+  const themeAccent = typeof (theme as any).custom?.accent === 'string' ? ((theme as any).custom.accent as string) : undefined;
+  const primaryRaw = contrast(flatten(p.primary.main, land), land);
+  const accent = themeAccent && primaryRaw < 3 && contrast(flatten(themeAccent, land), land) > primaryRaw
+    ? flatten(themeAccent, land) : null;
   const tones: Record<OsmBaseTone, string> = {
-    primary: tone(p.primary.main),
+    primary: tone(accent ?? p.primary.main),
     secondary: tone(p.secondary.main),
     info: tone(p.info.main),
     success: tone(p.success.main),
@@ -205,8 +233,7 @@ export function buildOsmPalette(theme: Theme): OsmPalette {
   return {
     mode,
     land,
-    water: mix(land, p.info.main, light ? 0.6 : 0.45),
-    waterArea: mix(land, p.info.main, light ? 0.26 : 0.18),
+    ...waterColors(land, p.info.main, textPrimary, light),
     road: {
       primary: mix(land, textPrimary, 0.42),
       secondary: mix(land, textPrimary, 0.32),
@@ -218,6 +245,7 @@ export function buildOsmPalette(theme: Theme): OsmPalette {
     meta: ensureContrast(textSecondary, land, 4.5, textPrimary),
     halo: land,
     tones,
+    accent,
     domain: resolveDomainTones(tones, land, textPrimary),
     states: {
       busy: tones.warning,

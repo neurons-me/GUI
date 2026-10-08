@@ -11,6 +11,8 @@ import {
   buildOsmPalette,
   contrast,
   deltaE,
+  mix,
+  OSM_WATER_MIN_CONTRAST,
   osmLayerKind,
   osmToneColor,
   type OsmPalette,
@@ -70,12 +72,41 @@ function everyThemeModeIsLegible() {
       assert.ok(contrast(r.secondary, pal.land) > contrast(r.tertiary, pal.land), `${at}: secondary > tertiary`);
       assert.ok(contrast(r.tertiary, pal.land) > contrast(r.minor, pal.land), `${at}: tertiary > minor`);
       assert.ok(contrast(r.primary, pal.land) >= 2, `${at}: primary road ≥ 2:1 on land`);
+      // water lines read as water (≥ 2.25:1, light modes included); areas stay subtle, under the line
+      assert.ok(contrast(pal.water, pal.land) >= OSM_WATER_MIN_CONTRAST, `${at}: water ≥ ${OSM_WATER_MIN_CONTRAST}:1 (${contrast(pal.water, pal.land).toFixed(2)})`);
+      assert.ok(contrast(pal.waterArea, pal.land) > 1.1 && contrast(pal.waterArea, pal.land) < contrast(pal.water, pal.land), `${at}: water area subtle`);
       // the five domain tones stay apart (port / ship / train / yard / queue)
       const d = Object.values(pal.domain);
       for (let i = 0; i < d.length; i++) for (let j = i + 1; j < d.length; j++) {
         assert.ok(deltaE(d[i], d[j]) >= 12, `${at}: domain tones distinct (ΔE ${deltaE(d[i], d[j]).toFixed(1)})`);
       }
     }
+  }
+}
+
+function darkWaterUnchangedAndAccentRule() {
+  // dark modes that already had visible water keep the S2 formula exactly
+  for (const tokens of [neuronsDark, ghostDark, muiDark, seafoamDark]) {
+    const theme = themeOf(tokens, 'dark');
+    const pal = buildOsmPalette(theme);
+    assert.equal(pal.water, mix(pal.land, theme.palette.info.main, 0.45), 'dark water line unchanged');
+    assert.equal(pal.waterArea, mix(pal.land, theme.palette.info.main, 0.18), 'dark water area unchanged');
+  }
+  // CherryByte dark (was 1.87:1) is raised
+  assert.ok(contrast(buildOsmPalette(themeOf(cherryDark, 'dark')).water, buildOsmPalette(themeOf(cherryDark, 'dark')).land) >= OSM_WATER_MIN_CONTRAST);
+  // theme accent takes the primary / port / highlight roles only where primary is weak and accent is stronger
+  for (const [name, tokens, accentHex] of [['Seafoam dark', seafoamDark, 'rgb(240, 183, 164)'], ['PrinceOfDarkness dark', princeDark, 'rgb(0, 209, 178)']] as const) {
+    const pal = buildOsmPalette(themeOf(tokens, 'dark'));
+    assert.equal(pal.accent, accentHex, `${name}: accent used`);
+    assert.equal(pal.tones.primary, accentHex, `${name}: primary tone = accent`);
+    assert.equal(pal.domain.port, accentHex, `${name}: port = accent`);
+    assert.equal(pal.states.highlight, accentHex, `${name}: highlight = accent`);
+    assert.ok(contrast(pal.states.highlight, pal.land) >= 9, `${name}: highlight is vivid`);
+  }
+  for (const [name, tokens, mode] of [['PrinceOfDarkness light', princeLight, 'light'], ['CherryByte light', cherryLight, 'light'], ['CherryByte dark', cherryDark, 'dark'], ['Seafoam light', seafoamLight, 'light'], ['neurons dark', neuronsDark, 'dark']] as const) {
+    const theme = themeOf(tokens, mode);
+    const pal = buildOsmPalette(theme);
+    assert.equal(pal.accent, null, `${name}: primary kept (strong enough, or no accent)`);
   }
 }
 
@@ -139,6 +170,7 @@ function canvasLayersReceiveThePalette() {
 }
 
 everyThemeModeIsLegible();
+darkWaterUnchangedAndAccentRule();
 layerKindsFromIds();
 markerTonesAndStatesFollowTheTheme();
 canvasLayersReceiveThePalette();

@@ -203,7 +203,7 @@ function ThemeCell({ themeId, themeName, mode }: { themeId: string; themeName: s
         <figcaption style={{ font: '11px/1.4 system-ui, sans-serif', padding: '4px 8px', color: theme.palette.text.primary }}>
           <b>{themeName}</b> · {mode}
           <span style={{ color: theme.palette.text.secondary }}>
-            {' '}· label {contrast(pal.label, pal.land).toFixed(1)}:1 · tones ≥ {minTone.toFixed(1)}:1
+            {' '}· label {contrast(pal.label, pal.land).toFixed(1)}:1 · tones ≥ {minTone.toFixed(1)}:1 · water {contrast(pal.water, pal.land).toFixed(1)}:1{pal.accent ? ' · accent' : ''}
           </span>
         </figcaption>
       </figure>
@@ -214,7 +214,8 @@ function ThemeCell({ themeId, themeName, mode }: { themeId: string; themeName: s
 /**
  * All 8 catalog themes × light / dark, each map under its own theme (MUI
  * ThemeProvider built with the same makeMuiTheme as <Theme>). Captions show
- * label and marker-tone contrast against the land colour.
+ * label, marker-tone and water-line contrast against the land colour ("accent" = the
+ * theme's color.accent took the primary/port/highlight role).
  */
 export const ThemesGrid: Story = {
   parameters: { osmFrame: false, layout: 'fullscreen' },
