@@ -68,11 +68,12 @@ export const CanvasLayer: Story = {
   render: (args) => (
     <OpenStreetMap {...args}>
       <OpenStreetMap.Canvas
-        onFrame={({ ctx, now, project, palette }) => {
+        onFrame={({ ctx, now, project, palette, markerScale }) => {
           const p = project(19.1985 + 0.004 * Math.sin(now / 900), -96.132 + 0.006 * Math.cos(now / 900));
           ctx.fillStyle = palette.tones.secondary;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+          // markerScale keeps the dot the same on-screen size as markers at any zoom
+          ctx.arc(p.x, p.y, 6 * markerScale, 0, Math.PI * 2);
           ctx.fill();
         }}
       />

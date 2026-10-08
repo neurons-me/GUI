@@ -2,7 +2,7 @@ import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
 import OpenStreetMap from './OpenStreetMap';
-import type { OsmOverlayPosition } from './context';
+import type { OsmMarkerScaleMode, OsmOverlayPosition } from './context';
 import type { OsmUserView } from './projection';
 import { createOsmProjection } from './projection';
 import { VERACRUZ_BASEMAP, VERACRUZ_FRAME, VERACRUZ_NODES, VERACRUZ_SOURCE } from './OpenStreetMap.veracruz.fixture';
@@ -14,8 +14,11 @@ import { LEGEND_ITEMS, VeracruzMarkers, useKernel } from './OpenStreetMap.story.
 // them, Enter / Space to press, Escape closes the layer panel. At a zoom limit
 // a button stays focusable and reports aria-disabled.
 //
-// S5 note: markers still zoom with the map here; constant on-screen marker
-// size, wheel / pinch / drag come with S5b.1.
+// Zoom / pan (S5b.1): wheel or trackpad pinch zooms about the pointer, drag
+// pans, two fingers pinch, double-click zooms in (shift: out), and the focused
+// map takes arrows / + / − / 0. Only the geometry zooms: markers and labels
+// keep their on-screen size (`markerScale`: 'fit' = their size at zoom 1,
+// 'screen' = CSS px), basemap lines grow gently, the view stays on the map.
 
 type ControlsArgs = {
   live: boolean;
@@ -24,9 +27,11 @@ type ControlsArgs = {
   position: OsmOverlayPosition;
   step: number;
   maxZoom: number;
+  markerScale: OsmMarkerScaleMode;
+  zoomPan: boolean;
 };
 
-function VeracruzControls({ live, layers, defaultLayersOpen, position, step, maxZoom, view, onViewChange }: ControlsArgs & {
+function VeracruzControls({ live, layers, defaultLayersOpen, position, step, maxZoom, markerScale, zoomPan, view, onViewChange }: ControlsArgs & {
   view?: Partial<OsmUserView>;
   onViewChange?: (v: OsmUserView) => void;
 }) {
@@ -39,6 +44,8 @@ function VeracruzControls({ live, layers, defaultLayersOpen, position, step, max
         source={VERACRUZ_SOURCE}
         ariaLabel="Port of Veracruz (OpenStreetMap basemap)"
         maxZoom={maxZoom}
+        markerScale={markerScale}
+        zoomPan={zoomPan}
         view={view}
         onViewChange={onViewChange}
       >
@@ -65,11 +72,12 @@ const meta: Meta<ControlsArgs> = {
         </div>
       ),
   ],
-  args: { live: true, layers: true, defaultLayersOpen: false, position: 'right', step: 2, maxZoom: 16 },
+  args: { live: true, layers: true, defaultLayersOpen: false, position: 'right', step: 2, maxZoom: 16, markerScale: 'fit', zoomPan: true },
   argTypes: {
     position: { control: 'select', options: ['top-left', 'top', 'top-right', 'left', 'right', 'bottom-left', 'bottom', 'bottom-right'] },
     step: { control: { type: 'number', min: 1.1, max: 4, step: 0.1 } },
     maxZoom: { control: { type: 'number', min: 1, max: 32, step: 1 } },
+    markerScale: { control: 'inline-radio', options: ['fit', 'screen'] },
   },
 };
 export default meta;
@@ -118,6 +126,29 @@ export const Controlled: Story = {
 /** Phone-sized frame: controls keep their dock on the right edge, chips wrap below. */
 export const Narrow: Story = {
   parameters: { osmFrame: false },
+  render: (args) => (
+    <div style={{ width: 360, height: 560 }}>
+      <VeracruzControls {...args} />
+    </div>
+  ),
+};
+
+/**
+ * Zoom / pan with constant-size markers: scroll or pinch on the map, drag it,
+ * or focus it and use the arrow keys / + / − / 0. Kernel values stay live.
+ * Starts zoomed in on the terminal so the effect is visible right away.
+ */
+export const ZoomPan: Story = {
+  render: (args) => {
+    const [view, setView] = React.useState<Partial<OsmUserView>>(() => ({ zoom: 3, center: PROJ.unproject(700, 280) }));
+    return <VeracruzControls {...args} view={view} onViewChange={setView} />;
+  },
+};
+
+/** markerScale="screen": marker sizes are CSS px, so a phone-sized map keeps readable pins. */
+export const ScreenSizedMarkers: Story = {
+  parameters: { osmFrame: false },
+  args: { markerScale: 'screen' },
   render: (args) => (
     <div style={{ width: 360, height: 560 }}>
       <VeracruzControls {...args} />
