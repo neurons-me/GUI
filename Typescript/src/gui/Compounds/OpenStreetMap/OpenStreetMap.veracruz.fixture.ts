@@ -16,6 +16,8 @@
  */
 import type { OsmBasemap, OsmSourceMeta } from './OpenStreetMap';
 import type { OsmBBox } from './projection';
+import type { OsmMarkerLabelPlacement, OsmMarkerShape } from './OpenStreetMapMarker';
+import type { OsmMarkerState, OsmMarkerTone } from './mapPalette';
 
 /** Frame build_basemap.py projected into (same as port-gui.js FRAME). */
 export const VERACRUZ_FRAME: { bbox: OsmBBox; width: number; height: number; pad: number } = {
@@ -32,6 +34,21 @@ export const VERACRUZ_SOURCE: OsmSourceMeta = {
   notes: 'static SVG basemap · no live tiles · coordinates rounded and simplified for the story',
   license: 'ODbL',
 };
+
+/** The port page's main nodes, in its map pixels (port-gui.js), with tones / states for the stories. */
+export type VeracruzNode = {
+  id: string; x: number; y: number; shape: OsmMarkerShape; size?: number; width?: number; height?: number;
+  gap: number; place?: OsmMarkerLabelPlacement; icon: string; tone: OsmMarkerTone; state?: OsmMarkerState; label: string; meta: string;
+};
+export const VERACRUZ_NODES: VeracruzNode[] = [
+  { id: 'n-port', x: 600.0, y: 255.4, shape: 'circle', size: 28, gap: 7, icon: 'anchor', tone: 'port', state: 'highlight', label: 'VERACRUZ', meta: 'port.busy = true' },
+  { id: 'n-ship1', x: 801.6, y: 168.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'busy', label: 'SHIP[1] coffee', meta: 'unloading' },
+  { id: 'n-ship2', x: 888.0, y: 284.3, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', label: 'SHIP[2] sugar', meta: 'waiting' },
+  { id: 'n-ship3', x: 945.6, y: 382.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'done', label: 'SHIP[3] TEU', meta: 'done' },
+  { id: 'n-train', x: 340.8, y: 342.2, shape: 'rect', width: 36, height: 16, gap: 5, place: 'left', icon: 'train', tone: 'train', label: 'TRAIN[1]', meta: 'loading' },
+  { id: 'n-qimp', x: 686.4, y: 313.2, shape: 'circle', size: 24, gap: 4, icon: 'local_shipping', tone: 'queue', label: 'Q.IMPORT', meta: '3 queued' },
+  { id: 'n-yard', x: 513.6, y: 457.8, shape: 'square', size: 28, gap: 7, icon: 'warehouse', tone: 'yard', label: 'CARGO YARD · CEDIS A', meta: 'pool' },
+];
 
 export const VERACRUZ_BASEMAP: OsmBasemap = {
   background: '#0b0d10',

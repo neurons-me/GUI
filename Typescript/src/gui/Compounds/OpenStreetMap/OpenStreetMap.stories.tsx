@@ -6,10 +6,9 @@ import { themeTokens } from '@/gui/Theme/styles/theme.tokens';
 import { GuiThemes } from '@/gui/Theme/utils/catalog';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmBasemap } from './OpenStreetMap';
-import type { OsmMarkerShape, OsmMarkerLabelPlacement } from './OpenStreetMapMarker';
 import { createOsmProjection } from './projection';
-import { buildOsmPalette, contrast, type OsmMarkerState, type OsmMarkerTone } from './mapPalette';
-import { VERACRUZ_BASEMAP, VERACRUZ_FRAME, VERACRUZ_SOURCE } from './OpenStreetMap.veracruz.fixture';
+import { buildOsmPalette, contrast } from './mapPalette';
+import { VERACRUZ_BASEMAP, VERACRUZ_FRAME, VERACRUZ_NODES, VERACRUZ_SOURCE } from './OpenStreetMap.veracruz.fixture';
 
 // Demo frame only: two hand-written strokes stand in for a project's
 // pre-projected basemap (a real page passes the layers its own generator made).
@@ -87,20 +86,6 @@ export const CanvasLayer: Story = {
 // projection, exactly as port-gui.js does. Tones replace the page's
 // `.node.ship / .train / .port / .yard / .queue` CSS, states its `.busy / .done / .hl`.
 const VERACRUZ_PROJ = createOsmProjection(VERACRUZ_FRAME);
-type VeracruzNode = {
-  id: string; x: number; y: number; shape: OsmMarkerShape; size?: number; width?: number; height?: number;
-  gap: number; place?: OsmMarkerLabelPlacement; icon: string; tone: OsmMarkerTone; state?: OsmMarkerState; label: string; meta: string;
-};
-const VERACRUZ_NODES: VeracruzNode[] = [
-  { id: 'n-port', x: 600.0, y: 255.4, shape: 'circle', size: 28, gap: 7, icon: 'anchor', tone: 'port', state: 'highlight', label: 'VERACRUZ', meta: 'port.busy = true' },
-  { id: 'n-ship1', x: 801.6, y: 168.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'busy', label: 'SHIP[1] coffee', meta: 'unloading' },
-  { id: 'n-ship2', x: 888.0, y: 284.3, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', label: 'SHIP[2] sugar', meta: 'waiting' },
-  { id: 'n-ship3', x: 945.6, y: 382.6, shape: 'rect', width: 32, height: 18, gap: 5, icon: 'directions_boat', tone: 'ship', state: 'done', label: 'SHIP[3] TEU', meta: 'done' },
-  { id: 'n-train', x: 340.8, y: 342.2, shape: 'rect', width: 36, height: 16, gap: 5, place: 'left', icon: 'train', tone: 'train', label: 'TRAIN[1]', meta: 'loading' },
-  { id: 'n-qimp', x: 686.4, y: 313.2, shape: 'circle', size: 24, gap: 4, icon: 'local_shipping', tone: 'queue', label: 'Q.IMPORT', meta: '3 queued' },
-  { id: 'n-yard', x: 513.6, y: 457.8, shape: 'square', size: 28, gap: 7, icon: 'warehouse', tone: 'yard', label: 'CARGO YARD · CEDIS A', meta: 'pool' },
-];
-
 function VeracruzMarkers() {
   return (
     <>
