@@ -51,6 +51,18 @@ import OpenStreetMapControls from './OpenStreetMapControls';
 import { osmLayerLabel, useOsmLayersState, useOsmViewState, type OsmLayersProps, type OsmViewProps } from './viewport';
 import type { OsmMarkerDefaults, OsmMarkerScaleMode, OsmViewport } from './context';
 import { osmIsMac, useOsmGestures, type OsmGestureOptions } from './gestures';
+import OpenStreetMapMarkerList from './OpenStreetMapMarkerList';
+import {
+  createOsmMarkerStore,
+  useOsmMarkerList,
+  useOsmSelectionState,
+  type OsmLink,
+  type OsmSelectionChangeInfo,
+  type OsmSelectionProps,
+  type OsmSelectionSource,
+} from './selection';
+import { useOsmPinLayout } from './usePinLayout';
+import { osmPinActivation, type OsmRect } from './pinLayout';
 import { osmLayerKind, osmLayerPaint, osmPaletteCssVars, useOsmPalette, type OsmLayerKind, type OsmPalette } from './mapPalette';
 
 export type OsmBasemapLayerStyle = {
@@ -98,7 +110,9 @@ export type OsmSourceMeta = {
 
 export type OsmAttributionPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
 
-export type OpenStreetMapProps = OsmViewProps & OsmLayersProps & {
+export type OpenStreetMapProps = OsmViewProps & OsmLayersProps & OsmSelectionProps & {
+  /** Share markers / selection with an OpenStreetMap.MarkerList rendered outside the map (useOpenStreetMapLink()). */
+  link?: OsmLink;
   /** Geographic bounds the basemap was projected from. */
   bbox: OsmBBox;
   /** Map frame size in map pixels (the basemap's viewBox). Default 1200×800. */
@@ -282,6 +296,8 @@ const DOCK_CSS = [
   '.gui-osm[data-osm-dragging]{cursor:grabbing!important}',
   '.gui-osm:focus-visible{outline:2px solid var(--gui-osm-overlay-accent);outline-offset:-2px}',
   '.gui-osm__overlays .gui-osm__dock>*{cursor:auto}',
+  '.gui-osm-marker[role=button]{cursor:pointer;outline:none}',
+  '.gui-osm-marker:focus-visible .gui-osm-marker__focus{stroke:var(--gui-osm-overlay-accent)}',
   '.gui-osm-control:hover:not([aria-disabled=true]){border-color:var(--gui-osm-overlay-accent)}',
   '.gui-osm-control:focus-visible{outline:2px solid var(--gui-osm-overlay-accent);outline-offset:2px;position:relative;z-index:1}',
 ].join('');
@@ -315,6 +331,10 @@ function OpenStreetMapRoot({
   markerDefaults,
   zoomPan = true,
   markerScale: markerScaleMode = 'fit',
+  selected,
+  defaultSelected,
+  onSelectionChange,
+  link,
   overlayInset = 10,
   overlayGap = 8,
   onTransformChange,
@@ -398,9 +418,76 @@ function OpenStreetMapRoot({
   const [docksReady, setDocksReady] = React.useState(false);
   useIsoLayoutEffect(() => setDocksReady(true), []);
   const getDock = React.useCallback((position: OsmOverlayPosition) => dockEls.current[position] ?? null, []);
+  // ── pin selection (S5b.2) ──
+  const [markerStore] = React.useState(createOsmMarkerStore);
+  const markerList = useOsmMarkerList(markerStore);
+  const [announcement, setAnnouncement] = React.useState('');
+  const announceChange = React.useCallback((ids: string[], info: OsmSelectionChangeInfo) => {
+    const total = markerStore.list().length;
+    const name = info.id ? markerStore.get(info.id)?.label || info.id : null;
+    const what = name ? `${name} ${info.selected ? 'selected' : 'deselected'}. ` : ids.length ? '' : 'Selection cleared. ';
+    setAnnouncement(`${what}${ids.length} of ${total} pins selected.`);
+  }, [markerStore]);
+  const selection = useOsmSelectionState({ selected, defaultSelected, onSelectionChange }, announceChange);
+  const [pinFocus, setPinFocus] = React.useState<string | null>(null);
+  const [obstacles, setObstacles] = React.useState<OsmRect[]>([]);
+  const [fontFamily, setFontFamily] = React.useState<string | undefined>(undefined);
+  const measureObstacles = React.useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r0 = el.getBoundingClientRect();
+    const pad = 4;
+    const next: OsmRect[] = [];
+    el.querySelectorAll('.gui-osm__dock > *, .gui-osm__attribution').forEach((node) => {
+      const r = (node as HTMLElement).getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        next.push({ x: Math.round(r.left - r0.left - pad), y: Math.round(r.top - r0.top - pad), w: Math.round(r.width + 2 * pad), h: Math.round(r.height + 2 * pad) });
+      }
+    });
+    setObstacles((prev) => (prev.length === next.length && prev.every((a, i) => a.x === next[i].x && a.y === next[i].y && a.w === next[i].w && a.h === next[i].h) ? prev : next));
+  }, []);
+  // overlays can change size without a root render (bound chip values, an opened panel)
+  useIsoLayoutEffect(() => {
+    if (!selection.enabled) return;
+    measureObstacles();
+  });
+  useIsoLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!selection.enabled || !el) return undefined;
+    setFontFamily(getComputedStyle(el).fontFamily || undefined);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => measureObstacles());
+    el.querySelectorAll('.gui-osm__dock, .gui-osm__attribution').forEach((d) => ro.observe(d));
+    return () => ro.disconnect();
+  }, [selection.enabled, measureObstacles, docksReady]);
+  const pinLayout = useOsmPinLayout(selection.enabled, { markers: markerList, selected: selection.ids, transform, obstacles, focusId: pinFocus, fontFamily });
+  const pinLayoutRef = React.useRef(pinLayout);
+  pinLayoutRef.current = pinLayout;
+  const showPin = React.useCallback((id: string) => {
+    const m = markerStore.get(id);
+    if (!m) return;
+    viewportRef.current.panTo(m.lat, m.lon, 'pin', { animate: true });
+    setAnnouncement(`Showing ${m.label || id} on the map.`);
+  }, [markerStore]);
+  const selectionRef = React.useRef(selection);
+  selectionRef.current = selection;
+  const activatePin = React.useCallback((id: string, source: OsmSelectionSource) => {
+    if (osmPinActivation(pinLayoutRef.current?.get(id)) === 'pan') showPin(id);
+    else selectionRef.current.toggle(id, source);
+  }, [showPin]);
+  React.useEffect(() => {
+    if (!link) return undefined;
+    link.publish({ store: markerStore, selection, palette, showPin });
+    return undefined;
+  }, [link, markerStore, selection, palette, showPin]);
+  React.useEffect(() => () => link?.publish(null), [link]);
+
   const contextValue = React.useMemo(
-    () => ({ transform, transformRef, palette, paletteRef, getDock, docksReady, viewport, layers, markerDefaults: markerDefaultsValue }),
-    [transform, palette, getDock, docksReady, viewport, layers, markerDefaultsValue],
+    () => ({
+      transform, transformRef, palette, paletteRef, getDock, docksReady, viewport, layers, markerDefaults: markerDefaultsValue,
+      selection, markerStore, pinLayout, setPinFocus, activatePin, showPin,
+    }),
+    [transform, palette, getDock, docksReady, viewport, layers, markerDefaultsValue, selection, markerStore, pinLayout, activatePin, showPin],
   );
   const themed = basemapStyle !== 'source';
 
@@ -411,7 +498,8 @@ function OpenStreetMapRoot({
   const svgChildren: React.ReactNode[] = [];
   const canvasLayers: React.ReactNode[] = [];
   const docks: OsmOverlayDocks = {};
-  const { interactive } = partitionLayers(children, svgChildren, canvasLayers, docks);
+  const { interactive: clickable } = partitionLayers(children, svgChildren, canvasLayers, docks);
+  const interactive = clickable || selection.enabled;
 
   const license = source?.license ?? OSM_ATTRIBUTION.license;
   const metadata = {
@@ -541,6 +629,16 @@ function OpenStreetMapRoot({
             {attribution?.extra ? <> · {attribution.extra}</> : null}
           </div>
         </div>
+        {selection.enabled ? (
+          <div
+            className="gui-osm__announce"
+            role="status"
+            aria-live="polite"
+            style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+          >
+            {announcement}
+          </div>
+        ) : null}
         {gestures && gestures.wheel !== false ? (
           <div
             className="gui-osm__hint"
@@ -579,6 +677,7 @@ type OpenStreetMapComponent = typeof OpenStreetMapRoot & {
   LegendRow: typeof OpenStreetMapLegendRow;
   Chip: typeof OpenStreetMapChip;
   Controls: typeof OpenStreetMapControls;
+  MarkerList: typeof OpenStreetMapMarkerList;
   useMap: typeof useOpenStreetMap;
   usePalette: typeof useOpenStreetMapPalette;
 };
@@ -591,6 +690,7 @@ const OpenStreetMap = Object.assign(OpenStreetMapRoot, {
   LegendRow: OpenStreetMapLegendRow,
   Chip: OpenStreetMapChip,
   Controls: OpenStreetMapControls,
+  MarkerList: OpenStreetMapMarkerList,
   useMap: useOpenStreetMap,
   usePalette: useOpenStreetMapPalette,
 }) as OpenStreetMapComponent;

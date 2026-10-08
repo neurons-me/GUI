@@ -1,6 +1,8 @@
 import * as React from 'react';
 import type { OsmTransform, OsmUserView } from './projection';
 import type { OsmLayerKind, OsmMarkerTone, OsmPalette } from './mapPalette';
+import type { OsmMarkerStore, OsmSelectionSource, OsmSelectionState } from './selection';
+import type { OsmPinLayoutEntry } from './usePinLayout';
 
 export type OpenStreetMapContextValue = {
   /** Transform as of the last render (re-renders when the container resizes). */
@@ -25,9 +27,21 @@ export type OpenStreetMapContextValue = {
   layers: OsmLayersState;
   /** Defaults for markers that do not set these props themselves. */
   markerDefaults: OsmMarkerDefaults;
+  /** Pin selection (enabled only with `selected` / `defaultSelected`). */
+  selection: OsmSelectionState;
+  /** Markers on the map (registered by OpenStreetMap.Marker). */
+  markerStore: OsmMarkerStore;
+  /** Screen-space layout of selected pins (edge pins, labels); null outside selection mode or before measuring. */
+  pinLayout: Map<string, OsmPinLayoutEntry> | null;
+  /** Hovered / focused pin (label priority). */
+  setPinFocus(id: string | null): void;
+  /** Click / Enter / Space on a pin: an edge pin pans the map to it, others toggle. */
+  activatePin(id: string, source: OsmSelectionSource): void;
+  /** Pan (animated unless reduced motion) so a pin is in view. */
+  showPin(id: string): void;
 };
 
-export type OsmViewSource = 'button' | 'keyboard' | 'wheel' | 'drag' | 'pinch' | 'reset' | 'api';
+export type OsmViewSource = 'button' | 'keyboard' | 'wheel' | 'drag' | 'pinch' | 'reset' | 'pin' | 'api';
 
 /**
  * How markers (and other screen-space symbols) are sized while the map zooms.
@@ -48,8 +62,11 @@ export type OsmViewport = {
   zoomBy(factor: number, source?: OsmViewSource, at?: { x: number; y: number }): void;
   /** Move the map content by (dx, dy) CSS px (a drag). */
   panBy(dx: number, dy: number, source?: OsmViewSource): void;
-  /** Centre the view on a point (S5b.2 uses this for edge pins). */
-  panTo(lat: number, lon: number, source?: OsmViewSource): void;
+  /**
+   * Centre the view on a point. `animate` eases the pan (~280 ms); it is instant
+   * under prefers-reduced-motion or without requestAnimationFrame.
+   */
+  panTo(lat: number, lon: number, source?: OsmViewSource, options?: { animate?: boolean }): void;
   reset(source?: OsmViewSource): void;
 };
 

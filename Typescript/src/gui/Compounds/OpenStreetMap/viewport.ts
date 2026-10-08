@@ -75,8 +75,13 @@ export function useOsmViewState(projection: OsmProjection, fit: OsmView, props: 
   const onChangeRef = React.useRef(props.onViewChange);
   onChangeRef.current = props.onViewChange;
 
+  const anim = React.useRef(0);
   const commit = React.useCallback(
-    (next: OsmViewState, source: OsmViewSource) => {
+    (next: OsmViewState, source: OsmViewSource, fromAnimation = false) => {
+      if (!fromAnimation && anim.current && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(anim.current);
+        anim.current = 0;
+      }
       const c = clamp(next);
       if (same(c, stateRef.current)) return;
       stateRef.current = c;
@@ -96,9 +101,25 @@ export function useOsmViewState(projection: OsmProjection, fit: OsmView, props: 
       setView: (v, source = 'api') => commit(toState(v, stateRef.current), source),
       zoomBy: (factor, source = 'api', at) => commit(zoomOsmViewStateAt(fitRef.current, stateRef.current, factor, at), source),
       panBy: (dx, dy, source = 'api') => commit(panOsmViewState(fitRef.current, stateRef.current, dx, dy), source),
-      panTo: (lat, lon, source = 'api') => {
+      panTo: (lat, lon, source = 'api', options) => {
         const p = projection.project(lat, lon);
-        commit({ ...stateRef.current, cx: p.x, cy: p.y }, source);
+        const from = stateRef.current;
+        const to = clamp({ ...from, cx: p.x, cy: p.y });
+        const reduced = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!options?.animate || reduced || typeof requestAnimationFrame !== 'function') {
+          commit(to, source);
+          return;
+        }
+        if (anim.current) cancelAnimationFrame(anim.current);
+        const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const dur = 280;
+        const step = (now: number) => {
+          const k = Math.min(1, (now - t0) / dur);
+          const e = 1 - Math.pow(1 - k, 3);
+          commit({ ...to, cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e }, source, true);
+          anim.current = k < 1 ? requestAnimationFrame(step) : 0;
+        };
+        anim.current = requestAnimationFrame(step);
       },
       reset: (source = 'reset') => commit(fitState, source),
     }),

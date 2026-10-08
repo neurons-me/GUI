@@ -4,6 +4,8 @@ import { useOpenStreetMapContext } from './context';
 import { osmToneColor, mix, type OsmMarkerState, type OsmMarkerTone } from './mapPalette';
 import { useBoundValue } from './bindings';
 import { useRegisterGuiNode } from '@/runtime/selection';
+import { OSM_LABEL_LINE, OSM_DOT_RADIUS, OSM_PIN_ARROW } from './pinLayout';
+import { osmNodeText } from './selection';
 import type { GuiNodeProvenance } from '@/types/gui.types';
 
 export type OsmMarkerShape = 'circle' | 'square' | 'triangle' | 'rect' | 'icon';
@@ -142,14 +144,39 @@ function useStableProvenance(provenance: GuiNodeProvenance | undefined): GuiNode
   return React.useMemo(() => provenance, [key]);
 }
 
+const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
+
 export default function OpenStreetMapMarker(props: OsmMarkerProps) {
-  const { transform: map, palette, markerDefaults } = useOpenStreetMapContext();
+  const { transform: map, palette, markerDefaults, selection, markerStore, pinLayout, setPinFocus, activatePin } = useOpenStreetMapContext();
   const v = useBoundProps(props);
   const provenance = useStableProvenance(props.provenance);
   useRegisterGuiNode(props.nodeId, 'OpenStreetMap.Marker', undefined, provenance);
   const lat = toNumber(v.lat);
   const lon = toNumber(v.lon);
-  if (v.visible === false || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const markerId = props.id ?? props.nodeId;
+  const [order] = React.useState(() => markerStore.nextOrder());
+  const shown = v.visible !== false && Number.isFinite(lat) && Number.isFinite(lon);
+  const regShape: OsmMarkerShape = (v.shape as OsmMarkerShape) || markerDefaults?.shape || 'circle';
+  const regSize = Number.isFinite(toNumber(v.size)) ? toNumber(v.size) : markerDefaults?.size ?? 10;
+  const regTone = (v.tone as OsmMarkerTone | undefined) || (v.color ? undefined : markerDefaults?.tone) || undefined;
+  const regState = ((v.state as OsmMarkerState | undefined) || 'default') as OsmMarkerState;
+  const regColor = regState === 'busy' ? palette.states.busy : regState === 'done' ? palette.states.done : (v.color as string) || osmToneColor(palette, regTone);
+  const labelText = osmNodeText(v.label);
+  const metaText = osmNodeText(v.meta);
+  // tell the map about this marker (list, label layout, edge pins)
+  useIsoLayoutEffect(() => {
+    if (!markerId || !shown) return;
+    markerStore.set({
+      id: markerId, lat, lon, shape: regShape, size: regSize, width: props.width, height: props.height,
+      icon: v.icon ? String(v.icon) : undefined, tone: regTone, state: regState, color: regColor,
+      label: labelText || undefined, meta: metaText || undefined, labelPlacement: props.labelPlacement, labelOffset: props.labelOffset, order,
+    });
+  });
+  useIsoLayoutEffect(() => {
+    if (!markerId || !shown) return undefined;
+    return () => markerStore.remove(markerId);
+  }, [markerStore, markerId, shown]);
+  if (!shown) return null;
 
   const shape: OsmMarkerShape = (v.shape as OsmMarkerShape) || markerDefaults?.shape || 'circle';
   const size = Number.isFinite(toNumber(v.size)) ? toNumber(v.size) : markerDefaults?.size ?? 10;
@@ -183,11 +210,123 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
     : { x: halfW + gap, y: twoLines ? -3 : 3.5, anchor: 'start' as const };
   const metaPos = twoLines ? { ...labelPos, y: labelPos.y + 12 } : { ...labelPos, y: labelPos.y + 11 };
 
+  // ── selection mode (S5b.2): unselected = small dot, selected = full pin ──
+  const selectable = selection.enabled && Boolean(markerId);
+  const isSelected = selectable && selection.has(markerId!);
+  const entry = isSelected ? pinLayout?.get(markerId!) : undefined;
+  const name = [labelText || props.title || markerId, metaText].filter(Boolean).join(', ');
+  const pinHandlers = selectable
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        'aria-pressed': isSelected,
+        'aria-label': entry?.clamped ? `${name}, ${entry.reason === 'occluded' ? 'under an overlay' : 'off view'}, press to show on the map` : name,
+        'data-selected': isSelected ? 'true' : 'false',
+        onClick: (e: React.MouseEvent<SVGGElement>) => {
+          props.onClick?.(e);
+          activatePin(markerId!, 'map');
+        },
+        onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            activatePin(markerId!, 'keyboard');
+          }
+        },
+        onFocus: () => setPinFocus(markerId!),
+        onBlur: () => setPinFocus(null),
+        onPointerEnter: () => setPinFocus(markerId!),
+        onPointerLeave: () => setPinFocus(null),
+      }
+    : null;
+  const classes = ['gui-osm-marker', tone ? `gui-osm-marker--${tone}` : null, state !== 'default' ? `gui-osm-marker--${state}` : null, props.className];
+
+  if (selectable && !isSelected) {
+    // constant CSS-px dot (1 unit = 1 CSS px), 24 px hit target
+    const s = map.view.scale > 0 ? 1 / map.view.scale : map.view.markerScale ?? 1;
+    return (
+      <g
+        id={props.id}
+        className={[...classes, 'gui-osm-marker--dot'].filter(Boolean).join(' ')}
+        transform={markerTransform(x, y, s)}
+        style={state === 'dimmed' ? { opacity: 0.3, ...props.style } : props.style}
+        data-gui-component="OpenStreetMap.Marker"
+        data-gui-node-id={props.nodeId || props['data-gui-node-id'] || undefined}
+        data-testid={props['data-testid']}
+        data-tone={tone}
+        data-state={state !== 'default' ? state : undefined}
+        data-lat={lat}
+        data-lon={lon}
+        {...pinHandlers}
+      >
+        <title>{name}</title>
+        <circle className="gui-osm-marker__hit" r={12} fill="transparent" />
+        <circle className="gui-osm-marker__focus" r={7.5} fill="none" stroke="transparent" strokeWidth={2} />
+        <circle className="gui-osm-marker__core gui-osm-marker__dot" r={OSM_DOT_RADIUS} fill={color} stroke={palette.halo} strokeWidth={1.5} />
+      </g>
+    );
+  }
+
+  // selected pin: drawn at its layout spot (edge / occluded pins move, with an arrow)
+  let gx = x;
+  let gy = y;
+  let arrow: React.ReactNode = null;
+  let labelEl: React.ReactNode | undefined;
+  if (entry && map.view.scale > 0) {
+    const k = entry.k;
+    gx = (entry.x - map.view.offsetX) / map.view.scale;
+    gy = (entry.y - map.view.offsetY) / map.view.scale;
+    if (entry.clamped && entry.angle !== undefined) {
+      // start the arrow at the pin's box edge in the arrow's direction (a wide rect's arrow
+      // pointing up starts at halfH, not halfW), so it stays inside the layout's arrow allowance
+      const ca = Math.abs(Math.cos(entry.angle));
+      const sa = Math.abs(Math.sin(entry.angle));
+      const r = Math.min(ca > 1e-6 ? halfW / ca : Infinity, sa > 1e-6 ? halfH / sa : Infinity) + 2;
+      const deg = Math.round((entry.angle * 180) / Math.PI * 10) / 10;
+      arrow = (
+        <g className="gui-osm-marker__arrow" transform={`rotate(${deg})`} data-angle={deg}>
+          <polygon points={`${round(r + OSM_PIN_ARROW)},0 ${round(r)},-4.5 ${round(r)},4.5`} fill={color} stroke={palette.halo} strokeWidth={1.5} strokeLinejoin="round" paintOrder="stroke" />
+        </g>
+      );
+    }
+    const pl = entry.label;
+    if (pl && pl.kind !== 'collapsed') {
+      const lx = round((pl.box.x - entry.x) / k + 1.5);
+      const ly = (pl.box.y - entry.y) / k;
+      labelEl = (
+        <>
+          {pl.kind === 'leader' ? (
+            <line
+              className="gui-osm-marker__leader"
+              x1={round((pl.from.x - entry.x) / k)}
+              y1={round((pl.from.y - entry.y) / k)}
+              x2={round((pl.to.x - entry.x) / k)}
+              y2={round((pl.to.y - entry.y) / k)}
+              stroke={palette.meta}
+              strokeWidth={1}
+            />
+          ) : null}
+          {labelText ? (
+            <text className="gui-osm-marker__label" x={lx} y={round(ly + 10)} textAnchor="start" fontSize={10} fontWeight={highlight ? 600 : undefined} fill={palette.label} {...haloProps}>
+              {v.label as React.ReactNode}
+            </text>
+          ) : null}
+          {hasMeta ? (
+            <text className="gui-osm-marker__meta" x={lx} y={round(ly + OSM_LABEL_LINE + 8.5)} textAnchor="start" fontSize={9} fill={palette.meta} {...haloProps}>
+              {v.meta as React.ReactNode}
+            </text>
+          ) : null}
+        </>
+      );
+    } else if (pl && pl.kind === 'collapsed') {
+      labelEl = null; // shown on hover / focus (it then gets priority), in the list and in the accessible name
+    }
+  }
+
   return (
     <g
       id={props.id}
-      className={['gui-osm-marker', tone ? `gui-osm-marker--${tone}` : null, state !== 'default' ? `gui-osm-marker--${state}` : null, props.className].filter(Boolean).join(' ')}
-      transform={markerTransform(x, y, map.view.markerScale)}
+      className={[...classes, isSelected ? 'gui-osm-marker--selected' : null, entry?.clamped ? 'gui-osm-marker--edge' : null, entry?.label?.kind === 'collapsed' ? 'gui-osm-marker--collapsed' : null].filter(Boolean).join(' ')}
+      transform={markerTransform(gx, gy, map.view.markerScale)}
       style={state === 'dimmed' ? { opacity: 0.3, ...props.style } : props.style}
       onClick={props.onClick}
       data-gui-component="OpenStreetMap.Marker"
@@ -199,8 +338,12 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
       data-lon={lon}
       data-x={round(x)}
       data-y={round(y)}
+      data-label-slot={entry?.label ? (entry.label.kind === 'collapsed' ? 'collapsed' : `${entry.label.kind === 'leader' ? 'leader:' : ''}${entry.label.slot}`) : undefined}
+      {...pinHandlers}
     >
-      {props.title ? <title>{props.title}</title> : null}
+      {selectable ? <title>{name}</title> : props.title ? <title>{props.title}</title> : null}
+      {selectable ? <circle className="gui-osm-marker__focus" r={Math.max(halfW, halfH) + 4} fill="none" stroke="transparent" strokeWidth={2} /> : null}
+      {arrow}
       <MarkerCore
         shape={shape}
         size={size}
@@ -222,12 +365,12 @@ export default function OpenStreetMapMarker(props: OsmMarkerProps) {
           </div>
         </foreignObject>
       ) : null}
-      {v.label !== undefined && v.label !== null && v.label !== '' ? (
+      {labelEl !== undefined ? labelEl : v.label !== undefined && v.label !== null && v.label !== '' ? (
         <text className="gui-osm-marker__label" x={labelPos.x} y={labelPos.y} textAnchor={labelPos.anchor} fontSize={10} fontWeight={highlight ? 600 : undefined} fill={palette.label} {...haloProps}>
           {v.label as React.ReactNode}
         </text>
       ) : null}
-      {hasMeta ? (
+      {labelEl !== undefined ? null : hasMeta ? (
         <text className="gui-osm-marker__meta" x={metaPos.x} y={metaPos.y} textAnchor={metaPos.anchor} fontSize={9} fill={palette.meta} {...haloProps}>
           {v.meta as React.ReactNode}
         </text>

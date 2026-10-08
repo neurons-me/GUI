@@ -19,6 +19,14 @@ export type { OsmLegendProps, OsmLegendItem, OsmLegendRowProps, OsmSwatch, OsmSw
 export { default as OpenStreetMapChip } from './OpenStreetMapChip';
 export type { OsmChipProps } from './OpenStreetMapChip';
 export { default as OpenStreetMapControls } from './OpenStreetMapControls';
+export { default as OpenStreetMapMarkerList } from './OpenStreetMapMarkerList';
+export type { OsmMarkerListProps } from './OpenStreetMapMarkerList';
+export { toggleOsmSelection, useOsmSelectionState, createOsmMarkerStore, createOsmLink, useOpenStreetMapLink, useOsmMarkerList } from './selection';
+export type { OsmSelectionProps, OsmSelectionSource, OsmSelectionChangeInfo, OsmSelectionState, OsmMarkerInfo, OsmMarkerStore, OsmLink, OsmLinkSnapshot } from './selection';
+export { osmEdgePin, placeOsmLabels, osmSlotBox, osmSlotOrder, osmLabelPriority, osmPinActivation, OSM_LABEL_SLOTS, OSM_LABEL_PUSH, OSM_PIN_ARROW } from './pinLayout';
+export type { OsmRect, OsmEdgePin, OsmLabelItem, OsmLabelPlacement, OsmLabelSlot } from './pinLayout';
+export { computeOsmPinLayout, measureOsmText, osmLabelBox } from './usePinLayout';
+export type { OsmPinLayoutEntry } from './usePinLayout';
 export type { OsmControlsProps } from './OpenStreetMapControls';
 export { useOsmViewState, useOsmLayersState, osmLayerLabel } from './viewport';
 export type { OsmViewProps, OsmLayersProps, OsmViewChangeInfo } from './viewport';
