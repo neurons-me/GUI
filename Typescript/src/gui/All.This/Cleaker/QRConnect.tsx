@@ -41,6 +41,7 @@ import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
+import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
 import type { CleakerRootStatus } from '@/react/session/verifiedCleakerRoot';
 import type { DoorLayers } from '@/react/session/doorLayers';
@@ -181,7 +182,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // SeedSessionProvider.tsx's openExistingNamespace — signing in no longer
   // silently claims an unrecognized username). This just toggles which one
   // renders; Claim itself calls the real registerWithCredentials().
-  const [mode, setMode] = useState<'signin' | 'register' | 'recover'>('signin');
+  const [mode, setMode] = useState<'signin' | 'register' | 'recover' | 'link'>('signin');
   // Claiming a namespace flips `authenticated` true the instant the claim
   // succeeds (SeedSessionProvider's registerWithCredentials commits the
   // session before Claim gets to run its own post-claim backup step)
@@ -615,6 +616,13 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
           onSwitchToSignIn={() => setMode('signin')}
           onRegistered={() => setRegistrationComplete(true)}
         />
+      ) : mode === 'link' ? (
+        // Its own form, not part of Register: it creates nothing, it presents an identity that is already open in
+        // another link of this context and asks for the claim here.
+        <LinkIdentity
+          namespace={namespaceRootLabel}
+          onSwitchToSignIn={() => setMode('signin')}
+        />
       ) : mode === 'recover' ? (
         // Same reasoning as the register branch above — RecoverAccount is
         // its own complete page (own heading, own back-link), not another
@@ -812,6 +820,23 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               Recover Account
             </Box>
           </Box>
+          )}
+          {/* Only when the local context holds an open identity that is not linked under this root yet. */}
+          {!remoteRoot && linkableIdentities(seedSessionCtx?.heldIdentities ?? [], namespaceRootLabel).length > 0 && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => setMode('link')}
+              disabled={!secureContextOk}
+              data-gui-node-id={`${nodeId}.link`}
+              sx={{
+                alignSelf: 'center', background: 'transparent', border: 0, color: 'text.secondary',
+                cursor: secureContextOk ? 'pointer' : 'not-allowed', opacity: secureContextOk ? 1 : 0.5,
+                fontSize: '0.8rem', textDecoration: 'underline', p: 0,
+              }}
+            >
+              Use my identity from another link
+            </Box>
           )}
         </Box>
         </>

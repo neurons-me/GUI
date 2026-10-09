@@ -20,6 +20,7 @@ import ME, {
 import cleaker from 'cleaker';
 import type { CleakerNode, MeKernel } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
+import { enlist, rememberRoot, rootOf } from './heldIdentities';
 import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
 import {
@@ -46,6 +47,20 @@ import {
 import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 
 export type CleakerSessionOptions = MonadClientOptions & {
+  /**
+   * The local context this link belongs to (the `.me` `<Me>` provides, used only as the key of the registry of what is
+   * held under it; it is never written to and the link never operates on it). The link lists itself there while it is
+   * open, so other links under the same context can be asked to use the identity it holds.
+   */
+  context?: object | null;
+  /**
+   * Use the identity an OPEN link under `context` already holds, instead of deriving one from credentials: this link
+   * presents a proof with that identity and asks for the claim here. It generates no new identity and no phrase. The link
+   * still builds its own kernel, with its own credentials-free session; `password` is not used.
+   *
+   * IDENTITY_NOT_HELD when that session is not open under `context`.
+   */
+  identityFrom?: SeedSession | null;
   username: string;
   /**
    * Required for the default (no identityRootHex) path — that's where
@@ -174,7 +189,17 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   if (!username) throw new SeedSessionError('SEED_REQUIRED', 'Username is required to create a cleaker session.');
   if (!rootNamespace) throw new SeedSessionError('NAMESPACE_REQUIRED', 'A root namespace is required to create a cleaker session.');
 
-  const explicitIdentityRootHex = String(options.identityRootHex || '').trim();
+  let explicitIdentityRootHex = String(options.identityRootHex || '').trim();
+  if (options.identityFrom) {
+    const held = rootOf(options.context, options.identityFrom);
+    if (!held) {
+      throw new SeedSessionError(
+        'IDENTITY_NOT_HELD',
+        'That identity is not held by an open link in this context: open it first, or create the identity.',
+      );
+    }
+    explicitIdentityRootHex = held;
+  }
 
   // Same `as any` cast signedRequest.ts already uses for this exact import —
   // this package's 'this.me' default export is typed as the factory
@@ -290,6 +315,15 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
 
   let activeNamespace: string | null = null;
   let identityHash = '';
+  // While this link is open under a context it is listed there, by the identity it holds; closing it removes it. Nothing
+  // here reads or writes anything shared: the session state below is this link's own kernel.
+  let release: (() => void) | null = null;
+  const listInContext = () => {
+    release?.();
+    release = options.context && activeNamespace
+      ? enlist(options.context, session, activeNamespace, username, identityHash)
+      : null;
+  };
 
   const claim = async (namespace: string): Promise<MonadClaimResult> => {
     const semanticNamespace = normalizeMonadSemanticNamespace(String(namespace || '').trim());
@@ -304,6 +338,7 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
+      listInContext();
       return toMonadClaimResult(result);
     } catch (cause) {
       throw toMonadClientError(cause, 'claim', semanticNamespace, transportOrigin);
@@ -323,6 +358,7 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
+      listInContext();
       return toMonadOpenResult(result);
     } catch (cause) {
       throw toMonadClientError(cause, 'open', semanticNamespace, transportOrigin);
@@ -332,10 +368,12 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
   const clear = () => {
     activeNamespace = null;
     identityHash = '';
+    release?.();
+    release = null;
     writeLocalSessionState(me, runtime, null, false, null, null);
   };
 
-  return {
+  const session: SeedSession = {
     me,
     runtime,
     monad,
@@ -506,6 +544,8 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       clear();
     },
   };
+  rememberRoot(session, kernelSeedHex);
+  return session;
 }
 
 export default createCleakerSession;

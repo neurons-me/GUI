@@ -173,7 +173,8 @@ export type SeedSessionErrorCode =
   | 'SEED_REQUIRED'
   | 'IDENTITY_HASH_UNAVAILABLE'
   | 'REPLAY_UNAVAILABLE'
-  | 'NAMESPACE_REQUIRED';
+  | 'NAMESPACE_REQUIRED'
+  | 'IDENTITY_NOT_HELD';
 
 export class SeedSessionError<Code extends SeedSessionErrorCode = SeedSessionErrorCode> extends Error {
   readonly code: Code;

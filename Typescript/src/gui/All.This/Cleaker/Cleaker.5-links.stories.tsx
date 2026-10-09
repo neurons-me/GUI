@@ -1,5 +1,9 @@
 // One local runtime, two links. <Me> above, TWO <Cleaker> under it, each to its own namespace, each against its own
-// disposable monad. The sign-in forms are the real ones; the point is that using one link must not touch the other.
+// disposable monad. The forms are the real ones; the point is that using one link must not touch the other, and that
+// what B does with the identity A holds is something the person asks for, never something that happens to them.
+//
+//   TwoLinks            the same actor in both: A registers, B uses the identity A holds ("Use my identity here").
+//   IndependentLinks    each link with its own credentials: Register in both, two identities, neither replaces the other.
 //
 // Needs two disposable monads, each in its own process:
 //   DM_ROOT=a-test.local DM_PORT=18331 node disposable-monad.mjs
@@ -47,6 +51,8 @@ export const TwoLinks = () => (
   </Theme>
 );
 
+export const IndependentLinks = TwoLinks.bind({});
+
 const text = (scope: HTMLElement) => (scope.innerText || "").replace(/\s+/g, " ");
 // What a signed-in link shows of who is in: the first ten hex digits of the identity hash.
 const identityOf = (scope: HTMLElement) => /\b[0-9a-f]{10}\b/.exec(text(scope))?.[0] ?? "";
@@ -71,46 +77,104 @@ async function register(scope: HTMLElement, username: string, password: string) 
   await waitFor(() => expect(q.getByRole("button", { name: /Sign out/i })).toBeInTheDocument(), { timeout: 15000 });
 }
 
-TwoLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+// Use, in this link, the identity another open link of the same context holds: its own form, nothing is created.
+async function useExisting(scope: HTMLElement, password: string) {
+  const q = within(scope);
+  const user = userEvent.setup();
+  await user.click(await q.findByRole("button", { name: "Use my identity from another link" }, { timeout: 20000 }));
+  await waitFor(() => expect(q.getByRole("button", { name: "Use this identity" })).toBeEnabled(), { timeout: 10000 });
+  fireEvent.change(q.getByLabelText(/Secret for this browser/), { target: { value: password } });
+  await user.click(q.getByRole("button", { name: "Use this identity" }));
+  await waitFor(() => expect(q.getByRole("button", { name: /Sign out/i })).toBeInTheDocument(), { timeout: 20000 });
+}
+
+const open = (scope: ReturnType<typeof within>) => scope.queryByRole("button", { name: /Sign out/i });
+
+async function reopenByPassword(scope: HTMLElement, username: string, password: string) {
+  const q = within(scope);
+  const user = userEvent.setup();
+  fireEvent.change(await q.findByLabelText("Username"), { target: { value: username } });
+  fireEvent.change(q.getByLabelText("Secret"), { target: { value: password } });
+  await user.click(q.getByRole("button", { name: ".me" }));
+  await waitFor(() => expect(open(q)).not.toBeNull(), { timeout: 20000 }).catch(() => {
+    throw new Error(`The link did not open again. It says: ${text(scope).slice(0, 500)}`);
+  });
+}
+
+const linksOf = async (canvasElement: HTMLElement) => {
   const canvas = within(canvasElement);
   const a = (await waitFor(() => canvas.getByTestId("link-a"))) as HTMLElement;
   const b = (await waitFor(() => canvas.getByTestId("link-b"))) as HTMLElement;
-  const qa = within(a);
-  const qb = within(b);
+  return { a, b, qa: within(a), qb: within(b) };
+};
+
+TwoLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const { a, b, qa, qb } = await linksOf(canvasElement);
   const tag = Math.random().toString(36).slice(2, 8);
   const username = `actor-${tag}`;
   const password = `pw-${tag}-correct-horse`;
-  const open = (scope: ReturnType<typeof within>) => scope.queryByRole("button", { name: /Sign out/i });
+  const user = userEvent.setup();
 
-  // the same actor enters A, then B
+  // A registers; B has nothing open yet, so it offers no way to use an identity
   await register(a, username, password);
   const inA = identityOf(a);
   expect(inA).not.toBe("");
-  await register(b, username, password);
-  const inB = identityOf(b);
+  expect(qb.queryByRole("button", { name: "Use my identity from another link" })).not.toBeNull();
+  // A itself offers it for nothing: the only identity held is already linked here
+  await user.click(qa.getByRole("button", { name: /Sign out/i }));
+  await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  // with A closed there is nothing held, so B has nothing to use
+  await waitFor(() => expect(qb.queryByRole("button", { name: "Use my identity from another link" })).toBeNull(), { timeout: 5000 });
 
-  // 1+2. both are open at once
+  // open A again by password, then B asks for A's identity explicitly
+  await reopenByPassword(a, username, password);
+  expect(identityOf(a)).toBe(inA);
+  await useExisting(b, password);
+
+  // the same actor in both, each with its own kernel and its own link
+  expect(identityOf(b)).toBe(inA);
   expect(open(qa)).not.toBeNull();
   expect(open(qb)).not.toBeNull();
-  // KNOWN GAP, recorded and not asserted: the same username and password, registered in two links, are TWO identities.
-  // Register generates a fresh 12-word root each time, so the key is not the one in A. (The session layer can claim
-  // with an existing root, `identityRootHex`; no form offers it.) See tests/continuity.live.test.ts for the session layer.
-  (globalThis as any).__twoLinksIdentities = { a: inA, b: inB, sameActor: inA === inB };
 
-  // 3. leaving A leaves B open, with the same identity
+  // leaving A leaves B open with the same identity
+  await user.click(qa.getByRole("button", { name: /Sign out/i }));
+  await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  expect(open(qb)).not.toBeNull();
+  expect(identityOf(b)).toBe(inA);
+
+  // B signs out and comes back through its own form, by name and secret, as the same identity
+  await user.click(qb.getByRole("button", { name: /Sign out/i }));
+  await waitFor(() => expect(qb.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  await reopenByPassword(b, username, password);
+  expect(identityOf(b)).toBe(inA);
+};
+
+IndependentLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const { a, b, qa, qb } = await linksOf(canvasElement);
+  const tag = Math.random().toString(36).slice(2, 8);
+  const username = `actor-${tag}`;
+  const password = `pw-${tag}-correct-horse`;
   const user = userEvent.setup();
+
+  // the same username and password registered in two links are two identities: Register creates, it does not link
+  await register(a, username, password);
+  const inA = identityOf(a);
+  await register(b, username, password);
+  const inB = identityOf(b);
+  expect(inA).not.toBe("");
+  expect(inB).not.toBe("");
+  expect(inA).not.toBe(inB);
+  expect(open(qa)).not.toBeNull();
+  expect(open(qb)).not.toBeNull();
+
+  // leaving A leaves B open, with its identity
   await user.click(qa.getByRole("button", { name: /Sign out/i }));
   await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
   expect(open(qb)).not.toBeNull();
   expect(identityOf(b)).toBe(inB);
 
-  // coming back to A through its own sign-in form: it must be A's namespace that is opened, with the identity it had
-  fireEvent.change(await qa.findByLabelText("Username"), { target: { value: username } });
-  fireEvent.change(qa.getByLabelText("Secret"), { target: { value: password } });
-  await user.click(qa.getByRole("button", { name: ".me" }));
-  await waitFor(() => expect(open(qa)).not.toBeNull(), { timeout: 20000 }).catch(() => {
-    throw new Error(`A did not open again (global active root: ${String((globalThis as any).__thisGui_activeNamespaceRoot__)}). It says: ${text(a).slice(0, 500)}`);
-  });
+  // coming back to A by its own sign-in form opens A's namespace, with the identity it had
+  await reopenByPassword(a, username, password);
   expect(identityOf(a)).toBe(inA);
   expect(open(qb)).not.toBeNull();
   expect(identityOf(b)).toBe(inB);

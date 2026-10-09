@@ -12,6 +12,7 @@ import {
   type CreateSessionRuntime,
 } from '@/core/session/createSeedSession';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
+import { heldIdentitiesOf, rootOf, sessionHolding, watchHeldIdentities, type HeldIdentity } from '@/core/session/heldIdentities';
 import {
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
   normalizeMonadTransportOrigin,
@@ -21,9 +22,9 @@ import {
   type MonadOpenResult,
   type MonadWriteResult,
 } from '@/core/session/monadClient';
-import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage } from '@/gui/All.This/Cleaker/signedRequest';
-import { bytesToHex, deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
-import { hasLocalIdentityVault, loadLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
+import { bytesToHex, deriveIdentityRootBytesFromPhrase, hexToBytes } from '@/core/identity/recoveryPhrase';
+import { hasLocalIdentityVault, loadLocalIdentityVault, saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
 
 export type SeedSessionStatus = 'idle' | 'pending' | 'ready' | 'error';
 
@@ -120,6 +121,13 @@ export type SeedSessionProviderProps = MonadClientOptions & {
    * for staying live, or to not want one.
    */
   live?: boolean;
+  /**
+   * 'cleaker' backend only. The local context this link belongs to (the `.me` `<Me>` provides). Links that share a
+   * context list the identities they hold there, so one of them can be asked, explicitly, to use an identity another
+   * one holds (`linkExistingIdentity`). It is only the key of that list: nothing is read from or written to it, and each
+   * link keeps its own kernel and its own credentials. Without it, `heldIdentities` is empty.
+   */
+  context?: object | null;
 };
 
 export type SeedSessionContextErrorCode =
@@ -127,7 +135,8 @@ export type SeedSessionContextErrorCode =
   | 'CREDENTIAL_LOGIN_UNAVAILABLE'
   | 'INVALID_CREDENTIAL_RESULT'
   | 'INVALID_CLAIM'
-  | 'INVALID_RECOVERY_PHRASE';
+  | 'INVALID_RECOVERY_PHRASE'
+  | 'IDENTITY_NOT_HELD';
 
 export type SeedRecoveryInput = {
   username: string;
@@ -135,6 +144,20 @@ export type SeedRecoveryInput = {
   words: string[];
   namespace?: string | null;
   transportOrigin?: string | null;
+};
+
+export type LinkExistingIdentityInput = {
+  /** Which held identity to use (`heldIdentities[i].identityHash`). Asked for by identity, never by position. */
+  identityHash: string;
+  /** The handle to claim in this namespace; it need not match the one the identity has elsewhere. */
+  username: string;
+  namespace?: string | null;
+  transportOrigin?: string | null;
+  /**
+   * Optional. When given, the identity is sealed into this browser's local vault for this name under it, so the link can
+   * be opened here later with this password. Without it the link exists only while it stays open.
+   */
+  password?: string;
 };
 
 export class SeedSessionContextError<
@@ -189,6 +212,18 @@ export type SeedSessionContextValue = {
    * RecoverAccount.tsx).
    */
   recoverWithPhrase(input: SeedRecoveryInput): Promise<SeedSession>;
+  /**
+   * The identities held by the OPEN links under this link's context (including this one's own), by identity: each with
+   * its fingerprint, the handles it is open under and its links. Sorted by fingerprint; nothing is "the latest".
+   */
+  readonly heldIdentities: readonly HeldIdentity[];
+  /**
+   * Explicit, and separate from registering: claims a name in THIS namespace with an identity another open link under
+   * the same context already holds. It presents that identity's proof and asks for the claim; it generates no new
+   * identity and no recovery phrase, and never changes what `registerWithCredentials` does. IDENTITY_NOT_HELD when no
+   * open link holds that identity.
+   */
+  linkExistingIdentity(input: LinkExistingIdentityInput): Promise<SeedSession>;
   claim(namespace: string): Promise<MonadClaimResult>;
   open(namespace?: string | null): Promise<MonadOpenResult>;
   claimAndOpen(namespace: string): Promise<MonadOpenResult>;
@@ -414,6 +449,7 @@ export function SeedSessionProvider({
   createRuntime,
   sessionBackend = 'monad',
   live,
+  context = null,
 }: SeedSessionProviderProps) {
   const defaultTransportOrigin = React.useMemo(
     () => normalizeMonadTransportOrigin(transportOrigin),
@@ -613,6 +649,7 @@ export function SeedSessionProvider({
           identityRootHex,
           createRuntime,
           live,
+          context,
         });
       } catch (cause) {
         return fail(cause);
@@ -635,7 +672,7 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const registerWithCredentials = React.useCallback(
@@ -687,6 +724,7 @@ export function SeedSessionProvider({
           identityRootHex: String(input.identityRootHex || '').trim() || undefined,
           createRuntime,
           live,
+          context,
         });
       } catch (cause) {
         return fail(cause);
@@ -713,7 +751,104 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+  );
+
+  // The identities held under this link's context. The registry is module-level and keyed by the context object; this
+  // only mirrors it into React state so the list re-renders when a link opens or closes anywhere under the context.
+  const [heldIdentities, setHeldIdentities] = React.useState<readonly HeldIdentity[]>(() => heldIdentitiesOf(context));
+  React.useEffect(() => {
+    setHeldIdentities(heldIdentitiesOf(context));
+    if (!context) return undefined;
+    return watchHeldIdentities(context, () => setHeldIdentities(heldIdentitiesOf(context)));
+  }, [context]);
+
+  // The explicit counterpart to registerWithCredentials for an identity that already exists in this context: same claim,
+  // same signed proof, but the root is the one an open link already holds. Nothing is generated and no phrase is shown.
+  const linkExistingIdentity = React.useCallback(
+    async (input: LinkExistingIdentityInput) => {
+      const username = String(input.username || '').trim();
+      const password = String(input.password || '');
+
+      if (!username) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+      }
+
+      const source = sessionHolding(context, String(input.identityHash || ''));
+      if (!source) {
+        return fail(new SeedSessionContextError(
+          'IDENTITY_NOT_HELD',
+          'That identity is not open in any link here: open it first, or create a new identity.',
+        ));
+      }
+
+      let rootNamespace = String(input.namespace || '').trim() || getActiveNamespaceRoot() || '';
+      if (!rootNamespace) {
+        try {
+          rootNamespace = await fetchGatewayHostname();
+        } catch (cause) {
+          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+      }
+      if (!rootNamespace) {
+        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+      }
+
+      if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
+        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+      }
+
+      React.startTransition(() => {
+        setStatus('pending');
+        setError(null);
+      });
+
+      const linkTransportOrigin = normalizeMonadTransportOrigin(input.transportOrigin || defaultTransportOrigin);
+      let nextSession: SeedSession;
+      try {
+        nextSession = createCleakerSession({
+          username: splitTypedNamespace(username, rootNamespace).handle,
+          namespace: rootNamespace,
+          transportOrigin: linkTransportOrigin,
+          fetchImpl,
+          headers,
+          createRuntime,
+          live,
+          context,
+          identityFrom: source,
+        });
+      } catch (cause) {
+        return fail(cause);
+      }
+      const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
+
+      try {
+        await nextSession.claimAndOpen(fullNamespace);
+      } catch (cause) {
+        try {
+          nextSession.logout();
+        } catch {
+          // Best-effort cleanup for a refused claim.
+        }
+        commitSnapshot(null);
+        return fail(cause);
+      }
+      commitSnapshot(nextSession);
+
+      // Sealing is a separate, optional step after the claim is accepted: a failure here is reported, and the link that
+      // was accepted stays open (it was claimed; only the way back in by password is missing).
+      if (password) {
+        try {
+          const rootHex = rootOf(context, nextSession);
+          if (!rootHex) throw new Error('The identity is no longer held by this link.');
+          await saveLocalIdentityVault(buildGuessedFullNamespace(username, rootNamespace), hexToBytes(rootHex), password);
+        } catch (cause) {
+          return fail(cause);
+        }
+      }
+      return nextSession;
+    },
+    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const recoverWithPhrase = React.useCallback(
@@ -774,6 +909,7 @@ export function SeedSessionProvider({
           identityRootHex,
           createRuntime,
           live,
+          context,
         });
       } catch (cause) {
         return fail(cause);
@@ -803,7 +939,7 @@ export function SeedSessionProvider({
         return fail(cause);
       }
     },
-    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
   );
 
   const loginWithCredentials = React.useCallback(
@@ -977,6 +1113,8 @@ export function SeedSessionProvider({
       loginWithCredentials,
       registerWithCredentials,
       recoverWithPhrase,
+      heldIdentities,
+      linkExistingIdentity,
       claim,
       open,
       claimAndOpen,
@@ -994,6 +1132,8 @@ export function SeedSessionProvider({
       loginWithCredentials,
       registerWithCredentials,
       recoverWithPhrase,
+      heldIdentities,
+      linkExistingIdentity,
       loginWithSeed,
       activateSession,
       open,

@@ -24,7 +24,10 @@
 //     name gives (`cleaker.me` -> https://cleaker.me).
 //   * The `.me` found here is configuration only. The session `SeedSessionProvider` opens builds its own kernel on
 //     claim / open (username + password, vault unlock, phrase recovery); nothing here ever operates on, or logs in, the
-//     `.me` it found. A shared runtime across links is NOT built here and is not claimed.
+//     `.me` it found. A shared runtime across links is NOT built here and is not claimed: every link keeps its own kernel and
+//     its own credentials. The `.me` is only the KEY under which the links of one page list the identities they hold, so
+//     that one of them can be asked, explicitly ("Use my identity from another link"), to claim a name with an identity
+//     another open link already holds. Registering is a different action and always creates a new identity.
 //   * `SeedSessionProvider.logout()` closes further operations through that session's wrapper; it does not revoke
 //     capability a reference obtained before logout might still hold elsewhere.
 //
@@ -101,6 +104,7 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
       transportOrigin={transportOrigin}
       resolveSeedFromCredentials={resolveSeedFromCredentials}
       sessionBackend="cleaker"
+      context={found.me as object | null}
     >
       <Namespace
         sx={sx}
