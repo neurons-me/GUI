@@ -117,7 +117,7 @@ function DOMModuleStory(args: DOMModuleProps) {
 }
 
 const meta: Meta<typeof DOMModule> = {
-  title: 'All.This/DOM/Workbench',
+  title: 'Pieces/DOM/Workbench',
   component: DOMModule,
   tags: ['autodocs'],
   parameters: {

@@ -10,7 +10,7 @@ import BlocksTable from './BlocksTable';
 // iterating on how the ledger reads before wiring it back into the tabbed
 // namespace.tsx surface.
 const meta: Meta<typeof BlocksTable> = {
-  title: 'All.This/Cleaker/Blockchain',
+  title: 'Pieces/Blockchain',
   component: BlocksTable,
   parameters: {
     layout: 'fullscreen',

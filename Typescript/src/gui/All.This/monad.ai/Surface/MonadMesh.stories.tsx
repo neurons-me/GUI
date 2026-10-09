@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import MonadMesh from './MonadMesh';
 
 const meta: Meta<typeof MonadMesh> = {
-  title: 'All.This/monad.ai/MonadMesh',
+  title: 'Pieces/monad.ai/MonadMesh',
   component: MonadMesh,
   parameters: { layout: 'padded' },
 };

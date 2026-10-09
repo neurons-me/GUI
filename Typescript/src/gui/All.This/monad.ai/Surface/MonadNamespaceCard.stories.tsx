@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import MonadNamespaceCard from './MonadNamespaceCard';
 
 const meta: Meta<typeof MonadNamespaceCard> = {
-  title: 'All.This/monad.ai/MonadNamespaceCard',
+  title: 'Pieces/monad.ai/MonadNamespaceCard',
   component: MonadNamespaceCard,
   parameters: {
     layout: 'padded',

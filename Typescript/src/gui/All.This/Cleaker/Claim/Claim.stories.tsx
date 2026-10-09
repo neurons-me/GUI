@@ -14,7 +14,7 @@ import { setActiveNamespaceRoot } from "../signedRequest";
 setActiveNamespaceRoot('local.cleaker');
 
 const meta: Meta<typeof Claim> = {
-  title: "All.This/Cleaker/Claim",
+  title: "Pieces/Claim",
   component: Claim,
   parameters: {
     layout: "fullscreen",

@@ -20,7 +20,8 @@
 //    (confirmed directly in `me/Typescript/src/me.ts` before building
 //    Cleaker.tsx around this) -- `<Cleaker me={that} />` must read it back
 //    out and use it as the destination, not the literal default.
-// 3. A REAL END-TO-END FLOW (RegisterThroughCleaker): `<Cleaker
+// 3. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
+//    words, set a new secret, sign in again with it -- all the SAME identity -- entered through `<Cleaker
 //    cleakerEndpoint=... netgetMonadOrigin=... transportOrigin=... />`
 //    (the explicit-override shape netget's own App.jsx migration uses,
 //    since it has no live `.me` kernel to pass as `me`) reaches a real
@@ -48,8 +49,7 @@
 //     src/gui/All.This/Cleaker/Cleaker.verify.stories.tsx
 // `MONAD_SELF_IDENTITY` MUST equal DISPOSABLE_ROOT_LABEL below, or the
 // register flow's claim fails with CLAIM_PERSIST_FAILED -- see
-// QRConnect.verify.stories.tsx's own header comment for the full
-// root-cause trace. Claim persistence itself already respects
+// the root-cause trace in this repo's history (the former QRConnect.verify story, merged into this file). Claim persistence itself already respects
 // ME_STATE_DIR automatically (modules/monad/Typescript/src/claim/
 // manager.ts's getClaimStorePaths()).
 import * as React from "react";
@@ -160,11 +160,78 @@ MalformedMeNamespaceErrors.play = async ({ canvasElement }: { canvasElement: HTM
   expect(boundary.textContent || '').toMatch(/unclosed context bracket/i);
 };
 
-// Check 3: real register flow through Cleaker's own explicit-override
-// props (the shape a caller with no live `.me` kernel uses, e.g. netget's
-// App.jsx) -- proves the internal SeedSessionProvider+Namespace wiring is
-// real, not just that it renders.
-export const RegisterThroughCleaker = () => (
+// Reads the 12 revealed words directly out of the Passphrase 'reveal' grid
+// DOM (CSS blur doesn't hide textContent) -- scoped to the grid itself (the
+// toggle button's sibling), not the whole canvas, so surrounding prose text
+// can't be mistaken for phrase words. The words are kept only in this
+// script's own in-memory variables -- never logged, never written anywhere
+// persistent.
+function readRevealedWords(canvasElement: HTMLElement): string[] {
+  const toggle = canvasElement.querySelector('[data-gui-node-id="Passphrase.toggleReveal"]');
+  if (!toggle || !toggle.parentElement) throw new Error('Passphrase reveal toggle not found');
+  const grid = toggle.parentElement.firstElementChild;
+  if (!grid) throw new Error('Passphrase reveal grid not found');
+  return Array.from(grid.children).map((slot) => (slot.children[1]?.textContent || '').trim());
+}
+
+function fillRecoveryWords(canvasElement: HTMLElement, words: string[]) {
+  words.forEach((word, i) => {
+    const input = canvasElement.querySelector(`[data-gui-node-id="Passphrase.word.${i + 1}"] input`);
+    if (!input) throw new Error(`Passphrase input slot ${i + 1} not found`);
+    fireEvent.change(input, { target: { value: word } });
+  });
+}
+
+// Once authenticated via the register/recover paths, `mode` stays
+// 'register'/'recover' (it is only ever reset to 'signin' on the
+// authenticated -> unauthenticated falling edge -- see QRConnect's
+// own wasAuthenticatedRef effect), which means its own QR bubble (and the
+// full namespace that would otherwise be drawn around its perimeter) is
+// suppressed the whole time -- confirmed live by inspecting the rendered
+// DOM: this is real, pre-existing production behavior, not something this
+// extraction changed. The authenticated view in that state renders only a
+// short identityHash-derived `label` plus Sign out. That label is read here
+// (both after register and after recover, and again after a fresh login) to
+// confirm every one of those sessions is the SAME identity, not a new or
+// different one silently created.
+function readIdentityLabel(canvasElement: HTMLElement): string {
+  const el = canvasElement.querySelector('[data-gui-node-id="GUI.content.landing"] .MuiTypography-caption');
+  if (!el || !el.textContent) throw new Error('authenticated identity label not found');
+  return el.textContent.trim();
+}
+
+function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: string) {
+  // The actual regression this component's registrationComplete/
+  // recoveryComplete guards exist for (see QRConnect's own doc
+  // comments): `authenticated` flips true the INSTANT claim()/open()
+  // succeeds, before Claim/RecoverAccount's own post-claim step has
+  // run. If that guard ever regresses, the authenticated branch (Sign out
+  // button) takes over immediately and the backup/recovery screen never
+  // renders, or is torn down the instant it would have. Asserting its
+  // absence right when the backup/recovery screen's own heading first
+  // appears is the direct check for that -- not just reaching the
+  // end-state later.
+  expect(canvas.queryByRole('button', { name: /Sign out/i }), `${context}: must not already show the authenticated view`).toBeNull();
+}
+
+// Full-journey live verification against the extracted QRConnect,
+// mounted the same way production does (Namespace -> GUI -> DOCUMENT_PAGES
+// .Landing -> QRConnect), on a disposable monad: register a REAL
+// throwaway namespace, confirm the backup step is actually reached (not
+// skipped by the authenticated flip) and functional, reach the
+// authenticated session, sign out; recover using the SAME captured phrase,
+// confirm the recovery step's own follow-up ("Set a New Secret") is
+// likewise actually reached (not skipped), reach the authenticated session
+// again (same identity), sign out; then do a completely independent, FRESH
+// login with the username + the new secret just set by recovery, through
+// the ordinary sign-in form (not Recover), and confirm that reaches the
+// same authenticated identity too -- proving the recovered credentials
+// genuinely work for day-to-day sign-in, not just for reaching the recovery
+// screen itself.
+// The whole identity journey, entered through the PUBLIC component (this is the composition a consumer receives):
+// <Cleaker> -> SeedSessionProvider -> Namespace -> Landing (QRConnect) -> a real disposable monad. Same script the
+// internal mount used to run (the old Verify/QRConnect), now through <Cleaker> itself: there is ONE identity flow.
+export const IdentityJourney = () => (
   <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
     <Theme>
       <Cleaker
@@ -176,15 +243,19 @@ export const RegisterThroughCleaker = () => (
   </ConnectionSeamsContext.Provider>
 );
 
-RegisterThroughCleaker.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const canvas = within(canvasElement);
   const user = userEvent.setup();
-  const username = `cleaker-verify-${Date.now().toString(36)}`;
+  const username = `verify-${Date.now().toString(36)}`;
   const password = 'verify-throwaway-password';
   const fullNamespace = `${username}.${DISPOSABLE_ROOT_LABEL}`;
 
+  // ---- Register ----
   await user.click(await canvas.findByRole('button', { name: 'New here? Register' }));
 
+  // fireEvent.change, not userEvent.type: in this environment userEvent's
+  // per-keystroke dispatch left the raw <input>.value updated but never
+  // actually landed React's own onChange-driven state (confirmed live).
   fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
   fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: password } });
   fireEvent.change(canvas.getByLabelText('Confirm Secret'), { target: { value: password } });
@@ -196,17 +267,103 @@ RegisterThroughCleaker.play = async ({ canvasElement }: { canvasElement: HTMLEle
   });
   await user.click(submit);
 
+  // Regression check #1: the backup step must actually be reached, not
+  // skipped straight to the authenticated view by the `authenticated` flip.
   await waitFor(() => expect(canvas.getByText('Back Up Your Identity')).toBeInTheDocument(), { timeout: 8000 });
+  expectNotAuthenticatedYet(canvas, 'register: at Back Up Your Identity');
   await waitFor(() => expect(canvas.getByText(fullNamespace)).toBeInTheDocument(), { timeout: 8000 });
 
+  // Capture the REAL generated phrase before confirming backup. In-memory
+  // only -- never logged.
+  const capturedWords = readRevealedWords(canvasElement);
+  expect(capturedWords).toHaveLength(12);
+  expect(capturedWords.every((w) => /^[a-z]+$/.test(w))).toBe(true);
+
+  // Interacting with the backup screen's OWN controls (reading its words,
+  // clicking ITS checkbox, clicking ITS Continue button) across these next
+  // steps only succeeds if the screen stayed mounted and stable the whole
+  // time -- a torn-down/remounted tree would fail these calls directly,
+  // not just the end-state check below.
   await user.click(canvas.getByText("I've written down my 12 words in a safe place"));
   await user.click(canvas.getByRole('button', { name: 'Continue' }));
 
-  // Real signed-in view, reached entirely through Cleaker's own internal
-  // wiring -- confirms the whole chain (Cleaker -> SeedSessionProvider ->
-  // Namespace -> QRConnect's own claim/backup flow -> real monad)
-  // is live end-to-end.
   await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
+  const identityLabelAfterRegister = readIdentityLabel(canvasElement);
+  expect(identityLabelAfterRegister.length).toBeGreaterThan(0);
+
+  await user.click(canvas.getByRole('button', { name: /Sign out/i }));
+  await waitFor(
+    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    { timeout: 8000 },
+  );
+
+  // ---- Recover, using the SAME captured phrase ----
+  await user.click(canvas.getByRole('button', { name: 'Recover Account' }));
+  await waitFor(() => expect(canvas.getByText('Recover Account')).toBeInTheDocument());
+
+  fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
+  fillRecoveryWords(canvasElement, capturedWords);
+
+  const recoverButton = await waitFor(() => {
+    const button = canvas.getByRole('button', { name: 'Recover' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  await user.click(recoverButton);
+
+  // Regression check #2: same guard, recovery side -- the "Set a New
+  // Secret" follow-up must actually be reached, not skipped/interrupted by
+  // the `authenticated` flip that open() also triggers immediately.
+  await waitFor(() => expect(canvas.getByText('Set a New Secret')).toBeInTheDocument(), { timeout: 8000 });
+  expectNotAuthenticatedYet(canvas, 'recover: at Set a New Secret');
+  // One real render-lag here (semanticNamespace reaches context slightly
+  // after `step` flips) -- a genuine async condition, not a flake to paper
+  // over, hence the retrying waitFor rather than a bare assertion.
+  await waitFor(() => expect(canvas.getByText(fullNamespace)).toBeInTheDocument(), { timeout: 8000 });
+
+  const newPassword = 'verify-recovered-password';
+  fireEvent.change(canvas.getByLabelText('New Secret'), { target: { value: newPassword } });
+  fireEvent.change(canvas.getByLabelText('Confirm New Secret'), { target: { value: newPassword } });
+
+  const continueButton = await waitFor(() => {
+    const button = canvas.getByRole('button', { name: 'Continue' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  await user.click(continueButton);
+
+  // Post-recovery: authenticated again, real signed-in view, and the SAME
+  // identity as the one registered above (not a new or different one
+  // silently created by recovery).
+  await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
+  const identityLabelAfterRecover = readIdentityLabel(canvasElement);
+  expect(identityLabelAfterRecover).toBe(identityLabelAfterRegister);
+
+  await user.click(canvas.getByRole('button', { name: /Sign out/i }));
+  await waitFor(
+    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    { timeout: 8000 },
+  );
+
+  // ---- Fresh login, independent of Recover, using the credentials recovery just set ----
+  // This is the actual point of the whole recovery flow: the LOCAL VAULT
+  // recovery wrote (saveLocalIdentityVault, RecoverAccount.tsx) must unlock
+  // with the new secret and let the ordinary sign-in form (loginWithCleaker,
+  // SeedSessionProvider.tsx) reconstruct the SAME identity -- not just that
+  // the recovery screen itself was reachable.
+  fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
+  fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: newPassword } });
+
+  const loginSubmit = await waitFor(() => {
+    const button = canvas.getByRole('button', { name: '.me' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  await user.click(loginSubmit);
+
+  await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
+  const identityLabelAfterFreshLogin = readIdentityLabel(canvasElement);
+  expect(identityLabelAfterFreshLogin).toBe(identityLabelAfterRegister);
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(

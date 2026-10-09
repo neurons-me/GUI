@@ -14,7 +14,7 @@ function GUIModuleStory(args: GUIModuleProps) {
 }
 
 const meta: Meta<typeof GUIModule> = {
-  title: 'All.This/GUI/Runtime',
+  title: 'Pieces/GUI/Runtime',
   component: GUIModule,
   tags: ['autodocs'],
   parameters: {

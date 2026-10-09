@@ -7,7 +7,7 @@ import { getGuiTheme } from '../../Theme/utils/catalog';
 import { makeMuiTheme } from '../../Theme/fromTokens';
 import { themeTokens } from '../../Theme/styles/theme.tokens';
 const meta: Meta<typeof Monad> = {
-  title: 'All.This/monad.ai/monad.ai',
+  title: 'Pieces/monad.ai/monad.ai',
   component: Monad,
   parameters: {
     layout: 'fullscreen',

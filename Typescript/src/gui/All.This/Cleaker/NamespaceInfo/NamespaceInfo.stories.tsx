@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import NamespaceInfo from "./NamespaceInfo";
 
 const meta: Meta<typeof NamespaceInfo> = {
-  title: "All.This/Cleaker/NamespaceInfo",
+  title: "Pieces/NamespaceInfo",
   component: NamespaceInfo,
 };
 

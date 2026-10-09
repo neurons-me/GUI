@@ -7,7 +7,7 @@ import Passphrase from './Passphrase';
 // registration/recovery flows in CleakerLanding — see RegisterMe.tsx for
 // the sibling "own page, own story" pattern this follows.
 const meta: Meta<typeof Passphrase> = {
-  title: 'All.This/Cleaker/Passphrase',
+  title: 'Pieces/Passphrase',
   component: Passphrase,
   parameters: {
     layout: 'centered',

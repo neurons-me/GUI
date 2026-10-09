@@ -6,7 +6,7 @@ import Me from './me';
 import { deriveIdentityRootHash } from './identity';
 
 export default {
-  title: 'All.This/.me',
+  title: 'Pieces/.me',
   component: Me,
 };
 

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import HostResources from "./HostResources";
 
 const meta: Meta<typeof HostResources> = {
-  title: "All.This/monad.ai/Host/Resources",
+  title: "Pieces/monad.ai/Host/Resources",
   component: HostResources,
 };
 

@@ -14,7 +14,7 @@ const MOCK_SURFACES: Surface[] = [
 ];
 
 const meta: Meta<typeof Beatle> = {
-  title: 'All.This/NRP/Beatle',
+  title: 'Pieces/NRP/Beatle',
   component: Beatle,
   parameters: { layout: 'padded' },
 };

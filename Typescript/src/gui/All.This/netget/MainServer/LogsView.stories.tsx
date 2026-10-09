@@ -9,7 +9,7 @@ import LogsView, { type LogEntry } from './LogsView';
 // "separate sibling, not a tab bolted on" convention that comment
 // describes for mainserver.ports/mainserver.domains too.
 const meta: Meta<typeof LogsView> = {
-  title: 'All.This/netget/Main Server/Logs',
+  title: 'Pieces/netget/Main Server/Logs',
   component: LogsView,
   parameters: {
     layout: 'fullscreen',
