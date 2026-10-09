@@ -1,4 +1,5 @@
-// What the person sees when the QR's expression could not be reached: one plain sentence and three ways forward.
+// What the person sees when the QR's expression could not be reached: one plain sentence and two ways forward (a third,
+// trying another namespace, is the namespace itself: it is edited where it is written, under the QR).
 // Nothing here asks them to know what nginx, a backend or a monad is; that is behind "Namespace diagnosis", which is
 // where the layers, the trace and the way to start the environment live.
 import * as React from 'react';
@@ -19,12 +20,11 @@ export type ConnectFailureProps = {
   /** Where the page was served from, for the diagnosis. */
   location?: string;
   onConnectPublic: () => void;
-  onTryNamespace: (root: string) => void;
   onDismiss?: () => void;
   'data-gui-node-id'?: string;
 };
 
-type View = 'menu' | 'another' | 'diagnosis';
+type View = 'menu' | 'diagnosis';
 
 // The shape and weight of cleaker.me's own `.me` button: 10px corners, a 1px line, 600 weight, ink on paper. The first
 // option carries the ink; the others stay quiet until pointed at. The icon sits at the edge so the label stays centred.
@@ -76,16 +76,9 @@ function QuietLink({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-export default function ConnectFailure({ expression, layers, trace = [], location, onConnectPublic, onTryNamespace, onDismiss, 'data-gui-node-id': nodeId = 'GUI.content.connect-failure' }: ConnectFailureProps) {
+export default function ConnectFailure({ expression, layers, trace = [], location, onConnectPublic, onDismiss, 'data-gui-node-id': nodeId = 'GUI.content.connect-failure' }: ConnectFailureProps) {
   const [view, setView] = React.useState<View>('menu');
-  const [draft, setDraft] = React.useState('');
   const publicIsThis = expression.trim().toLowerCase() === PUBLIC_NAMESPACE;
-
-  const submit = (event?: React.FormEvent) => {
-    event?.preventDefault();
-    const next = draft.trim();
-    if (next) onTryNamespace(next);
-  };
 
   return (
     <Box
@@ -125,30 +118,8 @@ export default function ConnectFailure({ expression, layers, trace = [], locatio
       {view === 'menu' && (
         <>
           {!publicIsThis && <ActionButton primary icon="language" label={`Connect to ${PUBLIC_NAMESPACE}`} nodeId={`${nodeId}.public`} onClick={onConnectPublic} />}
-          <ActionButton icon="edit" label="Try another namespace" nodeId={`${nodeId}.another`} onClick={() => setView('another')} />
           <ActionButton icon="monitor_heart" label="Diagnosis" nodeId={`${nodeId}.diagnosis`} onClick={() => setView('diagnosis')} />
         </>
-      )}
-
-      {view === 'another' && (
-        <Box component="form" onSubmit={submit} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Box
-            component="input"
-            autoFocus
-            value={draft}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value)}
-            placeholder="namespace"
-            spellCheck={false}
-            autoComplete="off"
-            data-gui-node-id={`${nodeId}.another.input`}
-            sx={{
-              width: '100%', height: OPTION_HEIGHT, px: 1.75, boxSizing: 'border-box', borderRadius: OPTION_RADIUS, border: '1px solid', borderColor: 'divider',
-              bgcolor: 'transparent', color: 'text.primary', fontFamily: 'monospace', fontSize: '0.85rem', textAlign: 'center',
-              transition: 'border-color 140ms ease', '&:focus': { outline: 'none', borderColor: 'primary.main' },
-            }}
-          />
-          <ActionButton primary icon="arrow_forward" label="Connect" nodeId={`${nodeId}.another.go`} onClick={() => submit()} />
-        </Box>
       )}
 
       {view === 'diagnosis' && (

@@ -42,7 +42,7 @@ export const Default: Story = {
 //
 //   grey QR --click--> loader --> "Unable to connect"
 //     Connect to cleaker.me      --> loader --> connected --> "Hello, I am…" (sign in)
-//     Try another namespace      --> type one that does not exist --> the cross, and the same card again
+//     (the namespace under the QR)  --> click it or its pencil, type one that does not exist --> the cross, same card
 //     Diagnosis                  --> the layers, where you are, the start command and the trace
 //
 // The control "otherHost" decides what the other host does: it answers (the path above), or it never finishes, which

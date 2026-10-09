@@ -352,11 +352,6 @@ export default function QRme({
   const [pinned, setPinned] = React.useState(defaultFace === 'avatar');
   const [editingRoot, setEditingRoot] = React.useState(false);
   const [rootDraft, setRootDraft] = React.useState(editableRootValue);
-  // Independent of `hovered`/hoverFlip above -- Namespace (the only
-  // real caller of editableRoot so far) sets hoverFlip=false, so that
-  // state never turns true and would leave the edit icon permanently
-  // invisible if reused here.
-  const [rootEditHovered, setRootEditHovered] = React.useState(false);
   const rootEditInputRef = React.useRef<HTMLInputElement>(null);
 
   const openRootEditor = () => {
@@ -592,8 +587,6 @@ export default function QRme({
         alignItems: 'center',
         justifyContent: 'center',
       }}
-      onMouseEnter={editableRoot ? () => setRootEditHovered(true) : undefined}
-      onMouseLeave={editableRoot ? () => setRootEditHovered(false) : undefined}
     >
       {showPerimeterLabel && (
         <svg
@@ -979,7 +972,9 @@ export default function QRme({
       </Box>
       </Box>
 
-      {editableRoot && (
+      {/* The namespace is edited where it is written: a quiet pencil after it and an underline that blinks, like a caret,
+          to say "this is a field". The whole label is the target, not only the pencil. */}
+      {editableRoot && perimeterTextBox && (
         editingRoot ? (
           <Box
             component="form"
@@ -987,8 +982,8 @@ export default function QRme({
             onClick={(event: React.MouseEvent) => event.stopPropagation()}
             sx={{
               position: 'absolute',
-              top: -38,
-              right: 0,
+              left: (perimeterTextBox?.x ?? 0) - 10,
+              top: (perimeterTextBox?.y ?? 0) - 7,
               zIndex: 2,
               display: 'flex',
               alignItems: 'center',
@@ -1046,42 +1041,47 @@ export default function QRme({
             onClick={(event: React.MouseEvent) => { event.stopPropagation(); openRootEditor(); }}
             sx={{
               position: 'absolute',
-              top: -6,
-              right: -6,
+              left: perimeterTextBox.x - 4,
+              top: perimeterTextBox.y - 2,
+              width: perimeterTextBox.width + 8 + 22,
+              height: perimeterTextBox.height + 4,
               zIndex: 2,
-              width: 24,
-              height: 24,
               p: 0,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              border: '1px solid',
-              borderColor,
-              bgcolor: theme.palette.background.paper,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.16)',
-              cursor: 'pointer',
-              opacity: rootEditHovered ? 1 : 0,
-              transition: 'opacity 160ms ease',
-              // Keep it out of the way (and unclickable) whenever it's
-              // faded out -- an invisible button still sitting right on
-              // top of the QR's own click-to-expand region would otherwise
-              // steal that click.
-              pointerEvents: rootEditHovered ? 'auto' : 'none',
+              border: 0,
+              bgcolor: 'transparent',
+              cursor: 'text',
+              '&:focus': { outline: 'none' },
+              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: '4px' },
+              // The pencil is the quiet part until the label is pointed at.
+              '& .qrme-root-edit-pencil': { opacity: 0.55, transition: 'opacity 160ms ease' },
+              '&:hover .qrme-root-edit-pencil, &:focus-visible .qrme-root-edit-pencil': { opacity: 1 },
+              '&:hover .qrme-root-edit-underline, &:focus-visible .qrme-root-edit-underline': { animation: 'none', opacity: 1 },
             }}
             data-gui-node-id={`${qrBase}.namespace.edit`}
           >
-            {/* `iconColor` explicit -- without it, Icon falls back to
-                inherited `color` (IconRegistry.tsx's own `color: iconColor`
-                style, undefined here means CSS inheritance), which this
-                button's own sx never sets either. Happened to read fine
-                against whatever this inherited in dark mode; invisible
-                against this button's own `background.paper` in light mode
-                -- flagged live (2026-10-02) as "en light mode no se ve".
-                Reuses the exact same color the inline edit INPUT already
-                uses a few lines below (theme.palette.text.primary), so
-                both pieces of this same editor agree. */}
-            <Icon name="edit" fontSize="0.9rem" iconColor={theme.palette.text.primary} />
+            <Box
+              aria-hidden="true"
+              className="qrme-root-edit-underline"
+              sx={{
+                position: 'absolute',
+                left: 4,
+                bottom: 1,
+                width: perimeterTextBox.width,
+                height: '1.5px',
+                borderRadius: 1,
+                bgcolor: readable(ringAccent, theme.palette.primary.light),
+                animation: 'qrme-root-blink 1.2s ease-in-out infinite',
+                '@keyframes qrme-root-blink': { '0%, 100%': { opacity: 0.9 }, '50%': { opacity: 0.12 } },
+                '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 0.6 },
+              }}
+            />
+            <Box
+              aria-hidden="true"
+              className="qrme-root-edit-pencil"
+              sx={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex' }}
+            >
+              <Icon name="edit" fontSize="0.8rem" iconColor={theme.palette.text.primary} />
+            </Box>
           </Box>
         )
       )}

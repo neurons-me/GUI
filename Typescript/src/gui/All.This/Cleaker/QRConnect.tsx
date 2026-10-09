@@ -538,7 +538,6 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
           trace={connectTrace.entries().filter((entry) => entry.expression === namespaceRootLabel)}
           location={typeof window !== 'undefined' ? window.location.origin : undefined}
           onConnectPublic={() => conn.changeExpression('cleaker.me')}
-          onTryNamespace={conn.changeExpression}
           onDismiss={conn.dismissFailure}
           data-gui-node-id={`${nodeId}.connect-failure`}
         />
