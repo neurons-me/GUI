@@ -598,18 +598,25 @@ export function SeedSessionProvider({
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
-      const nextSession = createCleakerSession({
-        // the handle, whether the person typed it short or as a complete namespace
-        username: splitTypedNamespace(username, rootNamespace).handle,
-        password,
-        namespace: rootNamespace,
-        transportOrigin: cleakerTransportOrigin,
-        fetchImpl,
-        headers,
-        identityRootHex,
-        createRuntime,
-        live,
-      });
+      // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
+      // pending.
+      let nextSession: SeedSession;
+      try {
+        nextSession = createCleakerSession({
+          // the handle, whether the person typed it short or as a complete namespace
+          username: splitTypedNamespace(username, rootNamespace).handle,
+          password,
+          namespace: rootNamespace,
+          transportOrigin: cleakerTransportOrigin,
+          fetchImpl,
+          headers,
+          identityRootHex,
+          createRuntime,
+          live,
+        });
+      } catch (cause) {
+        return fail(cause);
+      }
       const shouldAutoOpen = input.autoOpen !== false;
 
       try {
@@ -665,18 +672,25 @@ export function SeedSessionProvider({
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
-      const nextSession = createCleakerSession({
-        // the handle, whether the person typed it short or as a complete namespace
-        username: splitTypedNamespace(username, rootNamespace).handle,
-        password,
-        namespace: rootNamespace,
-        transportOrigin: cleakerTransportOrigin,
-        fetchImpl,
-        headers,
-        identityRootHex: String(input.identityRootHex || '').trim() || undefined,
-        createRuntime,
-        live,
-      });
+      // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
+      // pending.
+      let nextSession: SeedSession;
+      try {
+        nextSession = createCleakerSession({
+          // the handle, whether the person typed it short or as a complete namespace
+          username: splitTypedNamespace(username, rootNamespace).handle,
+          password,
+          namespace: rootNamespace,
+          transportOrigin: cleakerTransportOrigin,
+          fetchImpl,
+          headers,
+          identityRootHex: String(input.identityRootHex || '').trim() || undefined,
+          createRuntime,
+          live,
+        });
+      } catch (cause) {
+        return fail(cause);
+      }
       // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
@@ -746,17 +760,24 @@ export function SeedSessionProvider({
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
-      const nextSession = createCleakerSession({
-        // the handle, whether the person typed it short or as a complete namespace
-        username: splitTypedNamespace(username, rootNamespace).handle,
-        namespace: rootNamespace,
-        transportOrigin: cleakerTransportOrigin,
-        fetchImpl,
-        headers,
-        identityRootHex,
-        createRuntime,
-        live,
-      });
+      // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
+      // pending.
+      let nextSession: SeedSession;
+      try {
+        nextSession = createCleakerSession({
+          // the handle, whether the person typed it short or as a complete namespace
+          username: splitTypedNamespace(username, rootNamespace).handle,
+          namespace: rootNamespace,
+          transportOrigin: cleakerTransportOrigin,
+          fetchImpl,
+          headers,
+          identityRootHex,
+          createRuntime,
+          live,
+        });
+      } catch (cause) {
+        return fail(cause);
+      }
       // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 

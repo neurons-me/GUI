@@ -105,13 +105,15 @@ export default function Claim({ namespace, onSwitchToSignIn, onRegistered, sx }:
       setDerivationError(cause instanceof Error ? cause : new Error(String(cause)));
       return;
     }
-    // A rejected claim (NAMESPACE_TAKEN, network error, ...) throws here —
-    // deliberately left unguarded, matching this form's existing
-    // convention: the session provider already records the failure as
-    // session.error before throwing, so it renders below without a local
-    // catch. Nothing has been accepted yet, so nothing to lose or overwrite
-    // — the same `words` above are still there for a retry.
-    await registerWithCredentials({ username: username.trim(), password, namespace, identityRootHex });
+    // A rejected claim (NAMESPACE_TAKEN, network error, ...) throws here. The session provider has already recorded the
+    // failure as session.error before throwing, and that is what renders below, so the rejection is consumed here instead
+    // of leaving an unhandled promise rejection behind. Nothing has been accepted, so nothing to lose or overwrite — the
+    // same `words` above are still there for a retry.
+    try {
+      await registerWithCredentials({ username: username.trim(), password, namespace, identityRootHex });
+    } catch {
+      return;
+    }
     setStep('backup');
   };
 

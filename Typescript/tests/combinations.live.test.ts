@@ -29,7 +29,7 @@ async function cell(nParties: number, nLedgers: number, mode: Mode, cellId: stri
   const items: Item[] = [];
   const add = (name: string, ok: boolean, detail = '') => items.push({ name, ok, detail });
   const ledgers = LEDGERS.slice(0, nLedgers);
-  const parties = Array.from({ length: nParties }, (_, i) => `p${i + 1}-${cellId}`);
+  const parties = Array.from({ length: nParties }, (_, i) => `p${i + 1}-${cellId}-${tag}`);
   const passwordFor = (p: string, l: string) => (mode === 'same key' ? `pw-${p}-${tag}` : `pw-${p}-${l}-${tag}`);
   const links: Record<string, Record<string, any>> = {};
 
