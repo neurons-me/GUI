@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "this.me": ["../../me-export-audience/Typescript/index.ts"],
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["../src/**/*", "./*.ts"]
+}
