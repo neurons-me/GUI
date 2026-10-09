@@ -5,8 +5,13 @@
 //   nginx    served this page: if you can read this, it is up.
 //   backend  netget's gateway API.
 //   monad    netget's own .me.
+//
+// The person sees ONE thing, "netget", with the state of the whole and, when it is not up, the layer that decides it.
+// What netget consists of (the three layers above, each with why it is in that state) is behind a fold: open it to
+// break it down.
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
+import Icon from '@/gui/Atoms/Icon/Icon';
 import type { DoorLayers, LayerState } from '@/react/session/doorLayers';
 
 export type DoorNeeds = 'backend' | 'monad' | 'both';
@@ -41,6 +46,28 @@ const STATE_COLOR: Record<LayerState, string> = {
   up: 'success.main',
   off: 'text.disabled',
   error: 'error.main',
+};
+
+export type NetgetLayer = 'nginx' | 'backend' | 'monad';
+
+/**
+ * The state of netget as a whole. The first layer, in the order a request meets them (nginx, backend, monad), that is
+ * off or in error decides it and is named as the cause; with none failing, anything still being read makes it
+ * `checking`; otherwise it is `up`.
+ */
+export function netgetState(layers: DoorLayers): { state: LayerState; cause: NetgetLayer | null } {
+  const order: NetgetLayer[] = ['nginx', 'backend', 'monad'];
+  const failing = order.find((layer) => layers[layer] === 'off' || layers[layer] === 'error');
+  if (failing) return { state: layers[failing], cause: failing };
+  if (order.some((layer) => layers[layer] === 'checking')) return { state: 'checking', cause: null };
+  return { state: 'up', cause: null };
+}
+
+const NETGET_TEXT: Record<LayerState, string> = {
+  checking: 'Checking netget…',
+  up: 'netget is up',
+  off: 'netget is off',
+  error: 'netget answered with an error',
 };
 
 /** Does the layer a page needs fail the page? ('checking' does not: nothing is known yet; see doorPending.) */
@@ -128,19 +155,41 @@ function Command({ text }: { text: string }) {
   );
 }
 
-export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
-  const backendDown = layers.backend === 'off';
-  const monadDown = layers.monad === 'off';
-  const title = backendDown
-    ? "netget's gateway service is off"
-    : monadDown
-      ? 'No .me answers here'
-      : layers.backend === 'error' || layers.monad === 'error'
-        ? 'A layer answered with an error'
-        : 'Checking what is behind this door…';
+// "netget", one line: its state, the layer that decides it when it is not up, and a chevron that opens the breakdown.
+function NetgetSummary({ layers, open, onToggle, nodeId, align }: { layers: DoorLayers; open: boolean; onToggle: () => void; nodeId: string; align: 'start' | 'center' }) {
+  const { state, cause } = netgetState(layers);
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      data-gui-node-id={`${nodeId}.netget`}
+      sx={{
+        display: 'inline-flex', alignItems: 'center', gap: 1, alignSelf: align === 'center' ? 'center' : 'flex-start', p: 0, border: 0, bgcolor: 'transparent',
+        color: 'text.primary', fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
+        '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 3, borderRadius: '6px' },
+        '&:hover .netget-fold-chevron': { opacity: 1 },
+      }}
+    >
+      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: STATE_COLOR[state], flexShrink: 0 }} />
+      <Typography variant="subtitle1" component="span" sx={{ fontWeight: 700 }}>{NETGET_TEXT[state]}</Typography>
+      {cause && <Typography variant="caption" component="span" sx={{ color: 'text.secondary' }}>· {cause}</Typography>}
+      <Box
+        aria-hidden="true"
+        className="netget-fold-chevron"
+        sx={{ display: 'inline-flex', opacity: 0.55, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 300ms ease, opacity 300ms ease' }}
+      >
+        <Icon name="expand_more" fontSize="1.1rem" weight={300} />
+      </Box>
+    </Box>
+  );
+}
 
+export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
+  const [open, setOpen] = React.useState(false);
   const command = nextCommand(layers);
-  const shortTitle = backendDown ? "netget's gateway service is off" : monadDown ? 'No .me answers here' : title;
+  const toggle = () => setOpen((current) => !current);
 
   if (variant === 'compact') {
     return (
@@ -149,12 +198,14 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, va
         data-gui-component="DoorLayers"
         sx={{ width: '100%', maxWidth: 360, mx: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.25, mt: 1.5, ...sx }}
       >
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'center' }}>{shortTitle}</Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <Dot name="nginx" state={layers.nginx} />
-          <Dot name="backend" state={layers.backend} />
-          <Dot name="monad" state={layers.monad} />
-        </Box>
+        <NetgetSummary layers={layers} open={open} onToggle={toggle} nodeId={nodeId} align="center" />
+        {open && (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Dot name="nginx" state={layers.nginx} />
+            <Dot name="backend" state={layers.backend} />
+            <Dot name="monad" state={layers.monad} />
+          </Box>
+        )}
         {command && <BootstrapAction command={command} origin={location} />}
       </Box>
     );
@@ -166,13 +217,15 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, va
       data-gui-component="DoorLayers"
       sx={{ width: '100%', maxWidth: 440, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 1.75, p: { xs: 2, sm: 2.5 }, ...sx }}
     >
-      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{title}</Typography>
+      <NetgetSummary layers={layers} open={open} onToggle={toggle} nodeId={nodeId} align="start" />
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-        <Row name="nginx" detail="serving this page" state={layers.nginx} />
-        <Row name="backend" detail="netget's gateway API" state={layers.backend} reason={layers.backendReason} />
-        <Row name="monad" detail="netget's own .me, through /apps/netget" state={layers.monad} reason={layers.monadReason} />
-      </Box>
+      {open && (
+        <Box data-gui-node-id={`${nodeId}.netget.layers`} sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          <Row name="nginx" detail="serving this page" state={layers.nginx} />
+          <Row name="backend" detail="netget's gateway API" state={layers.backend} reason={layers.backendReason} />
+          <Row name="monad" detail="netget's own .me, through /apps/netget" state={layers.monad} reason={layers.monadReason} />
+        </Box>
+      )}
 
       {(namespace || location || asked) && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
