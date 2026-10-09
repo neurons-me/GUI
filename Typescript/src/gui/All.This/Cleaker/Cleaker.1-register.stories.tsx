@@ -50,15 +50,3 @@ export const Register: Story = {
     </Theme>
   ),
 };
-
-export const RegisterWithoutSwitchLink: Story = {
-  render: () => (
-    <Theme>
-      <SeedSessionProvider transportOrigin={DISPOSABLE_ORIGIN} sessionBackend="cleaker">
-        <Centered>
-          <Claim namespace={DISPOSABLE_ROOT_LABEL} />
-        </Centered>
-      </SeedSessionProvider>
-    </Theme>
-  ),
-};
