@@ -99,7 +99,7 @@
     "build:umd:bootstrap": "UMD=true UMD_TARGET=bootstrap vite build",
     "build:umd:searchbar": "UMD=true UMD_TARGET=searchbar vite build",
     "build:umd": "npm run build:umd:core && npm run build:umd:bootstrap && npm run build:umd:searchbar",
-    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts && tsx tests/registryMetaCoverage.test.ts && tsx tests/sidebarComposition.test.ts && tsx tests/inspectorNav.test.ts && tsx tests/guiLocalKernel.test.ts && tsx tests/guiDocument.test.ts && tsx tests/leftBarIds.test.ts && tsx tests/netgetSetupClient.test.ts && tsx tests/namespaceNames.test.ts && tsx tests/rootTransport.test.ts && tsx tests/mainServerPresentation.test.ts && tsx tests/mountDevtools.test.ts && tsx tests/mountReference.test.ts && tsx tests/nrpExpressionDeclaredSpace.test.ts && tsx tests/doorLayers.test.ts && tsx tests/remoteRoot.test.ts && tsx tests/connectTrace.test.ts && tsx tests/meProvider.test.ts && tsx tests/namespaceAddress.test.ts && tsx tests/netgetState.test.ts",
+    "test:runtime": "tsx tests/markdown-document-core.test.ts && tsx tests/monad-discovery-core.test.ts && tsx tests/registryMetaCoverage.test.ts && tsx tests/sidebarComposition.test.ts && tsx tests/inspectorNav.test.ts && tsx tests/guiLocalKernel.test.ts && tsx tests/guiDocument.test.ts && tsx tests/leftBarIds.test.ts && tsx tests/netgetSetupClient.test.ts && tsx tests/namespaceNames.test.ts && tsx tests/rootTransport.test.ts && tsx tests/mainServerPresentation.test.ts && tsx tests/mountDevtools.test.ts && tsx tests/mountReference.test.ts && tsx tests/nrpExpressionDeclaredSpace.test.ts && tsx tests/doorLayers.test.ts && tsx tests/remoteRoot.test.ts && tsx tests/connectTrace.test.ts && tsx tests/meProvider.test.ts && tsx tests/namespaceAddress.test.ts && tsx tests/netgetState.test.ts && tsx tests/audienceFormula.test.ts",
     "pack:local": "npm run build && npm pack",
     "prepublishOnly": "npm run build",
     "dev": "vite",
@@ -110,7 +110,8 @@
     "preview": "DEMO=true vite preview",
     "storybook": "STORYBOOK=true storybook dev -p 6006",
     "build-storybook": "STORYBOOK=true storybook build -o ../storybook && node scripts/fix-storybook-static-base.mjs",
-    "chromatic": "STORYBOOK=true chromatic"
+    "chromatic": "STORYBOOK=true chromatic",
+    "lab:ledgers": "node scripts/audience-lab-ledgers.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -63,6 +63,17 @@ const config: StorybookConfig = {
     viteConfig.base = './';
     viteConfig.plugins = viteConfig.plugins || [];
     viteConfig.plugins.push(tsconfigPaths());
+    // The Audience Lab needs a this.me that exposes the audience algebra (ME.sealAudience / ME.openAudience). Until that is
+    // in the .me this package resolves, point THIS_ME_SRC at a .me source that has it, e.g.
+    //   THIS_ME_SRC=../../me-export-audience/Typescript/index.ts npm run storybook
+    if (process.env.THIS_ME_SRC) {
+      viteConfig.resolve = viteConfig.resolve || {};
+      const target = path.resolve(process.cwd(), process.env.THIS_ME_SRC);
+      const current = viteConfig.resolve.alias;
+      viteConfig.resolve.alias = Array.isArray(current)
+        ? [{ find: /^this\.me$/, replacement: target }, ...current]
+        : [{ find: /^this\.me$/, replacement: target }, ...Object.entries(current || {}).map(([find, replacement]) => ({ find, replacement: String(replacement) }))];
+    }
     const storybookPackageDir = findStorybookPackageDir();
     if (storybookPackageDir) {
       viteConfig.resolve = viteConfig.resolve || {};
