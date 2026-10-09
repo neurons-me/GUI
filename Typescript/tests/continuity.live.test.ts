@@ -8,6 +8,7 @@
 //
 // Layer under test: the session (createCleakerSession): what a <Cleaker> link opens. Existing mechanisms only: the signed
 // claim/signIn proof, signAndWrite / readConfirmed, logout. Nothing here derives keys per namespace or changes seeds.
+import { normalizeProofMessage } from 'this.me';
 import { createCleakerSession } from '../src/core/session/createCleakerSession';
 
 const A = process.env.CONT_A, ROOT_A = process.env.CONT_A_ROOT, B = process.env.CONT_B, ROOT_B = process.env.CONT_B_ROOT;
@@ -71,6 +72,69 @@ async function main() {
   const afterB = await attempt(() => sB.readConfirmed('profile.note'));
   check('4b. A is unaffected by the rejection in B', afterA.ok && (afterA as any).value === 'written through A' && sA.semanticNamespace === nameA);
   check('4c. B (the owner) is unaffected too', afterB.ok && (afterB as any).value === 'written through B' && sB.semanticNamespace === nameB);
+
+  // 6. A valid signature from ANOTHER key must not write into this actor's tree in B.
+  // Built by hand because signAndWrite only ever targets the session's own namespace: the point is the server's answer.
+  const handWritten = async (
+    signer: any, via: any, target: { semanticNamespace: string; transportOrigin: string },
+    fields: { namespace: string; expectedHeadHash: string; expression: string; value: unknown; operator?: string },
+  ) => {
+    const identityHash = String(signer.me['!'].identity().hash);
+    const signedFields: Record<string, unknown> = {
+      operation: 'write', expression: fields.expression, value: fields.value,
+      ...(fields.operator ? { operator: fields.operator } : {}),
+      identityHash, namespace: fields.namespace, expectedHeadHash: fields.expectedHeadHash,
+    };
+    const signedPayload = normalizeProofMessage(signedFields);
+    const signature = await signer.signPayload(signedPayload);
+    return attempt(() => via.monad.writeNamespace({
+      semanticNamespace: target.semanticNamespace, transportOrigin: target.transportOrigin,
+      expression: fields.expression, value: fields.value, identityHash, signature, signedPayload,
+      body: { namespace: fields.namespace, expectedHeadHash: fields.expectedHeadHash, ...(fields.operator ? { operator: fields.operator } : {}) },
+    }));
+  };
+  const headB = (await sB.monad.fetchWriteHead({ semanticNamespace: nameB, transportOrigin: B })).expectedHeadHash;
+  const foreign = await handWritten(mallory, mallory, { semanticNamespace: nameB, transportOrigin: B },
+    { namespace: nameB, expectedHeadHash: headB, expression: 'profile.note', value: 'overwritten by another key' });
+  check('6a. a valid signature from another key is refused in the actor\'s tree', !foreign.ok && /FORBIDDEN/.test((foreign as any).code + (foreign as any).message),
+    foreign.ok ? 'WRITE WENT THROUGH' : `${(foreign as any).code} ${(foreign as any).message}`);
+  const untouched = await attempt(() => sB.readConfirmed('profile.note'));
+  check('6b. the tree is unchanged', untouched.ok && (untouched as any).value === 'written through B', JSON.stringify((untouched as any).value));
+
+  // 7. A write signed for A must not be accepted as a write to B, even though the SAME key holds both names.
+  const headA = (await sA.monad.fetchWriteHead({ semanticNamespace: nameA, transportOrigin: A })).expectedHeadHash;
+  const replay = await handWritten(sA, sB, { semanticNamespace: nameB, transportOrigin: B },
+    { namespace: nameA, expectedHeadHash: headA, expression: 'profile.note', value: 'a write meant for A, sent to B' });
+  check('7a. a write signed for A is refused when sent to B', !replay.ok, replay.ok ? 'WRITE WENT THROUGH' : `${(replay as any).code} ${(replay as any).message}`);
+  const afterReplay = await attempt(() => sB.readConfirmed('profile.note'));
+  check('7b. B is unchanged', afterReplay.ok && (afterReplay as any).value === 'written through B', JSON.stringify((afterReplay as any).value));
+
+  // 8. What a write through the link admits. A plain value was proved above. Now a derivation, in full: declare it,
+  // change a source, read the result.
+  await sA.signAndWrite('shop.price', 10);
+  await sA.signAndWrite('shop.rate', 2);
+  const headDerive = (await sA.monad.fetchWriteHead({ semanticNamespace: nameA, transportOrigin: A })).expectedHeadHash;
+  const declared = await handWritten(sA, sA, { semanticNamespace: nameA, transportOrigin: A },
+    { namespace: nameA, expectedHeadHash: headDerive, expression: 'shop.total', value: 'price * rate', operator: '=' });
+  check('8a. a derivation (operator "=") is accepted by the link', declared.ok, declared.ok ? '' : `${(declared as any).code} ${(declared as any).message}`);
+  const first = await attempt(() => sA.readConfirmed('shop.total'));
+  await sA.signAndWrite('shop.price', 20);
+  const second = await attempt(() => sA.readConfirmed('shop.total'));
+  const v1 = (first as any).value, v2 = (second as any).value;
+  const executes = Number(v1) === 20 && Number(v2) === 40;
+  console.log(`      read after declaring: ${JSON.stringify(v1)}; after changing the source (price 10 -> 20): ${JSON.stringify(v2)}`);
+  // Confirmed in a probe against this monad: three spellings of the formula (relative, absolute, at the root) are all
+  // accepted and none of them appears at the read surface or in the branch tree. Accepted is not executed.
+  gap('8b. a derivation written through the link is NOT executed: it is accepted, but nothing resolves at the path', !executes,
+    `read ${JSON.stringify(v1)}, then ${JSON.stringify(v2)} after changing a source (10 -> 20)`);
+
+  // 9. what else the link admits, for the record: a pointer ("->") is stored and read back AS a pointer
+  const headPtr = (await sA.monad.fetchWriteHead({ semanticNamespace: nameA, transportOrigin: A })).expectedHeadHash;
+  const ptr = await handWritten(sA, sA, { semanticNamespace: nameA, transportOrigin: A },
+    { namespace: nameA, expectedHeadHash: headPtr, expression: 'shop.alias', value: 'shop.price', operator: '->' });
+  const ptrRead = await attempt(() => sA.readConfirmed('shop.alias'));
+  check('9.  a pointer ("->") is accepted and stored as a pointer, not followed', ptr.ok && JSON.stringify((ptrRead as any).value) === JSON.stringify({ __ptr: 'shop.price' }),
+    `read back: ${JSON.stringify((ptrRead as any).value)}`);
 
   // 3. leaving A does not close B nor erase local state
   sA.logout();
