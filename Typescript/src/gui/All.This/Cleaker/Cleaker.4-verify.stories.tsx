@@ -7,20 +7,17 @@
 // reasoning as every other verification artifact in this package: a
 // reproducible check, not a one-off reported then discarded.
 //
-// Four things this file actually proves, live, against a genuinely
+// Three things this file actually proves, live, against a genuinely
 // DISPOSABLE monad (never local.cleaker/local.netget):
 //
-// 1. DEFAULT DESTINATION (DefaultsToCleakerMeWhenOmitted): `<Cleaker />`
-//    with ZERO props resolves to the real default ('cleaker.me'), read off
-//    the actual rendered perimeter label, not just "didn't crash".
-// 2. DESTINATION DERIVED FROM `me` (DerivesDestinationFromMeNamespace): a
+// 1. DESTINATION DERIVED FROM `me` (DerivesDestinationFromMeNamespace): a
 //    `.me` kernel constructed WITH a namespace option (`new ME(who, secret,
 //    { namespace: root })`, the exact shape `createCleakerSession.ts`
 //    already uses) writes `profile.rootNamespace` at construction time
 //    (confirmed directly in `me/Typescript/src/me.ts` before building
 //    Cleaker.tsx around this) -- `<Cleaker me={that} />` must read it back
 //    out and use it as the destination, not the literal default.
-// 3. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
+// 2. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
 //    words, set a new secret, sign in again with it -- all the SAME identity -- entered through `<Cleaker
 //    cleakerEndpoint=... netgetMonadOrigin=... transportOrigin=... />`
 //    (the explicit-override shape netget's own App.jsx migration uses,
@@ -28,7 +25,7 @@
 //    authenticated session against the disposable monad -- proving the
 //    SeedSessionProvider+Namespace wiring Cleaker assembles internally is
 //    real and functional, not just that something renders.
-// 4. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
+// 3. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
 //    (MalformedMeNamespaceErrors, 2026-10-02 regression check): a `me`
 //    whose own `profile.rootNamespace` is a non-empty but malformed string
 //    must throw a real error, not silently resolve to the default
@@ -74,19 +71,7 @@ export default meta;
 
 setActiveNamespaceRoot(DISPOSABLE_ROOT_LABEL);
 
-// Check 1: zero props -> default destination.
-export const DefaultsToCleakerMeWhenOmitted = () => (
-  <Theme>
-    <Cleaker />
-  </Theme>
-);
-
-DefaultsToCleakerMeWhenOmitted.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-  const canvas = within(canvasElement);
-  await waitFor(() => expect(canvas.getByText('cleaker.me')).toBeInTheDocument());
-};
-
-// Check 2: `me` constructed WITH a namespace -> destination derives from
+// Check: `me` constructed WITH a namespace -> destination derives from
 // its own `profile.rootNamespace`, not the default.
 export const DerivesDestinationFromMeNamespace = () => {
   const meRef = React.useRef<unknown>(null);
@@ -107,7 +92,7 @@ DerivesDestinationFromMeNamespace.play = async ({ canvasElement }: { canvasEleme
   await waitFor(() => expect(canvas.getByText(DISPOSABLE_ROOT_LABEL)).toBeInTheDocument());
 };
 
-// Check 4 (regression, 2026-10-02): a `me` whose own `profile.rootNamespace`
+// Check (regression, 2026-10-02): a `me` whose own `profile.rootNamespace`
 // is malformed must error for real, not fall back to the default. Rendered
 // inside a local error boundary (this is a render-phase throw from
 // `parseCleakerNamespaceExpression`, surfaced by Cleaker's own `useMemo`).

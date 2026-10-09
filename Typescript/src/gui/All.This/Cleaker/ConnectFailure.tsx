@@ -95,13 +95,32 @@ export default function ConnectFailure({ expression, layers, trace = [], locatio
       aria-label={`Unable to connect to ${expression}`}
       sx={{ width: '100%', maxWidth: view === 'diagnosis' ? 460 : 236, mx: 'auto', mt: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 1 }}
     >
-      {/* The namespace is already drawn around the QR (in red); this only says what happened. */}
-      <Typography
-        component="div"
-        sx={{ fontSize: '0.95rem', fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.3, textAlign: 'center', width: '100%', color: 'text.primary', mb: 0.75 }}
-      >
-        Unable to connect
-      </Typography>
+      {/* The namespace is already drawn around the QR (in red); this only says what happened. The cross sits in the top corner. */}
+      <Box sx={{ position: 'relative', width: '100%', mb: 0.75 }}>
+        <Typography
+          component="div"
+          sx={{ fontSize: '0.95rem', fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.3, textAlign: 'center', width: '100%', color: 'text.primary', px: 3.5, boxSizing: 'border-box' }}
+        >
+          Unable to connect
+        </Typography>
+        {onDismiss && (
+          <Box
+            component="button"
+            type="button"
+            aria-label="Close"
+            data-gui-node-id={`${nodeId}.close`}
+            onClick={onDismiss}
+            sx={{
+              position: 'absolute', top: '50%', right: 0, transform: 'translateY(-50%)', width: 24, height: 24, p: 0, border: 0, borderRadius: '8px',
+              bgcolor: 'transparent', color: 'text.secondary', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              transition: 'color 140ms ease, background-color 140ms ease', '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
+              '&:focus': { outline: 'none' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
+            }}
+          >
+            <Icon name="close" fontSize="1.05rem" weight={300} />
+          </Box>
+        )}
+      </Box>
 
       {view === 'menu' && (
         <>
@@ -150,7 +169,6 @@ export default function ConnectFailure({ expression, layers, trace = [], locatio
       )}
 
       {view !== 'menu' && <QuietLink label="Back" onClick={() => setView('menu')} />}
-      {view === 'menu' && onDismiss && <QuietLink label="Close" onClick={onDismiss} />}
     </Box>
   );
 }
