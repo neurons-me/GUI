@@ -772,13 +772,10 @@ export default function QRme({
             border: '1px solid',
             borderColor: `${ringAccent}55`,
             boxShadow: isTopbar
-              // Same glow TREATMENT as the default QR face below (ring +
-              // blurred glow + drop shadow, same ringAccent status color),
-              // just scaled down to this variant's own ~40px size -- a
-              // flat, non-glowing 1px outline here read as a visibly
-              // DIFFERENT component next to the default's glow, not a
-              // small version of the same one. Flagged live (2026-10-02).
-              ? `0 0 0 1px ${ringAccent}, 0 0 5px 1px ${ringAccent}40, 0 3px 8px rgba(0,0,0,0.14)`
+              // One thin ring in the status color, nothing else. It used to carry the default face's blur glow and
+              // drop shadow too, which on the left rail's dark ground read as a pale halo around a tiny QR. The ring
+              // is quieter while the state is fine and full strength while it needs looking at (checking / error).
+              ? `0 0 0 1px ${ringAccent}${status === 'error' || status === 'checking' ? '' : '8c'}`
               : showingAvatar
                 ? `0 0 0 1px ${theme.palette.primary.main}22, 0 12px 22px rgba(0,0,0,0.18)`
                 // Dialed way back from the earlier "stronger" pass, which

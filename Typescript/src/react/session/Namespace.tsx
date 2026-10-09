@@ -1568,8 +1568,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // from there once it's visibly working.
   // The position badge leads the LEFT bar, in the place Home used to take: the landing IS the QR, so the badge is
   // the way back to it as well as the connection state. Only the search field stays in the top bar.
+  // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
+  // than that, so it is scaled as a whole and given the same breathing room above and below.
+  const RAIL_BADGE_SIZE = 38;
   const positionBadge = (
-    <Link to="/" aria-label="Home" data-gui-node-id="GUI.bars.left.home" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+    <Link
+      to="/"
+      aria-label="Home"
+      data-gui-node-id="GUI.bars.left.home"
+      style={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: '10px 0', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+    >
+      <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
       <QRme
         variant="topbar"
         value={positionQrValue}
@@ -1582,6 +1591,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         cursor="pointer"
         data-gui-node-id="GUI.bars.top.position"
       />
+      </Box>
     </Link>
   );
 
