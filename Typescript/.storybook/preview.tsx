@@ -256,7 +256,7 @@ export const parameters = {
         'All.This',
         // Stories of ONE component keep the order of their files, and All.This/Cleaker is spread over several files on
         // purpose: Cleaker.0-presentation (Default, Flow), .1-register, .2-passphrase, .3-recover, .4-verify.
-        ['Cleaker'],
+        ['Cleaker', 'Me'],
         'Pieces',
         ['Keychain', 'Users', 'Blockchain', 'NamespaceInfo', 'QR.me', '.me'],
         'gui',

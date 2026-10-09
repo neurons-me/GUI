@@ -87,6 +87,11 @@ export interface NamespaceProps {
    */
   netgetMonadOrigin?: string;
   /**
+   * A handle the `.me` above this shell declared (`<Me username>`). It pre-fills the sign-in form, once, and that is
+   * all: it is context, not proof of who is here.
+   */
+  username?: string;
+  /**
    * Parts an app adds on top of the root GUI's document (pages and left-bar elements). The shell is the one
    * GUI: an app such as netget declares its own pages here instead of being a second application.
    */

@@ -9,9 +9,15 @@
 // open / logout machinery) around `react/session/Namespace.tsx` (the identity shell: QR, connect, sign in, register,
 // recover, users, blockchain, url, keychain). There is no other way to say where it points, so no props for that.
 //
-//   * Destination: the namespace of the `.me` it finds. No `.me`, or a `.me` without a namespace, renders a plain
-//     message saying so; it does not guess a destination. A namespace that cannot be parsed throws, it is never swapped
-//     for a default.
+//   * Four different things, never folded into each other:
+//       root           cleaker.me      where the page connects (destination)
+//       named          ana.cleaker.me  the handle the `.me` declares, inside that root
+//       transport      where it is resolved
+//       authentication whether whoever is here can act as ana: only a session says so
+//     The destination is the root. The handle is presented, not dropped: it pre-fills the sign-in form, and the
+//     namespace the page shows becomes the named one. It authenticates nothing.
+//   * No `.me`, or a `.me` without a namespace, renders a plain message saying so; it does not guess a destination. A
+//     namespace that cannot be parsed throws, it is never swapped for a default.
 //   * Transport: wherever `<Me transport>` says the `.me` is reached; absent, the namespace's own address.
 //   * The `.me` found here is configuration only. The session `SeedSessionProvider` opens builds its own kernel on
 //     claim / open (username + password, vault unlock, phrase recovery); nothing here ever operates on, or logs in, the
@@ -25,7 +31,7 @@
 // The modules behind both have since been deleted outright.
 import * as React from 'react';
 import { useOptionalMe } from '@/react/useMe';
-import { readMeNamespace } from '@/react/meNamespace';
+import { readMeNamespace, readMeUsername } from '@/react/meNamespace';
 import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
 import Namespace from '@/react/session/Namespace';
 import type { GuiDocument } from '@/runtime/guiDocument';
@@ -50,6 +56,8 @@ export type CleakerProps = {
 export default function Cleaker({ sx, resolveSeedFromCredentials, document, pages, footerExtras }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = readMeNamespace(found?.me);
+  // The handle only counts when the `.me` also declares the root it lives in: ana inside nothing is not a namespace.
+  const username = namespace ? readMeUsername(found?.me) : '';
 
   // Memoized on the namespace string. Parse errors are not caught: a namespace that was given and is broken deserves a
   // real error, not a silent redirect to somewhere else.
@@ -79,6 +87,7 @@ export default function Cleaker({ sx, resolveSeedFromCredentials, document, page
         sx={sx}
         cleakerEndpoint={cleakerEndpoint}
         netgetMonadOrigin={transportOrigin}
+        username={username || undefined}
         document={document}
         pages={pages}
         footerExtras={footerExtras}

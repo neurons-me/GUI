@@ -153,11 +153,20 @@ export type QRConnectProps = DocumentPageProps & {
   probeDoor?: () => Promise<DoorLayers>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
+  // A handle the `.me` above declared goes into the sign-in field once, when the form first exists. Not again: if the
+  // person clears it, it stays cleared. Typing it makes the page name `ana.<root>` the same way typing it does.
+  const declaredSeededRef = useRef(false);
+  const setFormUsername = view?.credentialsForm?.setUsername;
+  useEffect(() => {
+    if (declaredSeededRef.current || !declaredUsername || !setFormUsername) return;
+    declaredSeededRef.current = true;
+    setFormUsername(declaredUsername);
+  }, [declaredUsername, setFormUsername]);
   // Separate from `username` above (that one's the sign-in FORM's own
   // field, empty once authenticated) -- this identity's real username,
   // for LiveOwnProfile below. Derived from the session's own confirmed

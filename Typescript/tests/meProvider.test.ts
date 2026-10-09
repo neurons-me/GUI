@@ -6,9 +6,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ME from 'this.me';
 import { Me } from '../src/react/Me';
 import { useOptionalMe } from '../src/react/useMe';
-import { readMeNamespace } from '../src/react/meNamespace';
+import { readMeNamespace, readMeNamedNamespace, readMeUsername } from '../src/react/meNamespace';
 
-type Seen = { found: boolean; namespace: string; transport: string | null };
+type Seen = { found: boolean; namespace: string; transport: string | null; username?: string; named?: string };
 function seenFrom(tree: (probe: React.ReactElement) => React.ReactElement): Seen {
   let seen: Seen | null = null;
   const Probe = () => {
@@ -48,5 +48,45 @@ assert.deepEqual(
   seenFrom((probe) => React.createElement(Me, { me: new (ME as any)() }, probe)),
   { found: true, namespace: '', transport: null },
 );
+
+// a handle: declared, normalized, and named inside the root; no secret, no session
+const identity = (tree: (probe: React.ReactElement) => React.ReactElement) => {
+  let out: { root: string; username: string; named: string } | null = null;
+  const Probe = () => {
+    const found = useOptionalMe();
+    out = { root: readMeNamespace(found?.me), username: readMeUsername(found?.me), named: readMeNamedNamespace(found?.me) };
+    return null;
+  };
+  renderToStaticMarkup(tree(React.createElement(Probe)));
+  assert.ok(out);
+  return out;
+};
+assert.deepEqual(
+  identity((probe) => React.createElement(Me, { username: 'Ana', namespace: 'cleaker.me' }, probe)),
+  { root: 'cleaker.me', username: 'ana', named: 'ana.cleaker.me' },
+);
+// the root a gateway serves can be a single label: the factory in this.me would refuse it, <Me> does not
+assert.deepEqual(
+  identity((probe) => React.createElement(Me, { username: 'ana', namespace: 'localhost' }, probe)),
+  { root: 'localhost', username: 'ana', named: 'ana.localhost' },
+);
+// a handle with no root is declared, but names nothing
+assert.deepEqual(
+  identity((probe) => React.createElement(Me, { username: 'ana' }, probe)),
+  { root: '', username: 'ana', named: '' },
+);
+// a root alone declares no handle
+assert.deepEqual(
+  identity((probe) => React.createElement(Me, { namespace: 'cleaker.me' }, probe)),
+  { root: 'cleaker.me', username: '', named: '' },
+);
+
+// two sources for one .me is an error, not a precedence rule
+for (const props of [{ me: existing, namespace: 'cleaker.me' }, { me: existing, username: 'ana' }]) {
+  assert.throws(
+    () => renderToStaticMarkup(React.createElement(Me, props as any, React.createElement('i'))),
+    /either `me` or `namespace` \/ `username`, not both/,
+  );
+}
 
 console.log('meProvider: ok');

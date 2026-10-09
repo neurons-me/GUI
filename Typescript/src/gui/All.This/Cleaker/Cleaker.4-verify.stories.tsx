@@ -7,7 +7,7 @@
 // reasoning as every other verification artifact in this package: a
 // reproducible check, not a one-off reported then discarded.
 //
-// Four things this file actually proves, live, against a genuinely
+// Five things this file actually proves, live, against a genuinely
 // DISPOSABLE monad (never local.cleaker/local.netget):
 //
 // 1. DESTINATION DERIVED FROM `me` (DerivesDestinationFromMeNamespace): a
@@ -24,8 +24,9 @@
 //    authenticated session against the disposable monad -- proving the
 //    SeedSessionProvider+Namespace wiring Cleaker assembles internally is
 //    real and functional, not just that something renders.
-// 3. NO .ME ABOVE (NoMeAbove): a plain message, no guessed destination.
-// 4. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
+// 3. A DECLARED HANDLE (PrefillsDeclaredUsername): `<Me username=...>` pre-fills the form and names ana.<root>.
+// 4. NO .ME ABOVE (NoMeAbove): a plain message, no guessed destination.
+// 5. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
 //    (MalformedMeNamespaceErrors, 2026-10-02 regression check): a `me`
 //    whose own `profile.rootNamespace` is a non-empty but malformed string
 //    must throw a real error, not silently resolve to the default
@@ -126,6 +127,32 @@ export const MalformedMeNamespaceErrors = () => (
     </CaptureBoundary>
   </Theme>
 );
+
+// Check: a `.me` that declares a handle -> <Cleaker> presents it, it does not drop it to the root. The sign-in form is
+// pre-filled with it and the page names `ana.<root>`; nothing is signed in. Needs the disposable monad up.
+export const PrefillsDeclaredUsername = () => (
+  <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
+    <Theme>
+      <Me username="ana" namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN}>
+        <Cleaker />
+      </Me>
+    </Theme>
+  </ConnectionSeamsContext.Provider>
+);
+
+PrefillsDeclaredUsername.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const canvas = within(canvasElement);
+  const field = await waitFor(() => {
+    const el = canvasElement.querySelector('[data-gui-node-id$=".username"] input, input[data-gui-node-id$=".username"]') as HTMLInputElement | null;
+    if (!el) throw new Error('sign-in username field not shown yet');
+    return el;
+  }, { timeout: 15000 });
+  expect(field.value).toBe('ana');
+  // the label is drawn in pieces, so read the page's text rather than one element's
+  await waitFor(() => expect(canvasElement.textContent || '').toContain(`ana.${DISPOSABLE_ROOT_LABEL}`));
+  // declared, not signed in: the form is still the form
+  expect(canvas.queryByText(/Sign out|Logout/i)).toBeNull();
+};
 
 // Check: no `.me` above -> a plain message saying so; no guessed destination.
 export const NoMeAbove = () => (
