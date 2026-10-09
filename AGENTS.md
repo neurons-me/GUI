@@ -51,12 +51,14 @@ with its own ES + CJS output — importing one does not pull in the others.
 | `this.gui/atoms` | `src/gui/Atoms/atoms.ts` | Primitives — `Box`, `Button`, `Typography`, `Icon`, … |
 | `this.gui/molecules` | `src/gui/Molecules/molecules.ts` | Compositions — `Hero`, `Stack`, `Page`, … |
 | `this.gui/compounds` (alias `/components`) | `src/gui/Compounds/compounds.ts` | Feature panels built from molecules |
-| `this.gui/react` | `src/react-entry.ts` | `.me` bridge — `MeRuntimeProvider`, `useMeValue`, `useMeAction` |
+| `this.gui/react` | `src/react-entry.ts` | `.me` bridge — `Me`, `useMeValue`, `useMeAction` |
 | `this.gui/runtime` | `src/runtime-entry.ts` | `mount`, `mountApp`, `declareApp`, `createMeRuntime`, `writeMeValue`/`readMeValue`, `renderNode` |
 | `this.gui/devtools` | `src/devtools-entry.ts` | Semantic Inspector / admin view, opt-in only |
 | `this.gui/cleaker` | `src/cleaker-entry.ts` | Framework-free X-Me-Proof signing (`signedRequest`, `deriveCleakerNode`, `fetchGatewayHostname`) |
 | `this.gui/legacy` | `src/legacy/index.tsx` | UMD/global compatibility facade |
 | `this.gui/style.css` | `dist/styles.css` | Compiled stylesheet |
+
+**`<Me>` and `<Cleaker>`** (`src/react/Me.tsx`, `gui/All.This/Cleaker/Cleaker.tsx`): `<Me>` is the one provider of the page's `.me` — `<Me namespace="cleaker.me" transport="…">` makes a namespace-only kernel (or `<Me me={kernel}>` takes an existing one) and draws nothing. `<Cleaker>` has no destination props: it finds the `.me` with `useOptionalMe()`, reads its namespace (`readMeNamespace`, the only code that knows the profile path) and builds the way into it. No `.me` above it, or no namespace on it, renders a plain message; an unparsable namespace throws. `transport` is where that `.me` is reached when that is not the namespace's own address (netget's gateway page). The editable field that used to be called `Me` is `MeField` (registry type `MeField`).
 
 **Root barrel rule** (`index.ts`, stated at the top of the file): no
 `export *`. Every root export is explicit, and pulled from a concrete module
@@ -227,7 +229,7 @@ in sync.
 | Registry/resolver pattern | `src/Registry/GuiRegistry.ts`, `src/Registry/factory.ts`, any `*.resolver.tsx` |
 | Mount pipeline (low → high level) | `src/runtime/renderer.ts` → `src/runtime/SpecBoundary.tsx` / `src/runtime/mount.ts` → `src/runtime/mountApp.tsx` |
 | Semantic Inspector state | `src/runtime/selectionStore.ts`, `src/runtime/selection.tsx` |
-| `.me` React bridge | `src/react/MeRuntimeProvider.tsx`, `src/react/useMeValue.ts`, `src/react/useMeAction.ts` |
+| `.me` React bridge | `src/react/Me.tsx`, `src/react/useMeValue.ts`, `src/react/useMeAction.ts` |
 | Build entries (multi-entry + UMD) | `vite.config.js` |
 | Public API surface | `index.ts` (read the header comment — it states the export rules) |
 

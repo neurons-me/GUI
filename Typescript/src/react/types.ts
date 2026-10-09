@@ -29,7 +29,7 @@ export type MeSubscribeBridge = (path: string, callback: () => void) => (() => v
 
 export type MeRuntimeContextValue = {
   /**
-   * null before any identity is authenticated — MeRuntimeProvider now
+   * null before any identity is authenticated — <Me> now
    * mounts at a permanently stable tree position (see its own doc comment)
    * so a session completing does not remount whatever's underneath it;
    * consumers that require a live kernel must check for null explicitly
@@ -38,4 +38,6 @@ export type MeRuntimeContextValue = {
   me: MeLike | null;
   runtime: RuntimeAdapter | null;
   subscribe?: MeSubscribeBridge | null;
+  /** Where this `.me` is reached when that is not its namespace's own address (see `<Me transport>`). */
+  transport?: string | null;
 };

@@ -1,13 +1,13 @@
 // Verification artifact for the new, public Cleaker
 // (src/gui/All.This/Cleaker/Cleaker.tsx) -- the one-prop identity entry
-// point: <Cleaker me={me} />, internally composing SeedSessionProvider +
+// point: <Me namespace="…"><Cleaker /></Me>, internally composing SeedSessionProvider +
 // Namespace.tsx (the real, production identity shell), no second context,
 // no children-composition API (that direction was tried and abandoned --
 // see Cleaker.tsx's own header comment). KEPT in the diff on purpose, same
 // reasoning as every other verification artifact in this package: a
 // reproducible check, not a one-off reported then discarded.
 //
-// Three things this file actually proves, live, against a genuinely
+// Four things this file actually proves, live, against a genuinely
 // DISPOSABLE monad (never local.cleaker/local.netget):
 //
 // 1. DESTINATION DERIVED FROM `me` (DerivesDestinationFromMeNamespace): a
@@ -15,17 +15,17 @@
 //    { namespace: root })`, the exact shape `createCleakerSession.ts`
 //    already uses) writes `profile.rootNamespace` at construction time
 //    (confirmed directly in `me/Typescript/src/me.ts` before building
-//    Cleaker.tsx around this) -- `<Cleaker me={that} />` must read it back
+//    Cleaker.tsx around this) -- `<Me me={that}><Cleaker /></Me>` must read it back
 //    out and use it as the destination, not the literal default.
 // 2. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
-//    words, set a new secret, sign in again with it -- all the SAME identity -- entered through `<Cleaker
-//    cleakerEndpoint=... netgetMonadOrigin=... transportOrigin=... />`
-//    (the explicit-override shape netget's own App.jsx migration uses,
-//    since it has no live `.me` kernel to pass as `me`) reaches a real
+//    words, set a new secret, sign in again with it -- all the SAME identity -- entered through `<Me namespace=...
+//    transport=...><Cleaker /></Me>` (the shape netget's own App.jsx uses:
+//    the namespace is where the page was served, the transport is its monad) reaches a real
 //    authenticated session against the disposable monad -- proving the
 //    SeedSessionProvider+Namespace wiring Cleaker assembles internally is
 //    real and functional, not just that something renders.
-// 3. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
+// 3. NO .ME ABOVE (NoMeAbove): a plain message, no guessed destination.
+// 4. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
 //    (MalformedMeNamespaceErrors, 2026-10-02 regression check): a `me`
 //    whose own `profile.rootNamespace` is a non-empty but malformed string
 //    must throw a real error, not silently resolve to the default
@@ -59,9 +59,9 @@ import { ConnectionSeamsContext } from "./useQRConnect";
 import { disposableDoorSeams } from "./disposableDoor";
 import { DISPOSABLE_ORIGIN, DISPOSABLE_ROOT_LABEL } from "./disposable";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
-import { writeMeValue } from "@/runtime/run-me";
 
 
+import { Me } from "@/react/Me";
 const meta: Meta = {
   title: "All.This/Cleaker",
   parameters: { layout: "fullscreen" },
@@ -82,7 +82,9 @@ export const DerivesDestinationFromMeNamespace = () => {
   }
   return (
     <Theme>
-      <Cleaker me={meRef.current as any} />
+      <Me me={meRef.current as any}>
+        <Cleaker />
+      </Me>
     </Theme>
   );
 };
@@ -115,25 +117,27 @@ class CaptureBoundary extends React.Component<
   }
 }
 
-export const MalformedMeNamespaceErrors = () => {
-  const meRef = React.useRef<unknown>(null);
-  if (!meRef.current) {
-    const kernel = new (ME as any)();
-    // Written directly, bypassing the kernel's own normalizing
-    // constructor path -- simulates a `me` whose `profile.rootNamespace`
-    // somehow ended up malformed, which is exactly the case the fix under
-    // test (Cleaker.tsx's `namespaceConfig` useMemo) must not silently
-    // swallow into the default.
-    writeMeValue(kernel, 'profile.rootNamespace', 'bad[unclosed', { allowBarePath: true });
-    meRef.current = kernel;
-  }
-  return (
-    <Theme>
-      <CaptureBoundary>
-        <Cleaker me={meRef.current as any} />
-      </CaptureBoundary>
-    </Theme>
-  );
+export const MalformedMeNamespaceErrors = () => (
+  <Theme>
+    <CaptureBoundary>
+      <Me namespace="bad[unclosed">
+        <Cleaker />
+      </Me>
+    </CaptureBoundary>
+  </Theme>
+);
+
+// Check: no `.me` above -> a plain message saying so; no guessed destination.
+export const NoMeAbove = () => (
+  <Theme>
+    <Cleaker />
+  </Theme>
+);
+
+NoMeAbove.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const canvas = within(canvasElement);
+  await waitFor(() => expect(canvas.getByText(/There is no \.me above this Cleaker/)).toBeInTheDocument());
+  expect(canvas.queryByText('cleaker.me')).toBeNull();
 };
 
 MalformedMeNamespaceErrors.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -218,11 +222,9 @@ function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: s
 export const IdentityJourney = () => (
   <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
     <Theme>
-      <Cleaker
-        cleakerEndpoint={`http://${DISPOSABLE_ROOT_LABEL}`}
-        netgetMonadOrigin={DISPOSABLE_ORIGIN}
-        transportOrigin={DISPOSABLE_ORIGIN}
-      />
+      <Me namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN}>
+        <Cleaker />
+      </Me>
     </Theme>
   </ConnectionSeamsContext.Provider>
 );

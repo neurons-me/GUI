@@ -138,7 +138,7 @@ export default function Claim({ namespace, onSwitchToSignIn, onRegistered, sx }:
       // The phrase has done its job (claim proven, root wrapped into the
       // local vault) — nothing downstream needs the plaintext words in
       // memory any longer, and this component staying mounted a while
-      // longer (MeRuntimeProvider no longer forces a remount here) is no
+      // longer (Me no longer forces a remount here) is no
       // longer a reason for them to keep sitting in state.
       setWords([]);
       setUsername('');

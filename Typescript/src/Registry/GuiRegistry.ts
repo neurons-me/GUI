@@ -61,7 +61,7 @@ import NamespaceUsersResolver from "@/gui/All.This/Cleaker/Namespace/NamespaceUs
 import NamespaceSurfaceResolver from "@/gui/All.This/Cleaker/Namespace/NamespaceSurface.resolver";
 import QRmeResolver, { meta as QRmeMeta } from "@/gui/All.This/me/QR/QR.me.resolver";
 import SessionQRResolver, { meta as SessionQRMeta } from "@/gui/All.This/me/QR.resolver";
-import MeResolver, { meta as MeMeta } from "@/gui/All.This/me/me.resolver";
+import MeFieldResolver, { meta as MeFieldMeta } from "@/gui/All.This/me/MeField.resolver";
 import SearchBarResolver from "@/gui/All.This/SearchBar/SearchBar.resolver";
 
 // Newly wired (2026-09-29) -- 15 resolvers that were fully written (real
@@ -175,7 +175,7 @@ export const GuiRegistry = createRegistry([
   FooterResolver,
   withMeta(TabViewsResolver, TabViewsMeta),
   // All.This
-  withMeta(MeResolver, MeMeta),
+  withMeta(MeFieldResolver, MeFieldMeta),
   withMeta(SessionQRResolver, SessionQRMeta),
   withMeta(QRmeResolver, QRmeMeta),
   withMeta(CleakerQRResolver, CleakerQRMeta),

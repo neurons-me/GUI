@@ -16,9 +16,8 @@ export const meta = {
   tags: ['cleaker', 'identity', 'session', 'namespace', 'qr'],
   demoSpec: {
     type: 'Cleaker',
-    // Zero props: Cleaker is fully self-sufficient (defaults to the
-    // 'cleaker.me' destination and window.location-derived transport
-    // origin), so this never crashes the registry catalog.
+    // Zero props: Cleaker takes its destination from the `.me` above it (<Me namespace="...">); with none it renders a
+    // plain message saying so, so this never crashes the registry catalog.
     props: {},
   },
 } as const;

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import ME from 'this.me';
-import { MeRuntimeProvider, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
 import type { MeLike } from '@/react/types';
@@ -20,7 +20,7 @@ type MeFieldType = 'text' | 'number' | 'textarea';
 type MeMode = 'display' | 'commit' | 'live';
 type MeCoerceMode = 'auto' | 'string' | 'number' | 'boolean' | 'json';
 
-export type MeProps = {
+export type MeFieldProps = {
   me?: MeLike;
   path?: string;
   label?: React.ReactNode;
@@ -173,7 +173,7 @@ function DefaultValue({ value }: { value: any }) {
   );
 }
 
-function MeField({
+function MeFieldBody({
   normalizedPath,
   label,
   description,
@@ -420,7 +420,7 @@ function MeField({
   );
 }
 
-export default function Me({
+export default function MeField({
   me: providedMe,
   path = 'name',
   label,
@@ -438,9 +438,9 @@ export default function Me({
   initialValue,
   formatValue,
   parseValue,
-  'data-gui-node-id': nodeId = 'Me',
-  'data-gui-component': componentName = 'Me',
-}: MeProps) {
+  'data-gui-node-id': nodeId = 'MeField',
+  'data-gui-component': componentName = 'MeField',
+}: MeFieldProps) {
   const normalizedPath = React.useMemo(() => normalizeMePath(path), [path]);
   const localContext = useOptionalMeRuntimeContext();
   const env = useRuntimeEnvironment();
@@ -467,7 +467,7 @@ export default function Me({
   const shouldWrap = !localContext?.me || localContext.me !== kernel || !hasReactiveRuntime;
 
   const content = (
-    <MeField
+    <MeFieldBody
       normalizedPath={normalizedPath}
       label={label}
       description={description}
@@ -491,8 +491,8 @@ export default function Me({
   if (!shouldWrap) return content;
 
   return (
-    <MeRuntimeProvider me={kernel} subscribe={localContext?.subscribe ?? null}>
+    <Me me={kernel} subscribe={localContext?.subscribe ?? null}>
       {content}
-    </MeRuntimeProvider>
+    </Me>
   );
 }

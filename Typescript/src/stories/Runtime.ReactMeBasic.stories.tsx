@@ -5,7 +5,7 @@ import ME from 'this.me';
 
 import * as GUI from '../../index';
 import Theme from '@/gui/Theme/Theme';
-import Me from '@/gui/All.This/me/me';
+import MeField from '@/gui/All.This/me/MeField';
 import {
   Box,
   Button,
@@ -18,7 +18,7 @@ import {
   Typography,
 } from '@/gui/Atoms';
 import { Stack } from '@/gui/Molecules';
-import { MeRuntimeProvider, useMeAction, useMeValue } from '@/react-entry';
+import { Me, useMeAction, useMeValue } from '@/react-entry';
 import { createMeRuntime, mount, writeMeValue } from '@/runtime-entry';
 
 function ReactBridgePanel({
@@ -82,14 +82,14 @@ function ReactBridgePanel({
 
           <Divider />
 
-          <Me
+          <MeField
             label=".me Name"
             path="name"
             description="Commit mode field backed by the shared runtime."
             mode="commit"
           />
 
-          <Me
+          <MeField
             label=".me Count"
             path="metrics.count"
             description="Live mode number field with explicit coercion."
@@ -225,7 +225,7 @@ function RuntimeReactMeBasicDemo() {
 
   return (
     <Theme>
-      <MeRuntimeProvider me={demo.me} runtime={demo.runtime}>
+      <Me me={demo.me} runtime={demo.runtime}>
         <Box
           sx={{
             minHeight: '100vh',
@@ -261,7 +261,7 @@ function RuntimeReactMeBasicDemo() {
             </Box>
           </Box>
         </Box>
-      </MeRuntimeProvider>
+      </Me>
     </Theme>
   );
 }

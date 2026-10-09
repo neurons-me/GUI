@@ -1,4 +1,5 @@
-export { MeRuntimeProvider, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+export { Me, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/Me';
+export type { MeProps } from '@/react/Me';
 export {
   SeedSessionProvider,
   SeedSessionContextError,
@@ -30,7 +31,8 @@ export type { CleakerProps } from '@/gui/All.This/Cleaker/Cleaker';
 // the identity/claim landing (local.cleaker) — two separate surfaces.
 export { default as HostSurface } from '@/gui/All.This/Host/HostSurface';
 export type { HostSurfaceProps } from '@/gui/All.This/Host/HostSurface';
-export { useMe } from '@/react/useMe';
+export { useMe, useOptionalMe } from '@/react/useMe';
+export { readMeNamespace } from '@/react/meNamespace';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useMonadDiscovery } from '@/runtime/monads';

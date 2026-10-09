@@ -12,6 +12,7 @@
 import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
+import { Me } from "@/react/Me";
 import Cleaker from "./Cleaker";
 import { ConnectionSeamsContext } from "./useQRConnect";
 import { NOTHING_ANSWERS, NEVER_ANSWERS } from "./storyMocks";
@@ -25,11 +26,13 @@ const meta: Meta<typeof Cleaker> = {
 export default meta;
 type Story = StoryObj<typeof Cleaker>;
 
-// The one-prop, zero-setup shape. No `me` given: resolves to the literal default destination ('cleaker.me').
+// The shape: a `.me` above, <Cleaker> finds it and points at the namespace it stands in.
 export const Default: Story = {
   render: () => (
     <Theme>
-      <Cleaker />
+      <Me namespace="cleaker.me">
+        <Cleaker />
+      </Me>
     </Theme>
   ),
 };
@@ -54,7 +57,9 @@ export const Flow: StoryObj<FlowArgs> = {
     // keyed: changing the control starts the flow over, with the other channel
     <ConnectionSeamsContext.Provider key={otherHost} value={otherHost === "answers" ? NOTHING_ANSWERS : NEVER_ANSWERS}>
       <Theme>
-        <Cleaker cleakerEndpoint={typeof window !== "undefined" ? window.location.origin : "http://localhost"} />
+        <Me namespace={typeof window !== "undefined" ? window.location.host : "localhost"}>
+          <Cleaker />
+        </Me>
       </Theme>
     </ConnectionSeamsContext.Provider>
   ),

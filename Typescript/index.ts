@@ -403,13 +403,15 @@ export {
   SelectionProvider,
 } from '@/runtime/selection';
 export { useLauncherPopover, LauncherPopoverProvider } from '@/runtime/launcherPopover';
-export { MeRuntimeProvider, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+export { Me, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/Me';
+export type { MeProps } from '@/react/Me';
 export {
   SeedSessionProvider,
   SeedSessionContextError,
   useOptionalSeedSessionContext,
 } from '@/react/session/SeedSessionProvider';
-export { useMe } from '@/react/useMe';
+export { useMe, useOptionalMe } from '@/react/useMe';
+export { readMeNamespace } from '@/react/meNamespace';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';

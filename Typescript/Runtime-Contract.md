@@ -112,7 +112,7 @@ Two things this doesn't do automatically:
   for why that's the recommended shape rather than a dedicated subdomain).
   Get `semanticNamespace` wrong and writes silently land in the wrong `.me`
   namespace server-side — nothing here validates that they match.
-- **Pass `runtime` explicitly wherever it's used** — `MeRuntimeProvider`'s
+- **Pass `runtime` explicitly wherever it's used** — `Me`'s
   `runtime` prop, and separately to any standalone `SpecBoundary` (not
   context-aware on its own). Omitting it falls back to a no-op identity
   adapter with no error — a `{ read: ... }` token just echoes its own path
@@ -124,7 +124,7 @@ When your host app is React, use `this.gui/react`.
 
 ```tsx
 import ME from 'this.me';
-import { MeRuntimeProvider, useMeAction, useMeValue } from 'this.gui/react';
+import { Me, useMeAction, useMeValue } from 'this.gui/react';
 
 const me = new ME();
 
@@ -141,9 +141,9 @@ function ProfileName() {
 
 export default function App() {
   return (
-    <MeRuntimeProvider me={me}>
+    <Me me={me}>
       <ProfileName />
-    </MeRuntimeProvider>
+    </Me>
   );
 }
 ```
@@ -152,7 +152,7 @@ Contract:
 
 - `useMeValue(path)` reads semantic values reactively
 - `useMeAction(path)` writes payloads through the runtime bridge
-- `MeRuntimeProvider` keeps `.me` and the runtime adapter aligned
+- `Me` keeps `.me` and the runtime adapter aligned
 
 ## 3. Read / Write Tokens
 

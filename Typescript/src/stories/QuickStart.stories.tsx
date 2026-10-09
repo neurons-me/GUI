@@ -28,7 +28,7 @@ import Popper from '@mui/material/Popper';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import { SeedSessionProvider } from '@/react/session/SeedSessionProvider';
 import { SessionSurface } from '@/react/session/SessionSurface';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import { declareApp } from '@/runtime/mountApp';
 import type { AppDeclaration } from '@/runtime/mountApp';
 import { SpecBoundary } from '@/runtime/SpecBoundary';
@@ -222,7 +222,7 @@ function QuickStartPreview() {
 
   return (
     <Theme initialThemeId={templateApp.theme}>
-      <MeRuntimeProvider me={me}>
+      <Me me={me}>
         {/* SeedSessionProvider + SessionSurface: the one-click anonymous
             session (client-generated seed, no credentials form) — the
             default shape for a bare `npx this.gui <AppName>` scaffold with
@@ -239,7 +239,7 @@ function QuickStartPreview() {
                 already carried before MeLauncher was added — confirmed
                 live (DevTools + .me both open simultaneously) before this
                 was added. A real app built from this template needs this
-                too, the same way it needs Theme/MeRuntimeProvider. */}
+                too, the same way it needs Theme/Me. */}
             <LauncherPopoverProvider>
               <Layout
                 LeftBar={{
@@ -257,7 +257,7 @@ function QuickStartPreview() {
             </LauncherPopoverProvider>
           </SessionSurface>
         </SeedSessionProvider>
-      </MeRuntimeProvider>
+      </Me>
     </Theme>
   );
 }

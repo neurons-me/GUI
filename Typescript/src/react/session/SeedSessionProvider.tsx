@@ -1,6 +1,6 @@
 import ME from 'this.me';
 import * as React from 'react';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import type { RuntimeAdapter } from '@/runtime/adapter';
 import type { MeLike } from '@/react/types';
 import {
@@ -986,13 +986,13 @@ export function SeedSessionProvider({
   );
 
   // Always the same wrapper, whether or not a session exists yet — see
-  // MeRuntimeProvider's own doc comment for why conditionally inserting it
+  // Me's own doc comment for why conditionally inserting it
   // only post-auth used to remount (and silently wipe the state of)
   // everything underneath it the instant a claim/login succeeded.
   const content = (
-    <MeRuntimeProvider me={snapshot.me} runtime={snapshot.runtime}>
+    <Me me={snapshot.me} runtime={snapshot.runtime}>
       {children}
-    </MeRuntimeProvider>
+    </Me>
   );
 
   const SeedSessionContext = getSeedSessionContext();

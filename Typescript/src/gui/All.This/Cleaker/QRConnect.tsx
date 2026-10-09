@@ -287,7 +287,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
 
   const { authenticated, label, pending, error, onEnter, onLogout, credentialsForm, semanticNamespace } = view;
 
-  // MeRuntimeProvider no longer remounts this tree when a session
+  // Me no longer remounts this tree when a session
   // completes (see its own doc comment), so `mode`/`registrationComplete`
   // are no longer cleared "for free" by unmounting on logout — they have
   // to be reset explicitly, and only on the actual falling edge
