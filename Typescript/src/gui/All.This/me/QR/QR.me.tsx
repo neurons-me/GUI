@@ -972,7 +972,7 @@ export default function QRme({
       </Box>
       </Box>
 
-      {/* The namespace is edited where it is written: a quiet pencil after it and an underline that blinks, like a caret,
+      {/* The namespace is edited where it is written: a quiet pencil after it and an underline that breathes,
           to say "this is a field". The whole label is the target, not only the pencil. */}
       {editableRoot && perimeterTextBox && (
         editingRoot ? (
@@ -1052,10 +1052,10 @@ export default function QRme({
               cursor: 'text',
               '&:focus': { outline: 'none' },
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: '4px' },
-              // The pencil is the quiet part until the label is pointed at.
-              '& .qrme-root-edit-pencil': { opacity: 0.55, transition: 'opacity 160ms ease' },
+              // The pencil is the quiet part until the label is pointed at; it eases in and out slowly, like the underline.
+              '& .qrme-root-edit-pencil': { opacity: 0.5, transition: 'opacity 500ms ease' },
               '&:hover .qrme-root-edit-pencil, &:focus-visible .qrme-root-edit-pencil': { opacity: 1 },
-              '&:hover .qrme-root-edit-underline, &:focus-visible .qrme-root-edit-underline': { animation: 'none', opacity: 1 },
+              '&:hover .qrme-root-edit-underline, &:focus-visible .qrme-root-edit-underline': { animationPlayState: 'paused' },
             }}
             data-gui-node-id={`${qrBase}.namespace.edit`}
           >
@@ -1070,8 +1070,10 @@ export default function QRme({
                 height: '1.5px',
                 borderRadius: 1,
                 bgcolor: readable(ringAccent, theme.palette.primary.light),
-                animation: 'qrme-root-blink 1.2s ease-in-out infinite',
-                '@keyframes qrme-root-blink': { '0%, 100%': { opacity: 0.9 }, '50%': { opacity: 0.12 } },
+                // A breath, not a blink: one slow swell and settle (about 5s), never fully off, so it reads as calm
+                // and alive rather than as an alert. Pointing at the name pauses it where it is.
+                animation: 'qrme-root-breathe 5s cubic-bezier(0.37, 0, 0.63, 1) infinite',
+                '@keyframes qrme-root-breathe': { '0%, 100%': { opacity: 0.45 }, '50%': { opacity: 0.85 } },
                 '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 0.6 },
               }}
             />
