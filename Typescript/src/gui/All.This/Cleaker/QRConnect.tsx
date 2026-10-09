@@ -25,6 +25,7 @@
 // entry point, it's the identity-flow UI `Cleaker` reaches via `Namespace`.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useInsets } from '@/gui-internals/Hooks';
 import Box from '@/gui/Atoms/Box/Box';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
@@ -418,6 +419,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     if (element) requestAnimationFrame(() => element.focus());
   }, []);
 
+  const insets = useInsets();
+  const topInset = Math.max(0, Number(insets?.top ?? 0)) + Math.max(0, Number(insets?.nav ?? 0));
+
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
@@ -461,6 +465,10 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
         gap: 2.5,
         px: 3,
         py: 6,
+        // The top bar holds nothing but the search icon, so the eye takes the whole window as the page: the room Content
+        // reserved for that bar is given back below, which puts the middle of this group on the middle of the window
+        // instead of half a bar lower.
+        pb: (theme: any) => `calc(${theme.spacing(6)} + ${topInset}px)`,
         boxSizing: 'border-box',
         ...sx,
       }}
