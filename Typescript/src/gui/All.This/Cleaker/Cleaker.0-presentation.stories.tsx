@@ -4,9 +4,11 @@
 //   Flow     the whole way in with no network: click the grey QR and walk every option, to "Hello, I am…".
 //
 // Everything else lives elsewhere on purpose, so this page is the one place to understand the product:
-//   * the pieces and their states (Claim, Passphrase, Keychain, QR, Users, Blockchain, the loader…) — "Pieces/…"
-//   * the checks that make it true (the destination contract and the whole identity journey, through <Cleaker>
-//     itself, on a disposable monad) — "Verify/Cleaker"
+//   * the steps of the way in, in the order a person walks them, in this same group: Register, the 12 words
+//     (Passphrase), Recover; then the checks that make it true (the destination contract and the whole identity journey,
+//     through <Cleaker> itself, on a disposable monad). One file per step: Storybook keeps a component's stories in
+//     the order of their files.
+//   * the other pieces (Keychain, QR, Users, Blockchain…) — "Pieces/…"
 import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";

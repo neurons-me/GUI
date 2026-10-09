@@ -1,13 +1,13 @@
 import type { Meta } from '@storybook/react';
 import { useState } from 'react';
 import Theme from '@/gui/Theme/Theme';
-import Passphrase from './Passphrase';
+import Passphrase from './Passphrase/Passphrase';
 
 // Isolated so it can be iterated on visually before it's wired into the
 // registration/recovery flows in CleakerLanding — see RegisterMe.tsx for
 // the sibling "own page, own story" pattern this follows.
 const meta: Meta<typeof Passphrase> = {
-  title: 'Pieces/Passphrase',
+  title: 'All.This/Cleaker',
   component: Passphrase,
   parameters: {
     layout: 'centered',
@@ -23,25 +23,25 @@ const SAMPLE_WORDS = [
   'abandon', 'abandon', 'abandon', 'abandon', 'abandon', 'about',
 ];
 
-export const Reveal = () => (
+export const PassphraseReveal = () => (
   <Theme>
     <Passphrase mode="reveal" words={SAMPLE_WORDS} />
   </Theme>
 );
 
-export const RevealConfirmed = () => (
+export const PassphraseRevealConfirmed = () => (
   <Theme>
     <Passphrase mode="reveal" words={SAMPLE_WORDS} confirmed />
   </Theme>
 );
 
-export const Input = () => (
+export const PassphraseInput = () => (
   <Theme>
     <Passphrase mode="input" />
   </Theme>
 );
 
-export const InputWithError = () => {
+export const PassphraseInputWithError = () => {
   const [value, setValue] = useState<string[]>(SAMPLE_WORDS.slice(0, 6).concat(Array(6).fill('')));
   return (
     <Theme>

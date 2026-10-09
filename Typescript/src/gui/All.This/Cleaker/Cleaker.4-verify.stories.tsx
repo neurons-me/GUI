@@ -60,14 +60,13 @@ import Theme from "@/gui/Theme/Theme";
 import Cleaker from "@/gui/All.This/Cleaker/Cleaker";
 import { ConnectionSeamsContext } from "./useQRConnect";
 import { disposableDoorSeams } from "./disposableDoor";
+import { DISPOSABLE_ORIGIN, DISPOSABLE_ROOT_LABEL } from "./disposable";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
 import { writeMeValue } from "@/runtime/run-me";
 
-const DISPOSABLE_ORIGIN = "http://127.0.0.1:18322";
-const DISPOSABLE_ROOT_LABEL = "disposable-test.local";
 
 const meta: Meta = {
-  title: "Verify",
+  title: "All.This/Cleaker",
   parameters: { layout: "fullscreen" },
 };
 
