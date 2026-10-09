@@ -1043,7 +1043,7 @@ export default function QRme({
               position: 'absolute',
               left: perimeterTextBox.x - 4,
               top: perimeterTextBox.y - 2,
-              width: perimeterTextBox.width + 8 + 22,
+              width: perimeterTextBox.width + 8 + 17,
               height: perimeterTextBox.height + 4,
               zIndex: 2,
               p: 0,
@@ -1080,7 +1080,7 @@ export default function QRme({
             <Box
               aria-hidden="true"
               className="qrme-root-edit-pencil"
-              sx={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex' }}
+              sx={{ position: 'absolute', left: perimeterTextBox.width + 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex' }}
             >
               <Icon name="edit" fontSize="0.8rem" iconColor={theme.palette.text.primary} />
             </Box>
