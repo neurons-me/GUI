@@ -291,8 +291,8 @@ const DemoBody = () => {
                     </Typography>
 
                     <Box sx={{ pt: 0.5 }}>
-                      <Me namespace="cleaker.me">
-                        <Cleaker />
+                      <Me>
+                        <Cleaker namespace="cleaker.me" />
                       </Me>
                     </Box>
                   </Stack>

@@ -1,43 +1,21 @@
-// Verification artifact for the new, public Cleaker
-// (src/gui/All.This/Cleaker/Cleaker.tsx) -- the one-prop identity entry
-// point: <Me namespace="…"><Cleaker /></Me>, internally composing SeedSessionProvider +
-// Namespace.tsx (the real, production identity shell), no second context,
-// no children-composition API (that direction was tried and abandoned --
-// see Cleaker.tsx's own header comment). KEPT in the diff on purpose, same
-// reasoning as every other verification artifact in this package: a
+// Verification artifact for the public Cleaker (src/gui/All.This/Cleaker/Cleaker.tsx): a LINK from the page's `.me` to one
+// namespace, <Me><Cleaker namespace="..." /></Me>, composing SeedSessionProvider + Namespace.tsx (the real, production
+// identity shell). KEPT in the diff on purpose, same reasoning as every other verification artifact in this package: a
 // reproducible check, not a one-off reported then discarded.
 //
-// Five things this file actually proves, live, against a genuinely
-// DISPOSABLE monad (never local.cleaker/local.netget):
+// What this file proves, live, against a genuinely DISPOSABLE monad (never local.cleaker/local.netget):
 //
-// 1. DESTINATION DERIVED FROM `me` (DerivesDestinationFromMeNamespace): a
-//    `.me` kernel constructed WITH a namespace option (`new ME(who, secret,
-//    { namespace: root })`, the exact shape `createCleakerSession.ts`
-//    already uses) writes `profile.rootNamespace` at construction time
-//    (confirmed directly in `me/Typescript/src/me.ts` before building
-//    Cleaker.tsx around this) -- `<Me me={that}><Cleaker /></Me>` must read it back
-//    out and use it as the destination, not the literal default.
-// 2. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
-//    words, set a new secret, sign in again with it -- all the SAME identity -- entered through `<Me namespace=...
-//    transport=...><Cleaker /></Me>` (the shape netget's own App.jsx uses:
-//    the namespace is where the page was served, the transport is its monad) reaches a real
-//    authenticated session against the disposable monad -- proving the
-//    SeedSessionProvider+Namespace wiring Cleaker assembles internally is
-//    real and functional, not just that something renders.
-// 3. A DECLARED HANDLE (PrefillsDeclaredUsername): `<Me username=...>` pre-fills the form and names ana.<root>.
-// 4. NO .ME ABOVE (NoMeAbove): a plain message, no guessed destination.
-// 5. NO SILENT FALLBACK ON A MALFORMED `me`-DERIVED NAMESPACE
-//    (MalformedMeNamespaceErrors, 2026-10-02 regression check): a `me`
-//    whose own `profile.rootNamespace` is a non-empty but malformed string
-//    must throw a real error, not silently resolve to the default
-//    ('cleaker.me') as if nothing were wrong -- a bug that was previously
-//    fixed for an explicit, malformed `namespace` PROP (now retired along
-//    with the old Cleaker.tsx), then re-introduced when the destination
-//    source moved to `me`'s own namespace: the first version of this file
-//    wrapped both the "no namespace given" and "a namespace was given but
-//    is invalid" cases in the same try/catch, silently collapsing both into
-//    the default. Confirmed via a real error boundary (this is a
-//    render-phase throw), not by reading the parser function in isolation.
+// 1. THE WHOLE IDENTITY JOURNEY (IdentityJourney): register, back up the 12 words, sign out, recover with the same
+//    words, set a new secret, sign in again with it -- all the SAME identity -- entered through
+//    `<Me><Cleaker namespace=... transport=... /></Me>` (the shape netget's own App.jsx uses: the namespace is the host
+//    the page was served from, the transport is its monad) reaches a real authenticated session against the disposable
+//    monad.
+// 2. A DECLARED HANDLE (PrefillsDeclaredUsername): `<Me username=...>` pre-fills the form and names ana.<root>; nothing is
+//    signed in.
+// 3. NO .ME ABOVE (NoMeAbove) / NO NAMESPACE GIVEN (NoNamespaceGiven): a plain message each, no guessed destination.
+// 4. NO SILENT FALLBACK ON A MALFORMED NAMESPACE (MalformedNamespaceErrors, 2026-10-02 regression check): a non-empty but
+//    malformed namespace must throw a real error, not silently resolve to a default ('cleaker.me') as if nothing were
+//    wrong. Confirmed via a real error boundary (this is a render-phase throw), not by reading the parser in isolation.
 //
 // Run it with (from Typescript/, after starting a disposable monad):
 //   SEED=<random 32-byte hex> ME_STATE_DIR=<scratch dir> PORT=18322 \
@@ -53,7 +31,6 @@
 import * as React from "react";
 import type { Meta } from "@storybook/react";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
-import ME from "this.me";
 import Theme from "@/gui/Theme/Theme";
 import Cleaker from "@/gui/All.This/Cleaker/Cleaker";
 import { ConnectionSeamsContext } from "./useQRConnect";
@@ -72,33 +49,9 @@ export default meta;
 
 setActiveNamespaceRoot(DISPOSABLE_ROOT_LABEL);
 
-// Check: `me` constructed WITH a namespace -> destination derives from
-// its own `profile.rootNamespace`, not the default.
-export const DerivesDestinationFromMeNamespace = () => {
-  const meRef = React.useRef<unknown>(null);
-  if (!meRef.current) {
-    meRef.current = new (ME as any)('verify-user', 'verify-throwaway-secret', {
-      namespace: DISPOSABLE_ROOT_LABEL,
-    });
-  }
-  return (
-    <Theme>
-      <Me me={meRef.current as any}>
-        <Cleaker />
-      </Me>
-    </Theme>
-  );
-};
-
-DerivesDestinationFromMeNamespace.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-  const canvas = within(canvasElement);
-  await waitFor(() => expect(canvas.getByText(DISPOSABLE_ROOT_LABEL)).toBeInTheDocument());
-};
-
-// Check (regression, 2026-10-02): a `me` whose own `profile.rootNamespace`
-// is malformed must error for real, not fall back to the default. Rendered
-// inside a local error boundary (this is a render-phase throw from
-// `parseCleakerNamespaceExpression`, surfaced by Cleaker's own `useMemo`).
+// Check (regression, 2026-10-02): a malformed namespace must error for real, not fall back to a default. Rendered inside
+// a local error boundary (this is a render-phase throw from `parseCleakerNamespaceExpression`, surfaced by Cleaker's own
+// `useMemo`).
 class CaptureBoundary extends React.Component<
   { children: React.ReactNode },
   { error: Error | null }
@@ -118,11 +71,11 @@ class CaptureBoundary extends React.Component<
   }
 }
 
-export const MalformedMeNamespaceErrors = () => (
+export const MalformedNamespaceErrors = () => (
   <Theme>
     <CaptureBoundary>
-      <Me namespace="bad[unclosed">
-        <Cleaker />
+      <Me>
+        <Cleaker namespace="bad[unclosed" />
       </Me>
     </CaptureBoundary>
   </Theme>
@@ -133,8 +86,8 @@ export const MalformedMeNamespaceErrors = () => (
 export const PrefillsDeclaredUsername = () => (
   <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
     <Theme>
-      <Me username="ana" namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN}>
-        <Cleaker />
+      <Me username="ana">
+        <Cleaker namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN} />
       </Me>
     </Theme>
   </ConnectionSeamsContext.Provider>
@@ -157,9 +110,24 @@ PrefillsDeclaredUsername.play = async ({ canvasElement }: { canvasElement: HTMLE
 // Check: no `.me` above -> a plain message saying so; no guessed destination.
 export const NoMeAbove = () => (
   <Theme>
-    <Cleaker />
+    <Cleaker namespace="cleaker.me" />
   </Theme>
 );
+
+// Check: a `.me` above but no namespace given -> a plain message, nothing guessed.
+export const NoNamespaceGiven = () => (
+  <Theme>
+    <Me>
+      <Cleaker />
+    </Me>
+  </Theme>
+);
+
+NoNamespaceGiven.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const canvas = within(canvasElement);
+  await waitFor(() => expect(canvas.getByText(/This Cleaker has no namespace/)).toBeInTheDocument());
+  expect(canvas.queryByText('cleaker.me')).toBeNull();
+};
 
 NoMeAbove.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const canvas = within(canvasElement);
@@ -167,7 +135,7 @@ NoMeAbove.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   expect(canvas.queryByText('cleaker.me')).toBeNull();
 };
 
-MalformedMeNamespaceErrors.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+MalformedNamespaceErrors.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const canvas = within(canvasElement);
   const boundary = await waitFor(() => canvas.getByTestId('cleaker-error-boundary'));
   // The real parser error, not a generic/opaque failure, and NOT the
@@ -249,8 +217,8 @@ function expectNotAuthenticatedYet(canvas: ReturnType<typeof within>, context: s
 export const IdentityJourney = () => (
   <ConnectionSeamsContext.Provider value={disposableDoorSeams(DISPOSABLE_ORIGIN)}>
     <Theme>
-      <Me namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN}>
-        <Cleaker />
+      <Me>
+        <Cleaker namespace={DISPOSABLE_ROOT_LABEL} transport={DISPOSABLE_ORIGIN} />
       </Me>
     </Theme>
   </ConnectionSeamsContext.Provider>

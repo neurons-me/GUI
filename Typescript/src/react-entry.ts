@@ -32,7 +32,7 @@ export type { CleakerProps } from '@/gui/All.This/Cleaker/Cleaker';
 export { default as HostSurface } from '@/gui/All.This/Host/HostSurface';
 export type { HostSurfaceProps } from '@/gui/All.This/Host/HostSurface';
 export { useMe, useOptionalMe } from '@/react/useMe';
-export { readMeNamespace } from '@/react/meNamespace';
+export { readMeUsername } from '@/react/meIdentity';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useMonadDiscovery } from '@/runtime/monads';

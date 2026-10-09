@@ -1770,8 +1770,8 @@ const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
 // (netget's real App.jsx today — Namespace renders as a SIBLING of
 // netget's own <Router>, not nested inside it) gets its own <BrowserRouter>.
 // The shell reads and writes the page's one `.me` (the door's diagnosis asks it, under GUI.door). Under `<Cleaker>` there
-// is always one; a caller that mounts the shell directly gets one declared for it, for the namespace it points at, so
-// nothing below has to ask whether a `.me` exists.
+// is always one; a caller that mounts the shell directly gets a local one made for it, so nothing below has to ask
+// whether a `.me` exists.
 const WithMe: React.FC<NamespaceProps> = (props) => {
   const found = useOptionalMe();
   const routes = (
@@ -1780,7 +1780,7 @@ const WithMe: React.FC<NamespaceProps> = (props) => {
     </RouterProvider>
   );
   if (found) return routes;
-  return <Me namespace={deriveNamespaceRootLabel(requireCleakerEndpoint(props.cleakerEndpoint))}>{routes}</Me>;
+  return <Me>{routes}</Me>;
 };
 
 const Namespace: React.FC<NamespaceProps> = (props) => <WithMe {...props} />;

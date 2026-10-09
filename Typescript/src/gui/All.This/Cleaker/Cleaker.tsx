@@ -1,29 +1,30 @@
 // Cleaker — the one public entry point for a complete, namespace-scoped identity surface:
 //
-//   <Me namespace="cleaker.me">
-//     <Cleaker />
+//   <Me username="sui">
+//     <Cleaker namespace="cleaker.me" />
 //   </Me>
 //
-// `<Me>` (react/Me.tsx) provides the `.me` of this part of the page; `<Cleaker>` finds it with `useOptionalMe`, reads the
-// namespace that `.me` stands in, and builds the whole way into it: `SeedSessionProvider` (the real session / claim /
-// open / logout machinery) around `react/session/Namespace.tsx` (the identity shell: QR, connect, sign in, register,
-// recover, users, blockchain, url, keychain). There is no other way to say where it points, so no props for that.
+// `<Me>` (react/Me.tsx) is the local runtime: the `.me` of this part of the page. `<Cleaker>` is a LINK from that `.me` to
+// one namespace: it finds the `.me` with `useOptionalMe`, and builds the whole way into the namespace it is given:
+// `SeedSessionProvider` (the real session / claim / open / logout machinery) around `react/session/Namespace.tsx` (the
+// identity shell: QR, connect, sign in, register, recover, users, blockchain, url, keychain). The destination is a prop of
+// the link, not of the `.me`: the same `.me` can be linked to several namespaces.
 //
 //   * Four different things, never folded into each other:
-//       root           cleaker.me      where the page connects (destination)
-//       named          ana.cleaker.me  the handle the `.me` declares, inside that root
+//       namespace      cleaker.me       where the link goes (the root)
+//       named          ana.cleaker.me   the handle the `.me` declares, inside that root
 //       transport      where it is resolved
 //       authentication whether whoever is here can act as ana: only a session says so
-//     The destination is the root. The handle is presented, not dropped: it pre-fills the sign-in form, and the
-//     namespace the page shows becomes the named one. It authenticates nothing.
-//   * No `.me`, or a `.me` without a namespace, renders a plain message saying so; it does not guess a destination. A
+//     The handle is presented, not dropped: it pre-fills the sign-in form, and the namespace the page shows becomes the
+//     named one. It authenticates nothing.
+//   * No `.me` above it, or no `namespace`, renders a plain message saying so; it does not guess a destination. A
 //     namespace that cannot be parsed throws, it is never swapped for a default.
-//   * Where it is reached (scheme and port): see `namespaceAddress`. `<Me transport>` says it when it is not obvious; with
-//     none, a page served by the namespace's own host is reached where it is served, and any other namespace at the
-//     address its name gives (`cleaker.me` -> https://cleaker.me).
+//   * Where it is reached (scheme and port): see `namespaceAddress`. `transport` says it when it is not obvious; with none,
+//     a page served by the namespace's own host is reached where it is served, and any other namespace at the address its
+//     name gives (`cleaker.me` -> https://cleaker.me).
 //   * The `.me` found here is configuration only. The session `SeedSessionProvider` opens builds its own kernel on
 //     claim / open (username + password, vault unlock, phrase recovery); nothing here ever operates on, or logs in, the
-//     `.me` it read the namespace from. A shared namespace is not a shared runtime, and this file does not claim it is.
+//     `.me` it found. A shared runtime across links is NOT built here and is not claimed.
 //   * `SeedSessionProvider.logout()` closes further operations through that session's wrapper; it does not revoke
 //     capability a reference obtained before logout might still hold elsewhere.
 //
@@ -33,7 +34,7 @@
 // The modules behind both have since been deleted outright.
 import * as React from 'react';
 import { useOptionalMe } from '@/react/useMe';
-import { readMeNamespace, readMeUsername } from '@/react/meNamespace';
+import { readMeUsername } from '@/react/meIdentity';
 import { namespaceAddress } from '@/react/namespaceAddress';
 import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
 import Namespace from '@/react/session/Namespace';
@@ -45,6 +46,15 @@ import { parseCleakerNamespaceExpression } from './namespaceExpression';
 
 export type CleakerProps = {
   sx?: any;
+  /**
+   * The namespace this link goes to: a name, never an address (`cleaker.me`, `localhost`; no scheme, no port).
+   */
+  namespace?: string;
+  /**
+   * Where that namespace is reached, when that is not simply where its name or this page's own host says. Netget's
+   * gateway page: the namespace is the host it was served from, its monad answers behind `/apps/netget`.
+   */
+  transport?: string;
   /** Passed straight through to `SeedSessionProvider` — see its own doc comment. */
   resolveSeedFromCredentials?: ResolveSeedFromCredentials;
   /**
@@ -56,22 +66,24 @@ export type CleakerProps = {
   footerExtras?: LeftBarElement[];
 };
 
-export default function Cleaker({ sx, resolveSeedFromCredentials, document, pages, footerExtras }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras }: CleakerProps) {
   const found = useOptionalMe();
-  const namespace = readMeNamespace(found?.me);
-  // The handle only counts when the `.me` also declares the root it lives in: ana inside nothing is not a namespace.
-  const username = namespace ? readMeUsername(found?.me) : '';
+  const namespace = String(namespaceProp || '').trim();
+  const username = readMeUsername(found?.me);
 
   // Memoized on the namespace string. Parse errors are not caught: a namespace that was given and is broken deserves a
   // real error, not a silent redirect to somewhere else.
   const namespaceConfig = React.useMemo(() => (namespace ? parseCleakerNamespaceExpression(namespace) : null), [namespace]);
 
-  if (!namespaceConfig) {
+  if (!found || !namespaceConfig) {
     return (
       <Box data-gui-node-id="Cleaker.no-me" sx={{ p: 3 }}>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {found ? 'The .me above this Cleaker has no namespace.' : 'There is no .me above this Cleaker.'} Wrap it in{' '}
-          <code>{'<Me namespace="…">'}</code>.
+          {!found ? (
+            <>There is no .me above this Cleaker. Wrap it in <code>{'<Me>'}</code>.</>
+          ) : (
+            <>This Cleaker has no namespace. Give it one: <code>{'<Cleaker namespace="…" />'}</code>.</>
+          )}
         </Typography>
       </Box>
     );
@@ -79,10 +91,10 @@ export default function Cleaker({ sx, resolveSeedFromCredentials, document, page
 
   const cleakerEndpoint = namespaceAddress({
     namespaceOrigin: namespaceConfig.transport.origin,
-    transport: found?.transport,
+    transport,
     pageOrigin: typeof window !== 'undefined' ? window.location.origin : '',
   });
-  const transportOrigin = found?.transport || cleakerEndpoint;
+  const transportOrigin = transport || cleakerEndpoint;
 
   return (
     <SeedSessionProvider

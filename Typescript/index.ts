@@ -411,7 +411,7 @@ export {
   useOptionalSeedSessionContext,
 } from '@/react/session/SeedSessionProvider';
 export { useMe, useOptionalMe } from '@/react/useMe';
-export { readMeNamespace } from '@/react/meNamespace';
+export { readMeUsername } from '@/react/meIdentity';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';

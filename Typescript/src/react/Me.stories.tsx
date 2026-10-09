@@ -1,5 +1,6 @@
-// <Me> — the contract, on one page. It draws nothing, so each row is a probe: the exact JSX on the left, what a
-// component under it reads from the `.me` on the right. The play function checks every row.
+// <Me> — the contract, on one page. It draws nothing, so each row is a probe: the exact JSX on the left, what a component
+// under it reads from the `.me` on the right. The play function checks every row. A `.me` says nothing about namespaces:
+// those are links made from outside it (<Cleaker namespace>).
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, within } from 'storybook/test';
@@ -8,27 +9,19 @@ import Theme from '@/gui/Theme/Theme';
 import { Box, Typography } from '@/gui/Atoms';
 import { Me } from './Me';
 import { useOptionalMe } from './useMe';
-import { readMeNamespace, readMeNamedNamespace, readMeUsername } from './meNamespace';
+import { readMeUsername, writeMeUsername } from './meIdentity';
 
 const meta: Meta = { title: 'All.This/Me', component: Me, parameters: { layout: 'padded' } };
 export default meta;
 
 function Reading({ id }: { id: string }) {
   const found = useOptionalMe();
-  const fields: Array<[string, string]> = [
-    ['root', readMeNamespace(found?.me)],
-    ['username', readMeUsername(found?.me)],
-    ['named', readMeNamedNamespace(found?.me)],
-    ['transport', found?.transport ?? ''],
-  ];
   return (
-    <Box data-testid={`${id}.reading`} sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 0.25, fontFamily: 'monospace', fontSize: 13 }}>
-      {fields.map(([name, value]) => (
-        <React.Fragment key={name}>
-          <span style={{ opacity: 0.55 }}>{name}</span>
-          <span data-testid={`${id}.${name}`}>{value || '—'}</span>
-        </React.Fragment>
-      ))}
+    <Box data-testid={`${id}.reading`} sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, fontFamily: 'monospace', fontSize: 13 }}>
+      <span style={{ opacity: 0.55 }}>found</span>
+      <span data-testid={`${id}.found`}>{found ? 'yes' : 'no'}</span>
+      <span style={{ opacity: 0.55 }}>username</span>
+      <span data-testid={`${id}.username`}>{readMeUsername(found?.me) || '—'}</span>
     </Box>
   );
 }
@@ -50,16 +43,16 @@ class Catch extends React.Component<{ id: string; children: React.ReactNode }, {
   }
 }
 
-const existing = new (ME as any)('verify-user', 'verify-throwaway-secret', { namespace: 'disposable-test.local' });
+const existing: any = new (ME as any)();
+writeMeUsername(existing, 'robot-1');
 
 const ROWS: Array<{ id: string; code: string; note: string; render: (probe: React.ReactElement) => React.ReactElement }> = [
-  { id: 'root', code: '<Me namespace="cleaker.me">', note: 'a namespace is enough: the .me carries only that', render: (p) => <Me namespace="cleaker.me">{p}</Me> },
-  { id: 'named', code: '<Me username="Ana" namespace="cleaker.me">', note: 'the handle is normalized and named inside the root; it proves nothing about who is here', render: (p) => <Me username="Ana" namespace="cleaker.me">{p}</Me> },
-  { id: 'one-label', code: '<Me username="ana" namespace="localhost">', note: 'a gateway can serve a single-label root', render: (p) => <Me username="ana" namespace="localhost">{p}</Me> },
-  { id: 'transport', code: '<Me namespace="localhost" transport="http://localhost/apps/netget">', note: 'where it is reached, when that is not the namespace itself', render: (p) => <Me namespace="localhost" transport="http://localhost/apps/netget">{p}</Me> },
-  { id: 'handle-only', code: '<Me username="ana">', note: 'a handle with no root names nothing', render: (p) => <Me username="ana">{p}</Me> },
-  { id: 'existing', code: '<Me me={kernel}>', note: 'a .me that already exists, read as it is', render: (p) => <Me me={existing}>{p}</Me> },
-  { id: 'both', code: '<Me me={kernel} namespace="cleaker.me">', note: 'two sources for one .me: an error, not a precedence rule', render: (p) => <Me me={existing} namespace="cleaker.me">{p}</Me> },
+  { id: 'bare', code: '<Me>', note: 'a local runtime: made here, no handle, no permission, no network', render: (p) => <Me>{p}</Me> },
+  { id: 'handle', code: '<Me username="Ana">', note: 'the handle is normalized; it proves nothing about who is here', render: (p) => <Me username="Ana">{p}</Me> },
+  { id: 'existing', code: '<Me me={kernel}>', note: 'a .me that already exists, provided as it is', render: (p) => <Me me={existing}>{p}</Me> },
+  { id: 'through', code: '<Me username="outer"><Me me={null}>', note: 'null provides nothing here: what sits above passes through', render: (p) => <Me username="outer"><Me me={null}>{p}</Me></Me> },
+  { id: 'both', code: '<Me me={kernel} username="ana">', note: 'two sources for one .me: an error, not a precedence rule', render: (p) => <Me me={existing} username="ana">{p}</Me> },
+  { id: 'none', code: '(no <Me>)', note: 'nothing is found, nothing is invented', render: (p) => p },
 ];
 
 export const Contract: StoryObj = {
@@ -81,15 +74,12 @@ export const Contract: StoryObj = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const c = within(canvasElement);
     const text = (id: string) => c.getByTestId(id).textContent;
-    expect(text('root.root')).toBe('cleaker.me');
-    expect(text('root.username')).toBe('—');
-    expect(text('named.username')).toBe('ana');
-    expect(text('named.named')).toBe('ana.cleaker.me');
-    expect(text('one-label.named')).toBe('ana.localhost');
-    expect(text('transport.transport')).toBe('http://localhost/apps/netget');
-    expect(text('handle-only.username')).toBe('ana');
-    expect(text('handle-only.named')).toBe('—');
-    expect(text('existing.root')).toBe('disposable-test.local');
-    expect(c.getByTestId('both.error').textContent).toMatch(/either `me` or `namespace` \/ `username`, not both/);
+    expect(text('bare.found')).toBe('yes');
+    expect(text('bare.username')).toBe('—');
+    expect(text('handle.username')).toBe('ana');
+    expect(text('existing.username')).toBe('robot-1');
+    expect(text('through.username')).toBe('outer');
+    expect(c.getByTestId('both.error').textContent).toMatch(/either `me` or `username`, not both/);
+    expect(text('none.found')).toBe('no');
   },
 };

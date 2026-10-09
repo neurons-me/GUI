@@ -38,6 +38,4 @@ export type MeRuntimeContextValue = {
   me: MeLike | null;
   runtime: RuntimeAdapter | null;
   subscribe?: MeSubscribeBridge | null;
-  /** Where this `.me` is reached when that is not its namespace's own address (see `<Me transport>`). */
-  transport?: string | null;
 };

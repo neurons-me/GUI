@@ -4,7 +4,7 @@ import { createMeRuntime } from '@/runtime/run-me';
 import type { RuntimeAdapter } from '@/runtime/adapter';
 import ME from 'this.me';
 import type { MeLike, MeRuntimeContextValue, MeSubscribeBridge } from './types';
-import { normalizeMeUsername, writeMeIdentity } from './meNamespace';
+import { normalizeMeUsername, writeMeUsername } from './meIdentity';
 
 const MeRuntimeContext = React.createContext<MeRuntimeContextValue | null>(null);
 
@@ -23,67 +23,61 @@ const MeRuntimeContext = React.createContext<MeRuntimeContextValue | null>(null)
 // component's prop non-optional — is what makes that stable position
 // possible without lying about there being a session when there isn't one.
 export type MeProps = {
-  /** A `.me` that already exists. Not combinable with `namespace` / `username`: that is an error, not a precedence rule. */
+  /**
+   * A `.me` that already exists: that one is provided, as it is. `null` means nothing is provided here and whatever
+   * sits above passes through (what `SeedSessionProvider` uses before anyone has signed in). Left out, `<Me>` makes a
+   * local `.me` of its own.
+   */
   me?: MeLike | null;
   /**
-   * The root this `.me` stands in (`cleaker.me`). With no `me`, `<Me>` makes one: a kernel that carries only what is
-   * declared here, no secret and no session (signing in is what gives a session its own kernel, further down). Read it
-   * back with `readMeNamespace`.
-   */
-  namespace?: string;
-  /**
-   * The handle this `.me` declares (`ana`). With `namespace` it also names `ana.cleaker.me` (`readMeNamedNamespace`).
-   * It is a declaration of context: it does not prove that whoever holds the page is ana and grants nothing.
+   * The handle the `.me` made here declares (`ana`). Context, not proof: it does not mean whoever holds the page is
+   * ana, and it grants nothing. Not combinable with `me` (that `.me` already says what it is). Read it back with
+   * `readMeUsername`.
    */
   username?: string;
-  /**
-   * Where this `.me` is reached, when that is not simply the namespace's own address (netget's gateway page: the
-   * namespace is the host it was served from, the monad answers behind `/apps/netget`). Connection configuration, not
-   * kernel state: it lives in the context, not in the `.me`.
-   */
-  transport?: string;
   runtime?: RuntimeAdapter | null;
   subscribe?: MeSubscribeBridge | null;
   children: React.ReactNode;
 };
 
 /**
- * `<Me>` — the `.me` of this part of the page, provided to everything under it. It draws nothing.
+ * `<Me>` — a local runtime: the `.me` of this part of the page, provided to everything under it. It draws nothing, needs
+ * no permission and no network, and says nothing about any namespace: a `.me` is linked to namespaces from outside
+ * (`<Cleaker namespace>`), as many as you like.
  *
- *   <Me username="ana" namespace="cleaker.me">
- *     <Cleaker />
+ *   <Me username="sui">
+ *     <Cleaker namespace="cleaker.me" />
  *   </Me>
  *
  * It is the one provider: `SeedSessionProvider`, `mountApp`, `AppShell` and the editable `MeField` all mount it, and
- * `<Cleaker>` finds the `.me` through it (`useOptionalMe`).
+ * `<Cleaker>` finds the `.me` through it (`useOptionalMe`). Two `<Me>` are two runtimes only if each makes or is given a
+ * different `.me`; given the same one, they share it.
  *
  * What it takes, as a contract:
- *   - `me` alone: that `.me`, as it is.
- *   - `namespace` and/or `username`: a new `.me` that carries exactly that, made once per distinct pair.
- *   - `me` together with `namespace` or `username`: throws. Two sources for one `.me` would need a precedence rule,
- *     and a silent one is how a page ends up pointing somewhere nobody wrote down.
- *   - none of them: nothing is provided here, whatever sits above passes through (the form `SeedSessionProvider` uses).
+ *   - `me={kernel}`: that `.me`, as it is.
+ *   - `me={null}`: nothing here; whatever sits above passes through.
+ *   - no `me`: a new local `.me`, made once for this `<Me>`, carrying the `username` when one is declared.
+ *   - `me` together with `username`: throws. Two sources for one `.me` would need a precedence rule, and a silent one is
+ *     how a page ends up with a `.me` nobody wrote down.
  * Other attributes are not accepted yet; richer data goes in through `me`.
  */
-export function Me({ me, namespace, username, transport, runtime, subscribe, children }: MeProps) {
+export function Me({ me, username, runtime, subscribe, children }: MeProps) {
   const env = useRuntimeEnvironment();
-  const wantedNamespace = String(namespace || '').trim();
   const wantedUsername = normalizeMeUsername(username || '');
-  const declares = Boolean(wantedNamespace || wantedUsername);
-  if (me && declares) {
-    throw new Error('<Me> takes either `me` or `namespace` / `username`, not both.');
+  if (me && wantedUsername) {
+    throw new Error('<Me> takes either `me` or `username`, not both.');
   }
 
   // A kernel made here is made once per declaration, never per render: whatever is written into it has to survive
   // the provider re-rendering above it.
-  const declaredKey = `${wantedUsername}|${wantedNamespace}`;
-  const madeRef = React.useRef<{ key: string; me: MeLike } | null>(null);
-  if (!me && declares && madeRef.current?.key !== declaredKey) {
+  const makes = me === undefined;
+  const madeRef = React.useRef<{ username: string; me: MeLike } | null>(null);
+  if (makes && madeRef.current?.username !== wantedUsername) {
     const kernel = new ME() as unknown as MeLike;
-    writeMeIdentity(kernel, { namespace: wantedNamespace, username: wantedUsername });
-    madeRef.current = { key: declaredKey, me: kernel };
+    writeMeUsername(kernel, wantedUsername);
+    madeRef.current = { username: wantedUsername, me: kernel };
   }
-  const resolvedMe: MeLike | null = me ?? (declares ? madeRef.current?.me ?? null : null);
+  const resolvedMe: MeLike | null = makes ? madeRef.current?.me ?? null : me ?? null;
 
   const runtimeValue = React.useMemo(
     () => (resolvedMe ? (runtime ?? createMeRuntime(resolvedMe, { subscribe })) : null),
@@ -95,9 +89,8 @@ export function Me({ me, namespace, username, transport, runtime, subscribe, chi
       me: resolvedMe,
       runtime: runtimeValue,
       subscribe: subscribe ?? null,
-      transport: String(transport || '').trim() || null,
     }),
-    [resolvedMe, runtimeValue, subscribe, transport]
+    [resolvedMe, runtimeValue, subscribe]
   );
 
   const mergedEnvironment = React.useMemo(

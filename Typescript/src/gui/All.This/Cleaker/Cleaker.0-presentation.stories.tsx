@@ -26,12 +26,12 @@ const meta: Meta<typeof Cleaker> = {
 export default meta;
 type Story = StoryObj<typeof Cleaker>;
 
-// The shape: a `.me` above, <Cleaker> finds it and points at the namespace it stands in.
+// The shape: a local `.me` above, and <Cleaker> as its link to one namespace.
 export const Default: Story = {
   render: () => (
     <Theme>
-      <Me namespace="cleaker.me">
-        <Cleaker />
+      <Me>
+        <Cleaker namespace="cleaker.me" />
       </Me>
     </Theme>
   ),
@@ -57,8 +57,8 @@ export const Flow: StoryObj<FlowArgs> = {
     // keyed: changing the control starts the flow over, with the other channel
     <ConnectionSeamsContext.Provider key={otherHost} value={otherHost === "answers" ? NOTHING_ANSWERS : NEVER_ANSWERS}>
       <Theme>
-        <Me namespace={typeof window !== "undefined" ? window.location.hostname : "localhost"}>
-          <Cleaker />
+        <Me>
+          <Cleaker namespace={typeof window !== "undefined" ? window.location.hostname : "localhost"} />
         </Me>
       </Theme>
     </ConnectionSeamsContext.Provider>
