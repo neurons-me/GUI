@@ -1,6 +1,8 @@
-// What netget consists of is what me.explain("door.netget") says it depends on.
+// What netget consists of is what me.explain("GUI.door.netget") says it depends on, asked of the page's one .me.
+const createDoorKernel = (): any => new (ME as any)();
 import assert from 'node:assert/strict';
-import { createDoorKernel, explainNetget } from '../src/react/session/doorKernel';
+import ME from 'this.me';
+import { explainNetget } from '../src/react/session/doorKernel';
 import type { DoorLayers } from '../src/react/session/doorLayers';
 
 const layers = (backend: DoorLayers['backend'], monad: DoorLayers['monad'], reasons: [string, string] = ['', '']): DoorLayers => ({
@@ -34,6 +36,6 @@ assert.equal(explainNetget(kernel, layers('off', 'off')).up, false);
 const healed = explainNetget(kernel, layers('up', 'up'));
 assert.equal(healed.up, true);
 assert.deepEqual(healed.layers.map((entry) => entry.layer), ['nginx', 'backend', 'monad']);
-assert.deepEqual([...kernel.explain('door.netget').meta.dependsOn].sort(), ['door.backend.up', 'door.monad.up', 'door.nginx.up']);
+assert.deepEqual([...kernel.explain('GUI.door.netget').meta.dependsOn].sort(), ['GUI.door.backend.up', 'GUI.door.monad.up', 'GUI.door.nginx.up']);
 
 console.log('netgetState: ok');

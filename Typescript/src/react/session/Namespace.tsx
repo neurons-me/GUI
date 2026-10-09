@@ -31,6 +31,8 @@ import {
 } from '@/core/session/createSeedSession';
 import { readMeValue } from '@/runtime/run-me';
 import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
+import { Me } from '@/react/Me';
+import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
@@ -1767,10 +1769,20 @@ const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
 // provides) when already inside one; only a truly standalone render
 // (netget's real App.jsx today — Namespace renders as a SIBLING of
 // netget's own <Router>, not nested inside it) gets its own <BrowserRouter>.
-const Namespace: React.FC<NamespaceProps> = (props) => (
-  <RouterProvider>
-    <CleakerRoutes {...props} />
-  </RouterProvider>
-);
+// The shell reads and writes the page's one `.me` (the door's diagnosis asks it, under GUI.door). Under `<Cleaker>` there
+// is always one; a caller that mounts the shell directly gets one declared for it, for the namespace it points at, so
+// nothing below has to ask whether a `.me` exists.
+const WithMe: React.FC<NamespaceProps> = (props) => {
+  const found = useOptionalMe();
+  const routes = (
+    <RouterProvider>
+      <CleakerRoutes {...props} />
+    </RouterProvider>
+  );
+  if (found) return routes;
+  return <Me namespace={deriveNamespaceRootLabel(requireCleakerEndpoint(props.cleakerEndpoint))}>{routes}</Me>;
+};
+
+const Namespace: React.FC<NamespaceProps> = (props) => <WithMe {...props} />;
 
 export default Namespace;

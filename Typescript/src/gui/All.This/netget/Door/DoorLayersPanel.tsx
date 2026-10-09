@@ -8,13 +8,14 @@
 //
 // The person sees ONE thing, "netget", with the state of the whole and, when it is not up, the layer that decides it.
 // What netget consists of (the three layers above, each with why it is in that state) is behind a fold: open it to
-// break it down. The breakdown is not written out here: it is what `me.explain("door.netget")` says the whole depends
-// on (see doorKernel.ts).
+// break it down. The breakdown is not written out here: it is what the page's `.me` says `GUI.door.netget` depends on
+// (`me.explain`, see doorKernel.ts).
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import type { DoorLayers, LayerState } from '@/react/session/doorLayers';
-import { createDoorKernel, explainNetget, type NetgetReading } from '@/react/session/doorKernel';
+import { explainNetget, type NetgetReading } from '@/react/session/doorKernel';
+import { useMe } from '@/react/useMe';
 
 export type DoorNeeds = 'backend' | 'monad' | 'both';
 
@@ -181,10 +182,9 @@ function NetgetSummary({ netget, open, onToggle, nodeId, align }: { netget: Netg
 
 export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
   const [open, setOpen] = React.useState(false);
-  // One kernel for the life of the panel; each new reading is written into it and asked again.
-  const kernelRef = React.useRef<any>(null);
-  if (!kernelRef.current) kernelRef.current = createDoorKernel();
-  const netget = React.useMemo(() => explainNetget(kernelRef.current, layers), [layers]);
+  // The page's one `.me`: each new reading is written under GUI.door and asked again.
+  const { me } = useMe();
+  const netget = React.useMemo(() => explainNetget(me as any, layers), [me, layers]);
   const command = nextCommand(layers);
   const toggle = () => setOpen((current) => !current);
 
