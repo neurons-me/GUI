@@ -231,6 +231,14 @@ export type {
   SeedSessionOptions,
   SeedSessionWriteOptions,
 } from '@/core/session/createSeedSession';
+// A link writes a value FOR an audience (this.me's audience algebra) and reads it back as one of its members.
+export { writeForAudience, readForAudience, openEnvelope } from '@/core/session/audienceWrite';
+export type {
+  AudienceEnvelope,
+  AudienceFormula,
+  AudienceIdentity,
+  AudienceKey,
+} from '@/core/session/audienceWrite';
 // 3) runtime aggregates (compatibility / inspection convenience)
 // These stay as named exports for modern consumers and explicit compat layers.
 // NOTE: We still import concrete modules (not barrels) to preserve tree-shaking.
