@@ -18,7 +18,9 @@
 //     namespace the page shows becomes the named one. It authenticates nothing.
 //   * No `.me`, or a `.me` without a namespace, renders a plain message saying so; it does not guess a destination. A
 //     namespace that cannot be parsed throws, it is never swapped for a default.
-//   * Transport: wherever `<Me transport>` says the `.me` is reached; absent, the namespace's own address.
+//   * Where it is reached (scheme and port): see `namespaceAddress`. `<Me transport>` says it when it is not obvious; with
+//     none, a page served by the namespace's own host is reached where it is served, and any other namespace at the
+//     address its name gives (`cleaker.me` -> https://cleaker.me).
 //   * The `.me` found here is configuration only. The session `SeedSessionProvider` opens builds its own kernel on
 //     claim / open (username + password, vault unlock, phrase recovery); nothing here ever operates on, or logs in, the
 //     `.me` it read the namespace from. A shared namespace is not a shared runtime, and this file does not claim it is.
@@ -32,6 +34,7 @@
 import * as React from 'react';
 import { useOptionalMe } from '@/react/useMe';
 import { readMeNamespace, readMeUsername } from '@/react/meNamespace';
+import { namespaceAddress } from '@/react/namespaceAddress';
 import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
 import Namespace from '@/react/session/Namespace';
 import type { GuiDocument } from '@/runtime/guiDocument';
@@ -74,7 +77,11 @@ export default function Cleaker({ sx, resolveSeedFromCredentials, document, page
     );
   }
 
-  const cleakerEndpoint = namespaceConfig.transport.origin;
+  const cleakerEndpoint = namespaceAddress({
+    namespaceOrigin: namespaceConfig.transport.origin,
+    transport: found?.transport,
+    pageOrigin: typeof window !== 'undefined' ? window.location.origin : '',
+  });
   const transportOrigin = found?.transport || cleakerEndpoint;
 
   return (

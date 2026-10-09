@@ -47,8 +47,11 @@ export function writeMeNamespace(me: MeLike, namespace: string): void {
 }
 
 /**
- * Declares a root and/or a handle on a `.me`. The factory in `this.me` (`createThisMe`) is not used for this: it asks
- * for at least two labels in the root, and the root a gateway serves can be a single one (`localhost`).
+ * Declares a root and/or a handle on a `.me`. TEMPORARY: it writes by hand the fields `createThisMe` (this.me) writes,
+ * because the `.me` this package resolves today (the live checkout, 4.1.0) rejects a root of a single label such as
+ * `localhost`. `feat/known-root-single-label` (.me 4.2.0, not merged) accepts it, and strips a port from the root. Once
+ * that lands, this should call the factory and this second description of an identity should go. Not identical yet: the
+ * factory also sets `profile.name` and the kernel's active expression (`@`); this does not.
  */
 export function writeMeIdentity(me: MeLike, { namespace, username }: { namespace?: string; username?: string }): void {
   const root = String(namespace || '').trim();

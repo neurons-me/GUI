@@ -57,7 +57,7 @@ export const Flow: StoryObj<FlowArgs> = {
     // keyed: changing the control starts the flow over, with the other channel
     <ConnectionSeamsContext.Provider key={otherHost} value={otherHost === "answers" ? NOTHING_ANSWERS : NEVER_ANSWERS}>
       <Theme>
-        <Me namespace={typeof window !== "undefined" ? window.location.host : "localhost"}>
+        <Me namespace={typeof window !== "undefined" ? window.location.hostname : "localhost"}>
           <Cleaker />
         </Me>
       </Theme>
