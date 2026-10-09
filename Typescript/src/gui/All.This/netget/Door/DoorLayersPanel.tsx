@@ -8,11 +8,13 @@
 //
 // The person sees ONE thing, "netget", with the state of the whole and, when it is not up, the layer that decides it.
 // What netget consists of (the three layers above, each with why it is in that state) is behind a fold: open it to
-// break it down.
+// break it down. The breakdown is not written out here: it is what `me.explain("door.netget")` says the whole depends
+// on (see doorKernel.ts).
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import type { DoorLayers, LayerState } from '@/react/session/doorLayers';
+import { createDoorKernel, explainNetget, type NetgetReading } from '@/react/session/doorKernel';
 
 export type DoorNeeds = 'backend' | 'monad' | 'both';
 
@@ -48,20 +50,11 @@ const STATE_COLOR: Record<LayerState, string> = {
   error: 'error.main',
 };
 
-export type NetgetLayer = 'nginx' | 'backend' | 'monad';
-
-/**
- * The state of netget as a whole. The first layer, in the order a request meets them (nginx, backend, monad), that is
- * off or in error decides it and is named as the cause; with none failing, anything still being read makes it
- * `checking`; otherwise it is `up`.
- */
-export function netgetState(layers: DoorLayers): { state: LayerState; cause: NetgetLayer | null } {
-  const order: NetgetLayer[] = ['nginx', 'backend', 'monad'];
-  const failing = order.find((layer) => layers[layer] === 'off' || layers[layer] === 'error');
-  if (failing) return { state: layers[failing], cause: failing };
-  if (order.some((layer) => layers[layer] === 'checking')) return { state: 'checking', cause: null };
-  return { state: 'up', cause: null };
-}
+const LAYER_DETAIL: Record<'nginx' | 'backend' | 'monad', string> = {
+  nginx: 'serving this page',
+  backend: "netget's gateway API",
+  monad: "netget's own .me, through /apps/netget",
+};
 
 const NETGET_TEXT: Record<LayerState, string> = {
   checking: 'Checking netget…',
@@ -156,8 +149,8 @@ function Command({ text }: { text: string }) {
 }
 
 // "netget", one line: its state, the layer that decides it when it is not up, and a chevron that opens the breakdown.
-function NetgetSummary({ layers, open, onToggle, nodeId, align }: { layers: DoorLayers; open: boolean; onToggle: () => void; nodeId: string; align: 'start' | 'center' }) {
-  const { state, cause } = netgetState(layers);
+function NetgetSummary({ netget, open, onToggle, nodeId, align }: { netget: NetgetReading; open: boolean; onToggle: () => void; nodeId: string; align: 'start' | 'center' }) {
+  const { state, cause } = netget;
   return (
     <Box
       component="button"
@@ -188,6 +181,10 @@ function NetgetSummary({ layers, open, onToggle, nodeId, align }: { layers: Door
 
 export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
   const [open, setOpen] = React.useState(false);
+  // One kernel for the life of the panel; each new reading is written into it and asked again.
+  const kernelRef = React.useRef<any>(null);
+  if (!kernelRef.current) kernelRef.current = createDoorKernel();
+  const netget = React.useMemo(() => explainNetget(kernelRef.current, layers), [layers]);
   const command = nextCommand(layers);
   const toggle = () => setOpen((current) => !current);
 
@@ -198,7 +195,7 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, va
         data-gui-component="DoorLayers"
         sx={{ width: '100%', maxWidth: 360, mx: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.25, mt: 1.5, ...sx }}
       >
-        <NetgetSummary layers={layers} open={open} onToggle={toggle} nodeId={nodeId} align="center" />
+        <NetgetSummary netget={netget} open={open} onToggle={toggle} nodeId={nodeId} align="center" />
         {open && (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
             <Dot name="nginx" state={layers.nginx} />
@@ -217,13 +214,13 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, va
       data-gui-component="DoorLayers"
       sx={{ width: '100%', maxWidth: 440, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 1.75, p: { xs: 2, sm: 2.5 }, ...sx }}
     >
-      <NetgetSummary layers={layers} open={open} onToggle={toggle} nodeId={nodeId} align="start" />
+      <NetgetSummary netget={netget} open={open} onToggle={toggle} nodeId={nodeId} align="start" />
 
       {open && (
         <Box data-gui-node-id={`${nodeId}.netget.layers`} sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-          <Row name="nginx" detail="serving this page" state={layers.nginx} />
-          <Row name="backend" detail="netget's gateway API" state={layers.backend} reason={layers.backendReason} />
-          <Row name="monad" detail="netget's own .me, through /apps/netget" state={layers.monad} reason={layers.monadReason} />
+          {netget.layers.map((entry) => (
+            <Row key={entry.layer} name={entry.layer} detail={LAYER_DETAIL[entry.layer]} state={entry.state} reason={entry.layer === 'nginx' ? undefined : entry.reason} />
+          ))}
         </Box>
       )}
 
