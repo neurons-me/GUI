@@ -434,7 +434,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   const handleEnter = async () => {
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
-    await onEnter(remoteRoot ? { transportOrigin: `https://${remoteRoot}` } : undefined);
+    // The root is this link's own, said explicitly: not read back from the page-wide active root, which another mounted
+    // link may have written last.
+    await onEnter({ ...(remoteRoot ? { transportOrigin: `https://${remoteRoot}` } : {}), namespace: namespaceRootLabel });
   };
 
   return (

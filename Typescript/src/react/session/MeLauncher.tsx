@@ -54,7 +54,12 @@ export interface MeLauncherView {
   pending: boolean;
   error: Error | null;
   /** `transportOrigin`: sign in against that host instead of this page's own (a root that is another host). */
-  onEnter: (options?: { transportOrigin?: string }) => Promise<void>;
+  /**
+   * `namespace`: the root THIS caller is signing in to. A link passes its own, so signing in never depends on which
+   * root some other mounted link last wrote into the page-wide active root (getActiveNamespaceRoot), which is only
+   * the fallback for a caller that does not say.
+   */
+  onEnter: (options?: { transportOrigin?: string; namespace?: string }) => Promise<void>;
   onLogout: () => void;
   // Credentials-branch only — null for SessionSurface's one-click shape.
   credentialsForm: { username: string; setUsername: (v: string) => void; password: string; setPassword: (v: string) => void } | null;
@@ -106,6 +111,7 @@ export function useMeLauncherView(): MeLauncherView | null {
           username: username.trim(),
           password,
           ...(options?.transportOrigin ? { transportOrigin: options.transportOrigin } : {}),
+          ...(options?.namespace ? { namespace: options.namespace } : {}),
         });
         setUsername('');
         setPassword('');
