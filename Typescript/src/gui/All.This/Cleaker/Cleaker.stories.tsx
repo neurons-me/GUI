@@ -12,7 +12,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import Theme from "@/gui/Theme/Theme";
 import Cleaker from "./Cleaker";
 import { ConnectionSeamsContext } from "./useQRConnect";
-import { NOTHING_ANSWERS } from "./storyMocks";
+import { NOTHING_ANSWERS, NEVER_ANSWERS } from "./storyMocks";
 
 const meta: Meta<typeof Cleaker> = {
   title: "All.This/Cleaker",
@@ -40,11 +40,17 @@ export const Default: Story = {
 //     Try another namespace      --> type one that does not exist --> the cross, and the same card again
 //     Diagnosis                  --> the layers, where you are, the start command and the trace
 //
-// Only the network is replaced (ConnectionSeams, see storyMocks.ts). Open the console to read each step
-// (`[qr] …`), or `globalThis['GUI-QR-TRACE'].entries()`.
-export const Flow: Story = {
-  render: () => (
-    <ConnectionSeamsContext.Provider value={NOTHING_ANSWERS}>
+// The control "otherHost" decides what the other host does: it answers (the path above), or it never finishes, which
+// holds the loader for as long as you want to look at it. Only the network is replaced (ConnectionSeams, see
+// storyMocks.ts). Open the console to read each step (`[qr] …`), or `globalThis['GUI-QR-TRACE'].entries()`.
+type FlowArgs = { otherHost: "answers" | "never finishes" };
+
+export const Flow: StoryObj<FlowArgs> = {
+  args: { otherHost: "answers" },
+  argTypes: { otherHost: { control: "inline-radio", options: ["answers", "never finishes"] } },
+  render: ({ otherHost }) => (
+    // keyed: changing the control starts the flow over, with the other channel
+    <ConnectionSeamsContext.Provider key={otherHost} value={otherHost === "answers" ? NOTHING_ANSWERS : NEVER_ANSWERS}>
       <Theme>
         <Cleaker cleakerEndpoint={typeof window !== "undefined" ? window.location.origin : "http://localhost"} />
       </Theme>

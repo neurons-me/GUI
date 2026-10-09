@@ -67,7 +67,7 @@ const DISPOSABLE_ORIGIN = "http://127.0.0.1:18322";
 const DISPOSABLE_ROOT_LABEL = "disposable-test.local";
 
 const meta: Meta = {
-  title: "Verify/Cleaker",
+  title: "Verify",
   parameters: { layout: "fullscreen" },
 };
 
