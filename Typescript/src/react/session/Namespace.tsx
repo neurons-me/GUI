@@ -786,7 +786,7 @@ const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id
     }
   }
 
-  const shellSx = { minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
+  const shellSx = { minHeight: 'var(--gui-layout-min-height, 100vh)', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
 
   if (!gatewayId || !challenge || !state || !returnTo || !returnToUrl) {
     return (
@@ -1114,7 +1114,7 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
     }
   }
 
-  const shellSx = { minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
+  const shellSx = { minHeight: 'var(--gui-layout-min-height, 100vh)', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
 
   if (!returnTo || !returnToUrl) {
     return (

@@ -138,7 +138,9 @@ function Layout({
       <RightBarProvider initialView={rightInitialView}>
         <Box
           id="layout-root"
-          sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}
+          // A full page is as tall as the viewport. A container that embeds the shell in something shorter says so with
+          // `--gui-layout-min-height: 100%` (its own height), and the shell fits it instead of overflowing it.
+          sx={{ display: 'flex', flexDirection: 'column', minHeight: 'var(--gui-layout-min-height, 100vh)' }}
         >
           {topBarChild ?? (hasTopBar && (
             <TopBarComponent

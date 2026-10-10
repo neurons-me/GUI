@@ -32,7 +32,7 @@ function Link({ testId, link }: { testId: string; link: { origin: string; root: 
     <Box
       data-testid={testId}
       // overflow: clip (not hidden): a hidden box can still be scrolled by focus, which shifted one shell against the other
-      sx={{ position: "relative", transform: "translateZ(0)", height: 620, overflow: "clip", border: "1px solid", borderColor: "divider", borderRadius: 1 }}
+      sx={{ position: "relative", transform: "translateZ(0)", height: 620, overflow: "clip", "--gui-layout-min-height": "100%", border: "1px solid", borderColor: "divider", borderRadius: 1 }}
     >
       <ConnectionSeamsContext.Provider value={disposableDoorSeams(link.origin)}>
         <Cleaker namespace={link.root} transport={link.origin} />
