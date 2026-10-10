@@ -116,22 +116,25 @@ export function createInternalStore() {
       version += 1;
       listeners.forEach((listener) => listener());
     },
+    /** Move the snapshot without calling every listener (one path changed). */
+    bump() {
+      version += 1;
+    },
     getSnapshot() {
       return version;
     },
   };
 }
 
-function resolveNativeSubscribe(me: MeLike, opts: RenderMeOptions): MeSubscribeBridge | null {
-  if (typeof opts.subscribe === 'function') return opts.subscribe;
-  // A real `.me` kernel is a callable proxy, and on it EVERY property is a path-builder: `me.subscribe` is always a
-  // function, and calling it does not subscribe, it WRITES a memory at the path `subscribe` holding the callback (which
-  // then makes `exportSnapshot()` throw, a function cannot be cloned). So only a plain object that really has a
-  // `subscribe` method counts as having one.
-  if (typeof me !== 'function' && typeof (me as any)?.subscribe === 'function') {
-    return (path: string, callback: () => void) => (me as any).subscribe(path, callback);
-  }
-  return null;
+// Only an explicit bridge (opts.subscribe / MeRuntimeProvider's `subscribe`
+// prop) is used for external change notification. Do not duck-type
+// `me.subscribe`: the .me proxy turns any property name into a semantic path,
+// so `typeof me.subscribe === 'function'` is always true, and invoking it
+// commits a fact `subscribe = [path, callback]` to the kernel instead of
+// registering a listener (the callback never fires). Without a bridge,
+// subscribers are notified only by writes through this adapter or notify().
+function resolveNativeSubscribe(opts: RenderMeOptions): MeSubscribeBridge | null {
+  return typeof opts.subscribe === 'function' ? opts.subscribe : null;
 }
 
 function writeViaProxy(me: MeLike, path: string, value: any) {
@@ -202,7 +205,7 @@ export function writeMeValue(me: MeLike, target: string, body: any, opts: Render
 export function createMeRuntime(me: MeLike, opts: RenderMeOptions = {}): RuntimeAdapter & { __me?: MeLike; me?: MeLike } {
   const prefix = opts.pathPrefix ?? 'me/';
   const store = createInternalStore();
-  const nativeSubscribe = resolveNativeSubscribe(me, opts);
+  const nativeSubscribe = resolveNativeSubscribe(opts);
 
   const adapter: RuntimeAdapter & { __me?: MeLike; me?: MeLike } = {
     me,
@@ -224,7 +227,13 @@ export function createMeRuntime(me: MeLike, opts: RenderMeOptions = {}): Runtime
       const notify = () => callback(undefined);
       const unsubs: UnsubscribeFn[] = [store.subscribe(path, notify)];
       if (nativeSubscribe) {
-        const nativeUnsub = nativeSubscribe(path, notify);
+        // The kernel changed outside action(): the snapshot must move too, or
+        // useSyncExternalStore (RuntimeResolvedNode) sees the same version and
+        // keeps the stale value.
+        const nativeUnsub = nativeSubscribe(path, () => {
+          store.bump();
+          notify();
+        });
         if (typeof nativeUnsub === 'function') unsubs.push(nativeUnsub);
       }
       return combineUnsubscribers(unsubs);

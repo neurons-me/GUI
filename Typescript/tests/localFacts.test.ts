@@ -32,7 +32,7 @@ async function main() {
   // nothing there is `absent`, not a value
   assert.equal((await readAddress(local, 'me://self:read/nowhere.at.all')).status, 'absent');
 
-  // under a secret scope the owner's kernel reads the value; what is lent is the public view, which does not
+  // under a secret scope the owner's kernel reads the value; the restricted read (me.as(null)) does not
   local.wallet['_']('k-secret');
   local.wallet.note('hidden');
   assert.equal(local('wallet.note'), 'hidden', 'the owner still reads it through the kernel itself');
@@ -42,7 +42,30 @@ async function main() {
   const scope = await readAddress(local, 'me://self:read/wallet');
   assert.ok(!JSON.stringify(scope).includes('hidden') && !JSON.stringify(scope).includes('k-secret'));
 
-  // a fact written after a read is seen by the next one (the view is rebuilt when the kernel changes)
+  // nested under the scope, and a sibling outside it
+  local.wallet.deep.card('4111');
+  local.shop.price(10); local.shop.rate(2); local.shop['=']('total', 'price * rate');
+  assert.equal((await readAddress(local, 'me://self:read/wallet.deep.card')).status, 'absent');
+  // a derived value is answered by the kernel in place (no replay: nothing was copied)
+  const derived = await readAddress(local, 'me://self:read/shop.total');
+  assert.equal((derived as any).value, 20);
+  local.shop.price(15);
+  assert.equal(((await readAddress(local, 'me://self:read/shop.total')) as any).value, 30, 'and follows its sources');
+
+  // reading changed nothing: no memory added, and the owner still reads as the owner
+  const memories = local.memories.length;
+  await readAddress(local, 'me://self:read/wallet.note');
+  assert.equal(local.memories.length, memories);
+  assert.equal(local('wallet.note'), 'hidden', 'the restricted read leaves the owner\'s scope as it was');
+
+  // no restricted read, no read: an object that is callable but has no `as` is not read as the owner
+  const noAs: any = Object.assign((p: string) => 'secret-by-owner', {});
+  const refused = await readAddress(noAs, 'me://self:read/anything');
+  assert.equal(refused.status, 'error');
+  assert.equal((refused as any).code, 'NO_RESTRICTED_READ');
+  assert.ok(!JSON.stringify(refused).includes('secret-by-owner'));
+
+  // a fact written after a read is seen by the next one
   local.bateria(60);
   assert.equal(((await readAddress(local, 'me://self:read/bateria')) as any).value, 60);
   local.bateria(75);

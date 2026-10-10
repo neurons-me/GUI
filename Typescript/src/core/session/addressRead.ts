@@ -17,11 +17,13 @@
 // `<Me>`, readable by everything under it, and NOT authenticated (a declared username is context, not proof of who is
 // here), so nothing that reads them should present them as verified claims about the actor.
 //
-// What is lent is the PUBLIC VIEW of that kernel, the same thing a stranger would get from a ledger (the kernel's own
-// `exportSnapshot()`, which carries no secret material, hydrated into a scratch kernel): a path under a secret scope
-// reads as nothing, as it does there. Reading with the owner's keys stays what it always was, direct access to the
-// kernel by the page's own code. Nothing under a `<Me>` (a link's interface, an agent) gets it through this function.
-import ME from 'this.me';
+// What is read is the kernel's own RESTRICTED handle, not a copy: `kernel.as(null)` is a read as a caller with no scope, so
+// a path under a secret scope reads as nothing (stealth), exactly as it does for a stranger, while everything else,
+// derived values included, is answered by the same kernel in place. Reading with the owner's keys stays what it always
+// was, direct access to the kernel by the page's own code; nothing under a `<Me>` (a link's interface, an agent) gets it
+// through this function. (An earlier version restricted by exporting a snapshot and hydrating a scratch kernel: that is a
+// copy, costs O(memories) per read, and carries ciphertext and wrapped material along. `withScope` is deprecated and does
+// not restrict.)
 import { parseTarget } from 'cleaker';
 import { readMeValue } from '@/runtime/run-me';
 import type { SeedSession } from './createSeedSession';
@@ -63,19 +65,6 @@ export type AddressRead =
 export function isAudienceEnvelope(value: unknown): value is AudienceEnvelope {
   const v = value as any;
   return !!v && typeof v === 'object' && v.version === 1 && typeof v.audience === 'string' && 'ciphertext' in v && 'tree' in v;
-}
-
-// The public view of a local kernel, rebuilt only when the kernel's memories changed.
-const PUBLIC_VIEWS = new WeakMap<object, { key: string; view: any }>();
-function publicViewOf(kernel: any): any {
-  const memories = Array.isArray(kernel.memories) ? kernel.memories : [];
-  const key = `${memories.length}:${String(memories[memories.length - 1]?.hash ?? '')}`;
-  const cached = PUBLIC_VIEWS.get(kernel);
-  if (cached && cached.key === key) return cached.view;
-  const view: any = new (ME as any)();
-  view.hydrate(kernel.exportSnapshot());
-  PUBLIC_VIEWS.set(kernel, { key, view });
-  return view;
 }
 
 const serves = (link: OpenLink, namespace: string) => namespace === link.root || namespace.endsWith(`.${link.root}`);
@@ -135,9 +124,13 @@ export async function readAddress(
       // an object that is not a kernel is only a key for the registry: there is no local `.me` to read
       return { status: 'no_link', namespace, path, root: namespace, held: [...new Set(openLinksOf(context).map((l) => l.root))].sort() };
     }
+    // No restricted read, no read: it must never fall back to the owner's.
+    if (typeof (context as any).as !== 'function') {
+      return { status: 'error', namespace, path, via: 'self', code: 'NO_RESTRICTED_READ', message: 'This kernel has no restricted read (me.as), so a local fact is not read through it.' };
+    }
     try {
-      const value = readMeValue(publicViewOf(context), path, { allowBarePath: true });
-      // The public view answers `undefined` for a path with nothing there and for one under a secret scope; it never
+      const value = readMeValue((context as any).as(null), path, { allowBarePath: true });
+      // A restricted read answers `undefined` for a path with nothing there and for one under a secret scope; it never
       // says which (that is how a secret scope stays unseen), so neither can this.
       if (value === undefined || value === null) return { status: 'absent', namespace, path, via: 'self' };
       return { status: 'public', namespace, path, via: 'self', value };
