@@ -234,8 +234,8 @@ export type {
 // A link writes a value FOR an audience (this.me's audience algebra) and reads it back as one of its members.
 export { writeForAudience, readForAudience, openEnvelope } from '@/core/session/audienceWrite';
 // Reading by address (`me://ana.a-test.local:read/battery`) through the open links of a context; see addressRead.ts.
-export { readAddress, selectLink } from '@/core/session/addressRead';
-export type { AddressRead, AddressReadOptions } from '@/core/session/addressRead';
+export { readAddress, selectLink, subscribeAddress } from '@/core/session/addressRead';
+export type { AddressRead, AddressReadOptions, AddressSubscription } from '@/core/session/addressRead';
 export type {
   AudienceEnvelope,
   AudienceFormula,
@@ -426,6 +426,7 @@ export { readMeUsername } from '@/react/meIdentity';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';
+export { useAddress } from '@/react/session/useAddress';
 export type { MeLike, MeSubscribeBridge, MeTargetLike } from '@/react/types';
 export type {
   ResolveSeedFromCredentials,

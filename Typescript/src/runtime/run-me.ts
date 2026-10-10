@@ -124,7 +124,11 @@ export function createInternalStore() {
 
 function resolveNativeSubscribe(me: MeLike, opts: RenderMeOptions): MeSubscribeBridge | null {
   if (typeof opts.subscribe === 'function') return opts.subscribe;
-  if (typeof (me as any)?.subscribe === 'function') {
+  // A real `.me` kernel is a callable proxy, and on it EVERY property is a path-builder: `me.subscribe` is always a
+  // function, and calling it does not subscribe, it WRITES a memory at the path `subscribe` holding the callback (which
+  // then makes `exportSnapshot()` throw, a function cannot be cloned). So only a plain object that really has a
+  // `subscribe` method counts as having one.
+  if (typeof me !== 'function' && typeof (me as any)?.subscribe === 'function') {
     return (path: string, callback: () => void) => (me as any).subscribe(path, callback);
   }
   return null;

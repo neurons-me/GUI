@@ -4,6 +4,8 @@
 //
 //   TwoLinks            the same actor in both: A registers, B uses the identity A holds ("Use my identity here").
 //   IndependentLinks    each link with its own credentials: Register in both, two identities, neither replaces the other.
+//   LocalFacts          a fact of the local `.me` (me://self:read/bateria) read from two links; it follows the local
+//                       runtime when it changes and goes to no ledger. Needs no monad.
 //
 // Needs two disposable monads, each in its own process:
 //   DM_ROOT=a-test.local DM_PORT=18331 node disposable-monad.mjs
@@ -12,11 +14,16 @@
 // Each shell sits in a transformed box, which is what makes its fixed-position bars belong to the box and not to the
 // window: two full shells fit side by side.
 import * as React from "react";
+import ME from "this.me";
 import type { Meta } from "@storybook/react";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
 import Theme from "@/gui/Theme/Theme";
 import { Box } from "@/gui/Atoms";
 import { Me } from "@/react/Me";
+import { useMe } from "@/react/useMe";
+import { useMeAction } from "@/react/useMeAction";
+import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
+import { useAddress } from "@/react/session/useAddress";
 import Cleaker from "./Cleaker";
 import { ConnectionSeamsContext } from "./useQRConnect";
 import { disposableDoorSeams } from "./disposableDoor";
@@ -179,4 +186,61 @@ IndependentLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }
   expect(identityOf(a)).toBe(inA);
   expect(open(qb)).not.toBeNull();
   expect(identityOf(b)).toBe(inB);
+};
+
+// ── a local fact, read by address from two links ──
+function LocalReader({ testId }: { testId: string }) {
+  const answer = useAddress("me://self:read/bateria");
+  return (
+    <Box data-testid={testId} sx={{ p: 2, border: "1px solid", borderColor: "divider", borderRadius: 1, fontFamily: "monospace" }}>
+      {answer === null ? "…" : answer.status === "public" ? `bateria = ${String(answer.value)}` : answer.status}
+    </Box>
+  );
+}
+
+function LocalFactsLinks() {
+  const { me } = useMe(); // the `<Me>` above: where the fact lives
+  const set = useMeAction("bateria") as (value: number) => void; // writes through its runtime, which announces the change
+  return (
+    <Box sx={{ display: "grid", gap: 1.5, p: 1.5, maxWidth: 420 }}>
+      <SeedSessionProvider context={me as object} sessionBackend="cleaker" transportOrigin={LINK_A.origin}>
+        <LocalReader testId="local-a" />
+      </SeedSessionProvider>
+      <SeedSessionProvider context={me as object} sessionBackend="cleaker" transportOrigin={LINK_B.origin}>
+        <LocalReader testId="local-b" />
+      </SeedSessionProvider>
+      <button type="button" onClick={() => set(75)}>through the runtime: bateria = 75</button>
+      <button type="button" onClick={() => (me as any).bateria(10)}>straight on the kernel: bateria = 10</button>
+    </Box>
+  );
+}
+
+export const LocalFacts = () => {
+  const local = React.useMemo(() => {
+    const kernel = new (ME as any)();
+    kernel.bateria(80);
+    return kernel;
+  }, []);
+  return (
+    <Theme>
+      <Me me={local}>
+        <LocalFactsLinks />
+      </Me>
+    </Theme>
+  );
+};
+
+LocalFacts.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const canvas = within(canvasElement);
+  const user = userEvent.setup();
+  const a = await waitFor(() => canvas.getByTestId("local-a"));
+  const b = await waitFor(() => canvas.getByTestId("local-b"));
+  await waitFor(() => { expect(a).toHaveTextContent("bateria = 80"); expect(b).toHaveTextContent("bateria = 80"); });
+  // a write through the local runtime reaches both links
+  await user.click(canvas.getByRole("button", { name: /through the runtime/ }));
+  await waitFor(() => { expect(a).toHaveTextContent("bateria = 75"); expect(b).toHaveTextContent("bateria = 75"); });
+  // a value assigned straight on the kernel is not announced: nobody re-reads until something says so
+  await user.click(canvas.getByRole("button", { name: /straight on the kernel/ }));
+  await new Promise((r) => setTimeout(r, 400));
+  expect(a).toHaveTextContent("bateria = 75");
 };

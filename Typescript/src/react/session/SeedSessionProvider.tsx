@@ -12,7 +12,8 @@ import {
   type CreateSessionRuntime,
 } from '@/core/session/createSeedSession';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
-import { readAddress as readAddressThrough, type AddressRead, type AddressReadOptions } from '@/core/session/addressRead';
+import { readAddress as readAddressThrough, subscribeAddress as subscribeAddressThrough, type AddressRead, type AddressReadOptions, type AddressSubscription } from '@/core/session/addressRead';
+import { useOptionalMe } from '@/react/useMe';
 import { heldIdentitiesOf, rootOf, sessionHolding, watchHeldIdentities, type HeldIdentity } from '@/core/session/heldIdentities';
 import {
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
@@ -231,6 +232,11 @@ export type SeedSessionContextValue = {
    * no_link / ambiguous / error apart (see `AddressRead`). Anonymous like any ledger read; nothing is copied to a kernel.
    */
   readAddress(expression: string, options?: AddressReadOptions): Promise<AddressRead>;
+  /**
+   * Calls back when the local fact an address names (`me://self:read/...`) may have changed, so it can be read again.
+   * `live` says whether it ever will: an address in a ledger is not pushed here yet. See `subscribeAddress`.
+   */
+  subscribeAddress(expression: string, onChange: () => void): AddressSubscription;
   claim(namespace: string): Promise<MonadClaimResult>;
   open(namespace?: string | null): Promise<MonadOpenResult>;
   claimAndOpen(namespace: string): Promise<MonadOpenResult>;
@@ -775,6 +781,15 @@ export function SeedSessionProvider({
     [context],
   );
 
+  // The runtime of the `.me` this link was given, found ABOVE this provider (inside it, the nearest runtime is the
+  // link's own). It is the local runtime only when it is the runtime of that very `.me`.
+  const above = useOptionalMe();
+  const localRuntime = context && above && (above.me as unknown) === context ? above.runtime : null;
+  const subscribeAddress = React.useCallback(
+    (expression: string, onChange: () => void) => subscribeAddressThrough(localRuntime, expression, onChange),
+    [localRuntime],
+  );
+
   // The explicit counterpart to registerWithCredentials for an identity that already exists in this context: same claim,
   // same signed proof, but the root is the one an open link already holds. Nothing is generated and no phrase is shown.
   const linkExistingIdentity = React.useCallback(
@@ -1128,6 +1143,7 @@ export function SeedSessionProvider({
       heldIdentities,
       linkExistingIdentity,
       readAddress,
+      subscribeAddress,
       claim,
       open,
       claimAndOpen,
@@ -1148,6 +1164,7 @@ export function SeedSessionProvider({
       heldIdentities,
       linkExistingIdentity,
       readAddress,
+      subscribeAddress,
       loginWithSeed,
       activateSession,
       open,

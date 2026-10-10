@@ -3,7 +3,8 @@
 // there" / "not disclosed" into a value.
 import assert from 'node:assert/strict';
 import ME from 'this.me';
-import { readAddress } from '../src/core/session/addressRead';
+import { readAddress, subscribeAddress } from '../src/core/session/addressRead';
+import { createMeRuntime } from '../src/runtime/run-me';
 
 const fresh = () => new (ME as any)() as any;
 
@@ -58,6 +59,44 @@ async function main() {
 
   // only reads, here as everywhere
   assert.equal((await readAddress(local, 'me://self:write/bateria')).status, 'invalid_expression');
+
+  // ── subscribing must not write into the kernel it watches ──
+  const watched = fresh();
+  watched.bateria(80);
+  const before = watched.memories.length;
+  createMeRuntime(watched).subscribe!('bateria', () => undefined);
+  assert.equal(watched.memories.length, before, 'a subscription adds no memory');
+  assert.doesNotThrow(() => watched.exportSnapshot(), 'and the kernel still exports');
+
+  // ── reactivity: the local runtime tells the reader to read again ──
+  const live = fresh();
+  live.bateria(80);
+  const runtime = createMeRuntime(live);
+  let calls = 0;
+  const sub = subscribeAddress(runtime, 'me://self:read/bateria', () => { calls += 1; });
+  assert.equal(sub.live, true);
+  assert.equal(calls, 0);
+  runtime.action('bateria')(65);                                  // a write through the runtime
+  assert.equal(calls, 1, 'a write through the runtime is announced');
+  assert.equal(((await readAddress(live, 'me://self:read/bateria')) as any).value, 65, 'and reads as the new value');
+  runtime.action('bateria')(64);
+  assert.equal(calls, 2);
+  live.bateria(10);                                               // straight onto the kernel: nothing announces it
+  assert.equal(calls, 2, 'a value assigned directly on the kernel is not noticed');
+  runtime.notify?.();                                             // until something says so
+  assert.equal(calls, 3);
+  assert.equal(((await readAddress(live, 'me://self:read/bateria')) as any).value, 10);
+  sub.unsubscribe();
+  runtime.action('bateria')(1);
+  assert.equal(calls, 3, 'after unsubscribing nothing calls back');
+
+  // an address that is not local is not pretended to be live
+  const remote = subscribeAddress(runtime, 'me://ana.a-test.local:read/battery', () => { calls += 1; });
+  assert.equal(remote.live, false);
+  runtime.action('bateria')(2);
+  assert.equal(calls, 3);
+  assert.equal(subscribeAddress(null, 'me://self:read/bateria', () => undefined).live, false, 'no runtime, no promise');
+  assert.equal(subscribeAddress(runtime, 'not an address ::', () => undefined).live, false);
 
   console.log('localFacts: ok');
 }

@@ -6,6 +6,7 @@ export {
   useOptionalSeedSessionContext,
 } from '@/react/session/SeedSessionProvider';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';
+export { useAddress } from '@/react/session/useAddress';
 export {
   SessionSurface,
   useSessionSurface,

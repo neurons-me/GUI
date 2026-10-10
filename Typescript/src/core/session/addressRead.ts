@@ -28,6 +28,7 @@ import type { SeedSession } from './createSeedSession';
 import { MonadClientError } from './monadClient';
 import { openLinksOf, type OpenLink } from './heldIdentities';
 import type { AudienceEnvelope } from './audienceWrite';
+import type { RuntimeAdapter } from '@/runtime/adapter';
 
 export type AddressReadOptions = {
   /**
@@ -178,4 +179,42 @@ export async function readAddress(
     const code = cause instanceof MonadClientError ? String(cause.code) : String((cause as any)?.code || 'READ_FAILED');
     return { status: 'error', namespace, path, via, code, message: cause instanceof Error ? cause.message : String(cause) };
   }
+}
+
+export type AddressSubscription = {
+  /** Stops calling back. */
+  unsubscribe: () => void;
+  /**
+   * Whether this address will ever call back. A fact of the local `.me` (`self`) does, through the local runtime; an
+   * address in a ledger does not yet (its changes are not pushed to this reader here), and says so instead of looking live.
+   */
+  live: boolean;
+};
+
+/**
+ * Calls `onChange` when the local fact an address names may have changed, so it can be read again with `readAddress`.
+ *
+ * What counts as a change is what the local runtime sees: a write made THROUGH it (`runtime.action`, `useMeAction`) or one
+ * announced with `runtime.notify()`. The kernel itself has no change event, so a value assigned directly on the kernel
+ * (`kernel.bateria(75)`) is not noticed until something notifies. The callback is told nothing about which path moved;
+ * it re-reads.
+ */
+export function subscribeAddress(
+  runtime: Pick<RuntimeAdapter, 'subscribe'> | null | undefined,
+  expression: string,
+  onChange: () => void,
+): AddressSubscription {
+  const none: AddressSubscription = { unsubscribe: () => undefined, live: false };
+  let namespace = '';
+  let path = '';
+  try {
+    const t: any = parseTarget(String(expression ?? '').trim(), { defaultMode: 'reactive', allowShorthandRead: true });
+    namespace = String(t.namespace?.fqdn || '').trim().toLowerCase();
+    path = String(t.path || '').replace(/^\/+/, '').replace(/\//g, '.');
+  } catch {
+    return none;
+  }
+  if ((namespace !== 'self' && namespace !== 'local') || !path || typeof runtime?.subscribe !== 'function') return none;
+  const off = runtime.subscribe(path, () => onChange(), undefined, { propKey: path });
+  return { unsubscribe: typeof off === 'function' ? off : () => undefined, live: true };
 }
