@@ -1598,6 +1598,14 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     setIdentityMounted(true);
     setIdentityOpen(true);
   };
+  // Closing returns the person to the badge they opened it from. The dialog's own focus restore is not relied on: the
+  // rail re-creates its elements while the dialog is open (the badge's `active` changes), so the node focus would be
+  // restored to may be gone. The badge is found by its document id at the moment the dialog has finished closing.
+  const closeIdentityCard = () => setIdentityOpen(false);
+  const focusIdentityBadge = () => {
+    const badge = document.querySelector('[data-gui-node-id="GUI.bars.left.identity"]') as HTMLElement | null;
+    badge?.focus();
+  };
   const positionBadge = (
     <Box
       component="button"
@@ -1633,7 +1641,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const identityCard = identityMounted && LandingComponent ? (
     <Dialog
       open={identityOpen}
-      onClose={() => setIdentityOpen(false)}
+      onClose={closeIdentityCard}
+      TransitionProps={{ onExited: focusIdentityBadge }}
+      disableRestoreFocus
       keepMounted
       fullWidth
       maxWidth="sm"
@@ -1645,7 +1655,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         <Box
           component="button"
           type="button"
-          onClick={() => setIdentityOpen(false)}
+          onClick={closeIdentityCard}
           aria-label="Close"
           sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'text.secondary' }}
         >
