@@ -1074,7 +1074,7 @@ export default function QRme({
               p: 0,
               border: 0,
               bgcolor: 'transparent',
-              cursor: 'text',
+              cursor: 'pointer',
               '&:focus': { outline: 'none' },
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: '4px' },
               // The pencil is the quiet part until the label is pointed at; it eases in and out slowly, like the underline.
