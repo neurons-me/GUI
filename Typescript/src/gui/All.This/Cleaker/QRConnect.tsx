@@ -406,8 +406,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
 
   // The process of connecting (what the QR shows, what clicking it does, what is offered when it cannot be reached) is
   // useQRConnect's; this card draws the QR and the way forward, and keeps the form. It is not rendered while
-  // registering or recovering, so nothing connects then.
-  const qrActive = mode !== 'register' && mode !== 'recover';
+  // registering or recovering, so nothing connects then. Only while that form is what is showing: `mode` stays 'register'
+  // after the registration completes (it is reset on sign-out), and a signed-in link must still show its QR.
+  const qrActive = !((mode === 'register' && !registrationComplete) || (mode === 'recover' && !recoveryComplete));
   const conn = useQRConnect({
     expression: namespaceRootLabel,
     onExpressionChange: setNamespaceOverride,
