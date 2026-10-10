@@ -12,6 +12,7 @@ import {
   type CreateSessionRuntime,
 } from '@/core/session/createSeedSession';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
+import { readAddress as readAddressThrough, type AddressRead, type AddressReadOptions } from '@/core/session/addressRead';
 import { heldIdentitiesOf, rootOf, sessionHolding, watchHeldIdentities, type HeldIdentity } from '@/core/session/heldIdentities';
 import {
   DEFAULT_MONAD_TRANSPORT_ORIGIN,
@@ -224,6 +225,12 @@ export type SeedSessionContextValue = {
    * open link holds that identity.
    */
   linkExistingIdentity(input: LinkExistingIdentityInput): Promise<SeedSession>;
+  /**
+   * Reads a value by its address (`me://ana.a-test.local:read/battery`) through an open link of this context that serves
+   * that root: never "the last one opened", never another context's. The answer keeps public / sealed / closed / absent /
+   * no_link / ambiguous / error apart (see `AddressRead`). Anonymous like any ledger read; nothing is copied to a kernel.
+   */
+  readAddress(expression: string, options?: AddressReadOptions): Promise<AddressRead>;
   claim(namespace: string): Promise<MonadClaimResult>;
   open(namespace?: string | null): Promise<MonadOpenResult>;
   claimAndOpen(namespace: string): Promise<MonadOpenResult>;
@@ -763,6 +770,11 @@ export function SeedSessionProvider({
     return watchHeldIdentities(context, () => setHeldIdentities(heldIdentitiesOf(context)));
   }, [context]);
 
+  const readAddress = React.useCallback(
+    (expression: string, readOptions?: AddressReadOptions) => readAddressThrough(context, expression, readOptions),
+    [context],
+  );
+
   // The explicit counterpart to registerWithCredentials for an identity that already exists in this context: same claim,
   // same signed proof, but the root is the one an open link already holds. Nothing is generated and no phrase is shown.
   const linkExistingIdentity = React.useCallback(
@@ -1115,6 +1127,7 @@ export function SeedSessionProvider({
       recoverWithPhrase,
       heldIdentities,
       linkExistingIdentity,
+      readAddress,
       claim,
       open,
       claimAndOpen,
@@ -1134,6 +1147,7 @@ export function SeedSessionProvider({
       recoverWithPhrase,
       heldIdentities,
       linkExistingIdentity,
+      readAddress,
       loginWithSeed,
       activateSession,
       open,

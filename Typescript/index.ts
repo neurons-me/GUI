@@ -233,6 +233,9 @@ export type {
 } from '@/core/session/createSeedSession';
 // A link writes a value FOR an audience (this.me's audience algebra) and reads it back as one of its members.
 export { writeForAudience, readForAudience, openEnvelope } from '@/core/session/audienceWrite';
+// Reading by address (`me://ana.a-test.local:read/battery`) through the open links of a context; see addressRead.ts.
+export { readAddress, selectLink } from '@/core/session/addressRead';
+export type { AddressRead, AddressReadOptions } from '@/core/session/addressRead';
 export type {
   AudienceEnvelope,
   AudienceFormula,

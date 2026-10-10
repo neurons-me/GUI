@@ -85,3 +85,22 @@ export function watchHeldIdentities(context: object, cb: () => void): () => void
   set.add(cb);
   return () => { set!.delete(cb); };
 }
+
+/** An open link of a context, by what it serves: its own namespace and the root it is a name under. */
+export type OpenLink = { session: SeedSession; namespace: string; root: string };
+
+/**
+ * The open links of a context, sorted by namespace (never by when they opened). `root` is what the link's namespace is a
+ * name under: `ana.a-test.local` under `a-test.local`. Sessions are returned as they are; the roots they were built from
+ * are not reachable from here.
+ */
+export function openLinksOf(context: object | null | undefined): OpenLink[] {
+  if (!context) return [];
+  return [...entriesOf(context).values()]
+    .map((e) => {
+      const prefix = `${e.handle}.`;
+      const root = e.namespace.startsWith(prefix) ? e.namespace.slice(prefix.length) : e.namespace;
+      return { session: e.session, namespace: e.namespace, root };
+    })
+    .sort((a, b) => a.namespace.localeCompare(b.namespace));
+}
