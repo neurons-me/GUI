@@ -90,6 +90,10 @@ type MainServerState = {
   entrypoints: Entrypoint[];
   // whether /entrypoints answered: an unanswered request is not an empty list
   entrypointsView: EntrypointsView;
+  // Which requests answered. "Unclaimed", "unknown" and "no public domain configured" are statements about the server;
+  // they are only made when the request that would say so actually came back.
+  identityAnswered: boolean;
+  namespaceAnswered: boolean;
 };
 
 const EMPTY_STATE: MainServerState = {
@@ -109,17 +113,20 @@ const EMPTY_STATE: MainServerState = {
   publicIP: '',
   entrypoints: [],
   entrypointsView: { kind: 'unavailable' },
+  identityAnswered: false,
+  namespaceAnswered: false,
 };
 
-async function fetchJson(base: string, path: string): Promise<any | null> {
+// `status` is 0 when the request itself failed (no answer); `json` is null unless a JSON body came back with a 2xx.
+async function fetchJsonResult(base: string, path: string): Promise<{ status: number; json: any | null }> {
   try {
     const res = await fetch(`${base}${path}`, { cache: 'no-store', credentials: 'same-origin' });
-    if (!res.ok) return null;
+    if (!res.ok) return { status: res.status, json: null };
     const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) return null;
-    return await res.json();
+    if (!contentType.includes('application/json')) return { status: res.status, json: null };
+    return { status: res.status, json: await res.json() };
   } catch {
-    return null;
+    return { status: 0, json: null };
   }
 }
 
@@ -148,7 +155,7 @@ function maskHash(hash: string): string {
 }
 
 function portText(view: PortView): string {
-  return view === 'listening' ? 'listening' : view === 'not-listening' ? 'not listening' : 'unavailable';
+  return view === 'listening' ? 'listening' : view === 'not-listening' ? 'not listening' : view === 'restricted' ? 'not shown on this door' : 'unavailable';
 }
 
 function StatusDot({ on }: { on: boolean }) {
@@ -210,6 +217,8 @@ function SurfaceList({ title, hint, rows, unavailable = false, emptyText = 'None
 export default function MainServerView({ endpoint, namespaceRootUrl, pollIntervalMs = 5000, sx, 'data-gui-node-id': nodeId = 'MainServerView' }: MainServerViewProps) {
   const [state, setState] = React.useState<MainServerState>(EMPTY_STATE);
   const [connected, setConnected] = React.useState(false);
+  // false until the first round of reads has come back, whatever it said: until then nothing is known, so nothing is claimed.
+  const [loaded, setLoaded] = React.useState(false);
   const [ownerExpanded, setOwnerExpanded] = React.useState(false);
 
   React.useEffect(() => {
@@ -217,13 +226,22 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
     const base = String(endpoint || '').replace(/\/+$/, '');
 
     async function poll() {
-      const identity = await fetchJson(base, '/gateway-identity');
-      const openresty = await fetchJson(base, '/openresty-status');
-      const entrypointsRes = await fetchJson(base, '/entrypoints');
-      const ipInfo = await fetchJson(base, '/ip-info');
-      const namespaceRes = await fetchJson(base, '/main-server-namespace');
+      // Independent reads, so the first paint waits for the slowest one rather than the sum of the five.
+      const [identityR, openrestyR, entrypointsR, ipInfoR, namespaceR] = await Promise.all([
+        fetchJsonResult(base, '/gateway-identity'),
+        fetchJsonResult(base, '/openresty-status'),
+        fetchJsonResult(base, '/entrypoints'),
+        fetchJsonResult(base, '/ip-info'),
+        fetchJsonResult(base, '/main-server-namespace'),
+      ]);
+      const identity = identityR.json;
+      const openresty = openrestyR.json;
+      const entrypointsRes = entrypointsR.json;
+      const ipInfo = ipInfoR.json;
+      const namespaceRes = namespaceR.json;
       if (cancelled) return;
 
+      setLoaded(true);
       setConnected(Boolean(identity || openresty || entrypointsRes));
       setState({
         gatewayHost: hostnameOf(identity),
@@ -235,13 +253,15 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         mainServerName: namespaceRes?.mainServerName ? String(namespaceRes.mainServerName) : null,
         gatewayPort: identity && typeof identity.port === 'number' ? identity.port : null,
         gatewayScheme: identity ? String(identity.scheme || '') : '',
-        httpListening: describePort(openresty, 'httpListening'),
-        httpsListening: describePort(openresty, 'httpsListening'),
+        httpListening: describePort(openresty, 'httpListening', openrestyR.status),
+        httpsListening: describePort(openresty, 'httpsListening', openrestyR.status),
         openrestyMode: String(openresty?.mode || '').toUpperCase(),
         localIP: ipInfo?.success ? String(ipInfo.localIP || '') : '',
         publicIP: ipInfo?.success ? String(ipInfo.publicIP || '') : '',
         entrypoints: Array.isArray(entrypointsRes?.entrypoints) ? entrypointsRes.entrypoints : [],
         entrypointsView: describeEntrypoints(entrypointsRes),
+        identityAnswered: Boolean(identity),
+        namespaceAnswered: Boolean(namespaceRes),
       });
     }
 
@@ -274,6 +294,13 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           {connected ? 'online' : 'connecting…'}
         </Typography>
       </Box>
+
+      {!loaded ? (
+        <Typography variant="body2" data-gui-node-id={`${nodeId}.loading`} sx={{ color: 'text.secondary' }}>
+          Reading this server…
+        </Typography>
+      ) : (
+      <>
 
       {/* Three distinct facts, never collapsed into one another (see
           Namespace-Is-Context.md): Host is the physical surface answering
@@ -349,7 +376,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
             </Typography>
           ) : (
             <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
-              local.netget (no public domain configured)
+              {state.namespaceAnswered ? 'local.netget (no public domain configured)' : 'not available'}
             </Typography>
           )}
         </Box>
@@ -430,9 +457,13 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
                   {ownerExpanded ? state.ownerIdentityHash : maskHash(state.ownerIdentityHash)}
                 </Typography>
               </Box>
-            ) : (
+            ) : state.identityAnswered ? (
               <Typography variant="body2" sx={{ color: 'warning.main' }}>
                 Unclaimed — no .me owns this surface yet.
+              </Typography>
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                not available
               </Typography>
             )}
           </Box>
@@ -502,6 +533,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         rows={state.entrypointsView.kind === 'list' ? state.entrypointsView.rows : []}
         unavailable={state.entrypointsView.kind === 'unavailable'}
       />
+      </>
+      )}
     </Box>
     </GuiNodeIdBase>
   );

@@ -8,6 +8,8 @@
 //   an IP that is not CONFIGURED does not show the gateway is local-only (it may sit behind NAT; nothing here detects it)
 //   an /entrypoints that did not answer is not an empty list
 //   an /openresty-status that did not answer (401, 404, timeout, not JSON) is not "the port is not listening"
+//   an /openresty-status REFUSED to this caller (401/403: it is the operator's route) is "not shown on this door" --
+//     a fact about who is asking, not a port that is down, and not the same words as a request that failed
 
 /** The machine's name from the identity payload; '' when the gateway did not say (an older one) -- never the gatewayId. */
 export function hostnameOf(identity: { hostname?: unknown } | null | undefined): string {
@@ -42,14 +44,21 @@ export function describeEntrypoints(response: { entrypoints?: unknown } | null |
   return rows.length === 0 ? { kind: 'empty' } : { kind: 'list', rows };
 }
 
-export type PortView = 'listening' | 'not-listening' | 'unavailable';
+export type PortView = 'listening' | 'not-listening' | 'restricted' | 'unavailable';
 
 /**
  * Whether a port is listening, from the parsed /openresty-status body. `response` is null when the request failed or was
  * not JSON (a 401 -- the route is for the gateway's operator --, a 404, a refusal, no answer): then nothing was learned
  * about the port, which is 'unavailable', never 'not-listening'. Only an explicit boolean says anything about the port.
+ * A 401/403 is 'restricted': the answer exists but is not given to this caller.
  */
-export function describePort(response: Record<string, unknown> | null | undefined, key: 'httpListening' | 'httpsListening'): PortView {
+export function describePort(
+  response: Record<string, unknown> | null | undefined,
+  key: 'httpListening' | 'httpsListening',
+  status?: number,
+): PortView {
+  // `status` is the HTTP status of that request, when known: a refusal says the route is not for this caller.
+  if (status === 401 || status === 403) return 'restricted';
   if (!response || typeof response !== 'object' || response.ok === false) return 'unavailable';
   const value = response[key];
   if (typeof value !== 'boolean') return 'unavailable';

@@ -40,3 +40,9 @@ assert.equal(describePort({ ok: true, httpListening: true, httpsListening: false
 assert.equal(describePort({ ok: true, httpListening: true, httpsListening: false }, 'httpsListening'), 'not-listening', 'an explicit false is a real negative');
 
 console.log('mainServerPresentation: ok');
+// a refusal to THIS caller is a fact about who is asking, not a port that is down and not a request that failed
+assert.equal(describePort(null, 'httpListening', 401), 'restricted');
+assert.equal(describePort({ ok: false, error: 'Unauthorized' }, 'httpsListening', 403), 'restricted');
+assert.equal(describePort(null, 'httpListening', 404), 'unavailable', 'a 404 says nothing about who is asking');
+assert.equal(describePort(null, 'httpListening', 0), 'unavailable', 'no answer at all');
+assert.equal(describePort({ ok: true, httpListening: false }, 'httpListening', 200), 'not-listening');
