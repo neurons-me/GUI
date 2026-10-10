@@ -17,6 +17,7 @@ import IconButton from '@/gui/Atoms/IconButton/IconButton';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
+import Dialog from '@mui/material/Dialog';
 import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
@@ -1403,6 +1404,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // read as "signed in as someone"). One expression, one QR value, both built from the SAME three parts
   // here — not two independent derivations that could drift (the earlier gap this closes).
   const location = useLocation();
+  // The identity card (the landing's component) as a dialog over whatever page this is. The badge in the rail used to
+  // be a link to "/": using your identity meant leaving the page you were on. Now it opens the card here.
+  //   * `identityOpen` is only whether the dialog is showing. The card is mounted the first time it is opened and then
+  //     KEPT mounted (Dialog keepMounted), so closing and reopening resumes exactly where it was -- a registration at
+  //     its recovery-phrase step is still at its recovery-phrase step. Nothing it holds is torn down by closing.
+  //   * it renders inside this same tree, so it reads the page's one session/`.me`: opening or closing it never
+  //     creates another session and never signs the current one out.
+  //   * on the landing route itself ("/") the card is already the page, so the badge does not open a second copy.
+  const [identityOpen, setIdentityOpen] = useState(false);
+  const [identityMounted, setIdentityMounted] = useState(false);
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
   const positionIdentity = authenticated && session?.semanticNamespace ? session.semanticNamespace : namespaceRootLabel;
   const positionExpression = `${positionIdentity}${currentNodePath}`;
@@ -1520,6 +1531,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       .map((entry) => entry.route as string),
   );
 
+  // What the landing is given. The same object feeds the landing route and the identity card dialog.
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
+
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
   const documentPageRoutes = flattenGuiDocument(doc)
@@ -1545,7 +1559,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) }
+            ? landingProps
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,
@@ -1578,12 +1592,22 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
   const RAIL_BADGE_SIZE = 38;
+  const landingIsThisPage = location.pathname === '/';
+  const openIdentityCard = () => {
+    if (landingIsThisPage) return;
+    setIdentityMounted(true);
+    setIdentityOpen(true);
+  };
   const positionBadge = (
-    <Link
-      to="/"
-      aria-label="Home"
-      data-gui-node-id="GUI.bars.left.home"
-      style={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: '10px 0', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+    <Box
+      component="button"
+      type="button"
+      onClick={openIdentityCard}
+      aria-label="Identity"
+      aria-haspopup="dialog"
+      aria-expanded={identityOpen}
+      data-gui-node-id="GUI.bars.left.identity"
+      sx={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: '10px 0', alignItems: 'center', justifyContent: 'center', p: 0, border: 'none', background: 'none', cursor: 'pointer' }}
     >
       <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
       <QRme
@@ -1599,8 +1623,38 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         data-gui-node-id="GUI.bars.top.position"
       />
       </Box>
-    </Link>
+    </Box>
   );
+
+  // The card itself: the landing's own component with the landing's own props, so its flows (sign in, register,
+  // recover, link an identity, sign out) are the existing ones. Mounted on first open, then kept (see above).
+  const landingEntry = flattenGuiDocument(doc).find((entry) => entry.id === LANDING_ID);
+  const LandingComponent = landingEntry?.component ? pageRegistry[landingEntry.component] : undefined;
+  const identityCard = identityMounted && LandingComponent ? (
+    <Dialog
+      open={identityOpen}
+      onClose={() => setIdentityOpen(false)}
+      keepMounted
+      fullWidth
+      maxWidth="sm"
+      scroll="body"
+      aria-label="Identity"
+      data-gui-node-id="GUI.identity"
+    >
+      <Box sx={{ position: 'relative', p: { xs: 1, sm: 2 } }}>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setIdentityOpen(false)}
+          aria-label="Close"
+          sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'text.secondary' }}
+        >
+          ×
+        </Box>
+        <LandingComponent {...landingProps} data-gui-node-id="GUI.identity.card" />
+      </Box>
+    </Dialog>
+  ) : null;
 
   const topBarRightElements = [
     {
@@ -1619,6 +1673,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
+      {identityCard}
       <Layout
         TopBar={{ elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
@@ -1637,7 +1692,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           // never did, for exactly that reason.
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end].map((el): LeftBarElement =>
             el.type === 'link' && el.props.to === '/'
-              ? { type: 'action', props: { label: el.props.label, element: positionBadge, tooltip: false, active: location.pathname === '/' } }
+              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: identityOpen || location.pathname === '/' } }
               : el.type === 'link'
                 ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
                 : el
