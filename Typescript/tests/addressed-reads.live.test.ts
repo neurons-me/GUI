@@ -33,7 +33,11 @@ const show = (r: AddressRead) => JSON.stringify(r).slice(0, 160);
 
 async function main() {
   // ── three `.me`s, each its own context ──
-  const ctx = { ana: {}, bob: {}, carol: {} };
+  // ana's context is a real local `.me` (what `<Me>` provides), so it can hold local facts; the others are only keys
+  const ctx = { ana: new (ME as any)(), bob: {}, carol: {} } as Record<string, any>;
+  const LOCAL_FACT = `local-only-${tag}`;
+  ctx.ana.bateria(80);
+  ctx.ana.nota(LOCAL_FACT);
   const aName = `ana${tag}`, bName = `bob${tag}`, cName = `carol${tag}`;
   const ana_A = link({ context: ctx.ana, username: aName, password: `pw-ana-${tag}-horse`, namespace: RA, transportOrigin: A });
   await ana_A.claimAndOpen(`${aName}.${RA}`);
@@ -127,6 +131,23 @@ async function main() {
   check('`via` must serve that root', badVia.status === 'error' && (badVia as any).code === 'VIA_DOES_NOT_SERVE', show(badVia));
   const stillBobs = await readAddress(ctx.bob, `me://${bName}.${RA}:read/battery`);
   check('another context is not affected by ana\'s second link', stillBobs.status === 'absent' && (stillBobs as any).via === `${bName}.${RA}`);
+
+  // ── local facts of the `.me`, by the same grammar: `self` ──
+  const sent: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: any, init?: any) => { if (init?.body) sent.push(String(init.body)); return realFetch(input, init); }) as any;
+  const localFact = await readAddress(ctx.ana, 'me://self:read/nota');
+  check('self: a fact of the context\'s own .me is read in place', localFact.status === 'public' && (localFact as any).value === LOCAL_FACT && (localFact as any).via === 'self', show(localFact));
+  check('self: another .me does not see it', (await readAddress(ctx.bob, 'me://self:read/nota')).status === 'no_link'
+    && (await readAddress(ctx.carol, 'me://self:read/nota')).status === 'no_link');
+  await ana_A.signAndWrite('battery', 70);
+  await ana_B.signAndWrite('battery', 55);
+  globalThis.fetch = realFetch;
+  const atLedger = await readAddress(ctx.bob, `me://${aName}.${RA}:read/nota`);
+  check('the local fact is not in the ledger', atLedger.status === 'absent', show(atLedger));
+  check('and not in anything either link sent', sent.length > 0 && !sent.some((b) => b.includes(LOCAL_FACT)), `${sent.length} bodies`);
+  check('the links\' kernels do not have it', ana_A.read('nota') === undefined && ana_B.read('nota') === undefined);
+  await ana_A.signAndWrite('battery', 80); await ana_B.signAndWrite('battery', 50);
 
   // ── bob tries to act on ana's address; her sessions are what they were ──
   const intrusion = await attempt(() => bob_A.monad.writeNamespace({ semanticNamespace: `${aName}.${RA}`, expression: 'battery', value: 0, identityHash: bob_A.identityHash }));

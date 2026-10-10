@@ -121,13 +121,12 @@ export type QRmeProps = {
    */
   perimeterLabel?: string;
   /**
-   * The bare root namespace (e.g. "local.cleaker") that `perimeterLabel`
-   * ends with -- when this matches the tail of `perimeterLabel`, that
-   * trailing portion is drawn bold and colored by `status`/the ring's own
-   * accent (ringAccent) instead of the rest of the label's plain
-   * treatment. The root is what actually answers "which namespace is
-   * this," so it's the part that should carry the connection-status
-   * color. Omit to draw the whole label in the plain, non-status
+   * The bare root namespace (e.g. "local.cleaker") inside `perimeterLabel`,
+   * which reads `<handle>.<root>` optionally followed by a `/path`. When it
+   * is found there as a whole segment run, the root is drawn bold in the
+   * theme's accent (a warning or an error still recolours it; "off" only
+   * dims it), the handle before it keeps the link colour and the path
+   * after it is quiet. Omit to draw the whole label in the handle's
    * treatment (e.g. pre-auth, where `perimeterLabel` already IS just the
    * root).
    */
@@ -455,12 +454,33 @@ export default function QRme({
   // pass pre-split segments -- perimeterLabel is already the single
   // source of truth for what's drawn; this only figures out where the
   // root starts inside it.
-  const perimeterRootStart =
-    perimeterRootLabel && perimeterLabel?.endsWith(perimeterRootLabel)
-      ? perimeterLabel.length - perimeterRootLabel.length
-      : -1;
+  // The label reads `<handle>.<root><path>`: three things, three treatments. The root is found as a whole segment run
+  // (after a `.` or at the start, before the end or a `/ ? #`), so a path after it no longer hides it.
+  const perimeterRootStart = (() => {
+    if (!perimeterRootLabel || !perimeterLabel) return -1;
+    let from = 0;
+    for (;;) {
+      const at = perimeterLabel.indexOf(perimeterRootLabel, from);
+      if (at < 0) return -1;
+      const next = perimeterLabel[at + perimeterRootLabel.length];
+      const startsSegment = at === 0 || perimeterLabel[at - 1] === '.';
+      const endsSegment = next === undefined || next === '/' || next === '?' || next === '#';
+      if (startsSegment && endsSegment) return at;
+      from = at + 1;
+    }
+  })();
   const perimeterPrefixText = perimeterRootStart >= 0 ? perimeterLabel!.slice(0, perimeterRootStart) : perimeterLabel;
-  const perimeterRootText = perimeterRootStart >= 0 ? perimeterLabel!.slice(perimeterRootStart) : '';
+  const perimeterRootText = perimeterRootStart >= 0 ? perimeterRootLabel! : '';
+  const perimeterPathText = perimeterRootStart >= 0 ? perimeterLabel!.slice(perimeterRootStart + perimeterRootLabel!.length) : '';
+  // The namespace carries the accent: the theme's own primary, so it stands apart from the handle (link blue) and from the
+  // path (quiet). A warning or an error still colours it (those are worth seeing); "off" only dims it, and the dot and
+  // the ring say that nothing answers.
+  const perimeterRootColor = readable(
+    status === 'checking' || status === 'error' ? ringAccent : theme.palette.primary.main,
+    theme.palette.primary.light,
+  );
+  const perimeterRootOpacity = status === 'off' ? 0.7 : 1;
+  const perimeterPathColor = readable(theme.palette.text.secondary);
 
   // perimeterLabel's own ring, sized around (not overlapping) the QR
   // face -- scannability testing for the QR itself (see the face Box's
@@ -659,8 +679,13 @@ export default function QRme({
                 )
               )}
               {perimeterRootText && (
-                <tspan fill={readable(ringAccent, theme.palette.primary.light)} fontWeight={700}>
+                <tspan fill={perimeterRootColor} fillOpacity={perimeterRootOpacity} fontWeight={700} data-gui-part="namespace">
                   {perimeterRootText}
+                </tspan>
+              )}
+              {perimeterPathText && (
+                <tspan fill={perimeterPathColor} fontWeight={400} data-gui-part="path">
+                  {perimeterPathText}
                 </tspan>
               )}
             </textPath>

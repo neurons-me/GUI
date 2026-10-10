@@ -11,7 +11,19 @@
 //     two readers can open differs only by the keys they hold (audience envelopes), never by this function.
 //   * It does not discover who serves a root. A root no open link of the context serves is `no_link`, said as such.
 //   * It never uses another context's links, and never "the last link opened".
+//
+// `self` (and `local`) is the context's own `.me`, the one `<Me>` provides: `me://self:read/bateria` reads that kernel
+// in place, with no link, no network and no copy into any ledger. Those are local facts: written by whoever owns the
+// `<Me>`, readable by everything under it, and NOT authenticated (a declared username is context, not proof of who is
+// here), so nothing that reads them should present them as verified claims about the actor.
+//
+// What is lent is the PUBLIC VIEW of that kernel, the same thing a stranger would get from a ledger (the kernel's own
+// `exportSnapshot()`, which carries no secret material, hydrated into a scratch kernel): a path under a secret scope
+// reads as nothing, as it does there. Reading with the owner's keys stays what it always was, direct access to the
+// kernel by the page's own code. Nothing under a `<Me>` (a link's interface, an agent) gets it through this function.
+import ME from 'this.me';
 import { parseTarget } from 'cleaker';
+import { readMeValue } from '@/runtime/run-me';
 import type { SeedSession } from './createSeedSession';
 import { MonadClientError } from './monadClient';
 import { openLinksOf, type OpenLink } from './heldIdentities';
@@ -30,7 +42,7 @@ export type AddressReadOptions = {
 type Where = { namespace: string; path: string };
 
 export type AddressRead =
-  /** The value is readable. */
+  /** The value is readable. `via` is the link's namespace, or `self` for a fact of the context's own `.me`. */
   | ({ status: 'public'; value: unknown; via: string } & Where)
   /** What the ledger holds is an audience envelope: ciphertext, readable by anyone, openable only with a key (`openEnvelope`). */
   | ({ status: 'sealed'; envelope: AudienceEnvelope; via: string } & Where)
@@ -50,6 +62,19 @@ export type AddressRead =
 export function isAudienceEnvelope(value: unknown): value is AudienceEnvelope {
   const v = value as any;
   return !!v && typeof v === 'object' && v.version === 1 && typeof v.audience === 'string' && 'ciphertext' in v && 'tree' in v;
+}
+
+// The public view of a local kernel, rebuilt only when the kernel's memories changed.
+const PUBLIC_VIEWS = new WeakMap<object, { key: string; view: any }>();
+function publicViewOf(kernel: any): any {
+  const memories = Array.isArray(kernel.memories) ? kernel.memories : [];
+  const key = `${memories.length}:${String(memories[memories.length - 1]?.hash ?? '')}`;
+  const cached = PUBLIC_VIEWS.get(kernel);
+  if (cached && cached.key === key) return cached.view;
+  const view: any = new (ME as any)();
+  view.hydrate(kernel.exportSnapshot());
+  PUBLIC_VIEWS.set(kernel, { key, view });
+  return view;
 }
 
 const serves = (link: OpenLink, namespace: string) => namespace === link.root || namespace.endsWith(`.${link.root}`);
@@ -101,6 +126,23 @@ export async function readAddress(
   }
   if (!namespace || !path) {
     return { status: 'invalid_expression', expression: raw, reason: namespace ? 'a path is required' : 'a namespace is required' };
+  }
+
+  // the context's own `.me`: local facts, read in place
+  if (namespace === 'self' || namespace === 'local') {
+    if (typeof context !== 'function') {
+      // an object that is not a kernel is only a key for the registry: there is no local `.me` to read
+      return { status: 'no_link', namespace, path, root: namespace, held: [...new Set(openLinksOf(context).map((l) => l.root))].sort() };
+    }
+    try {
+      const value = readMeValue(publicViewOf(context), path, { allowBarePath: true });
+      // The public view answers `undefined` for a path with nothing there and for one under a secret scope; it never
+      // says which (that is how a secret scope stays unseen), so neither can this.
+      if (value === undefined || value === null) return { status: 'absent', namespace, path, via: 'self' };
+      return { status: 'public', namespace, path, via: 'self', value };
+    } catch (cause) {
+      return { status: 'error', namespace, path, via: 'self', code: 'LOCAL_READ_FAILED', message: cause instanceof Error ? cause.message : String(cause) };
+    }
   }
 
   const links = openLinksOf(context);
