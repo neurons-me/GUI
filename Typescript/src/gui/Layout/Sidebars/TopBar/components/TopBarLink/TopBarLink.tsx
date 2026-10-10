@@ -2,7 +2,7 @@ import React from 'react';
 import Link from '@/gui/Atoms/Link/Link'; // Adjust import path if necessary
 import Icon from '@/gui/Atoms/Icon/Icon'; // Import Icon component
 import type { TopBarLinkProps } from './TopBarLink.types';
-const TopBarLink: React.FC<TopBarLinkProps> = ({ label, href, icon, iconColor, external, showLabel = true }) => {
+const TopBarLink: React.FC<TopBarLinkProps> = ({ label, href, icon, iconColor, external, showLabel = true, 'data-gui-node-id': guiNodeId }) => {
   const content = (
     <>
       {icon && (
@@ -20,6 +20,7 @@ const TopBarLink: React.FC<TopBarLinkProps> = ({ label, href, icon, iconColor, e
     <Link
       href={href ?? '#'}
       target={external ? '_blank' : '_self'}
+      data-gui-node-id={guiNodeId || undefined}
       style={{ display: 'inline-flex', alignItems: 'center', color: 'inherit', textDecoration: 'none' }}
     >
       {content}

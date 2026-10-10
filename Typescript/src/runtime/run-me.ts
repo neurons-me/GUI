@@ -126,7 +126,7 @@ export function createInternalStore() {
   };
 }
 
-// Only an explicit bridge (opts.subscribe / MeRuntimeProvider's `subscribe`
+// Only an explicit bridge (opts.subscribe / <Me>'s `subscribe`
 // prop) is used for external change notification. Do not duck-type
 // `me.subscribe`: the .me proxy turns any property name into a semantic path,
 // so `typeof me.subscribe === 'function'` is always true, and invoking it

@@ -103,10 +103,13 @@ export function usePersistentThemeId(
   useEffect(() => {
     const scope = resolveThemeScope(fallback, 'light');
     try {
+      // A scoped page (window.__thisGuiThemeScope) writes only its own key, so it
+      // never changes the theme of other this.gui pages on the same origin.
       if (scope.themeIdKey) {
         localStorage.setItem(scope.themeIdKey, themeId);
+      } else {
+        localStorage.setItem(LEGACY_THEME_ID_KEY, themeId);
       }
-      localStorage.setItem(LEGACY_THEME_ID_KEY, themeId);
     } catch {
       // fail silently
     }
@@ -171,8 +174,9 @@ export function usePersistentThemeMode(
     try {
       if (scope.themeModeKey) {
         localStorage.setItem(scope.themeModeKey, mode);
+      } else {
+        localStorage.setItem(LEGACY_THEME_MODE_KEY, mode);
       }
-      localStorage.setItem(LEGACY_THEME_MODE_KEY, mode);
     } catch {
       // fail silently
     }

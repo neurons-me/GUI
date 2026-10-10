@@ -26,6 +26,19 @@ function resolveOverlayColor(
   return resolved;
 }
 
+
+function resolveAccentSurface(
+  theme: any,
+  accent?: 'aurora' | 'ember' | 'monolith' | 'neutral'
+): { soft?: string; strong?: string } {
+  if (!accent) return {};
+  const entry = theme?.visuals?.accents?.[accent];
+  if (!entry || typeof entry !== 'object') return {};
+  return {
+    soft: typeof entry.soft === 'string' ? entry.soft : undefined,
+    strong: typeof entry.strong === 'string' ? entry.strong : undefined,
+  };
+}
 function resolveMediaFilter(blurRadius: string, blur?: 'none'|'light'|'medium'|'heavy'|'all'): string | undefined {
   if (!blur || blur === 'none') return 'none';
   return blur === 'all' ? 'saturate(1.05) brightness(0.96)' : 'none';
@@ -41,6 +54,7 @@ export const Hero: React.FC<HeroProps & Record<string, any>> = ({
   padding = 4,
   blur,
   customColor,
+  accent,
   brand,
   header,
   subheader,
@@ -67,7 +81,17 @@ export const Hero: React.FC<HeroProps & Record<string, any>> = ({
   //console.log('theme.custom.blurRadius:', theme.custom.blurRadius);
   //console.log(theme.palette.blur);
   const blurRadius = resolveBlurRadius(theme, blur);
-  const overlayBg  = resolveOverlayColor(theme, blur, customColor, overlayColor);
+  const accentSurface = resolveAccentSurface(theme, accent);
+  const overlayBg  = resolveOverlayColor(
+    theme,
+    blur,
+    customColor,
+    overlayColor ?? accentSurface.soft
+  );
+  const resolvedBackgroundColor =
+    backgroundColor
+    ?? (backgroundType === 'color' ? accentSurface.strong : undefined)
+    ?? (backgroundType === 'color' ? accentSurface.soft : undefined);
   const mediaFilter = resolveMediaFilter(blurRadius, blur);
   const modeConfig = (() => {
     switch (mode) {
@@ -143,7 +167,7 @@ export const Hero: React.FC<HeroProps & Record<string, any>> = ({
         justifyContent: modeConfig.justifyContent,
         boxSizing: 'border-box',
         zIndex: 0,
-        backgroundColor: backgroundType === 'color' ? (backgroundColor || 'transparent') : 'transparent',
+        backgroundColor: backgroundType === 'color' ? (resolvedBackgroundColor || 'transparent') : 'transparent',
         ...(sxProp || {}),
       }}
     >

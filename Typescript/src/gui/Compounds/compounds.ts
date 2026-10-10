@@ -11,6 +11,7 @@ import Charts, {
   LineChart,
   Slider as ChartsSlider,
 } from '@/gui/Compounds/Charts';
+import OpenStreetMap from '@/gui/Compounds/OpenStreetMap/OpenStreetMap';
 // IMPORTANT:
 // - Keep this registry explicit.
 // - Do not `export *` from here.
@@ -20,8 +21,9 @@ const Compounds = {
   Cleaker,
   SearchBar,
   Charts,
+  OpenStreetMap,
 } as const;
-export { AllThis, Cleaker, SearchBar, Charts, LineChart, BarChart, ChartsSlider };
+export { AllThis, Cleaker, SearchBar, Charts, LineChart, BarChart, ChartsSlider, OpenStreetMap };
 export type { JsonSearchItem, JsonSearchIcon, SearchBarProps } from '@/gui/All.This/SearchBar/SearchBar.types';
 export { Compounds };
 export default Compounds;

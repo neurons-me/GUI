@@ -12,6 +12,7 @@
     "**/*.test.tsx",
     "**/*.spec.ts",
     "**/*.spec.tsx",
+    "**/*.fixture.ts",
     "test",
     "tests",
     "__tests__",

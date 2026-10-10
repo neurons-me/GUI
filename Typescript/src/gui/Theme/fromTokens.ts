@@ -272,6 +272,8 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
     // All tokens exposed under theme.custom for easy access
     custom: {
       border: pick(c, ['border'], borderDefault),
+      // `color.accent` when a theme defines it as a single colour (CherryByte, PrinceOfDarkness, Seafoam); else undefined.
+      accent: typeof pick(c, ['accent'], undefined) === 'string' ? pick<string>(c, ['accent']) : undefined,
       gradients,
       overlays,
       iconSizes,
