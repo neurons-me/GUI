@@ -9,10 +9,14 @@ import type { SxProps, Theme } from '@mui/material/styles';
  * alongside it, so SearchBar versions without this field (and no-JS consumers) still show the picture.
  */
 export type JsonSearchMonadIcon = {
-  variant?: 'identity';
+  /** "identity" (default): the .me ring + dot orb. "bubble": the monad.ai pixel bubble. */
+  variant?: 'identity' | 'bubble';
   kind?: 'me' | 'monad';
-  /** Identity seed, e.g. "jabellae". */
+  /** Seed of the pattern, e.g. "jabellae"; omit for the kind's own pattern (bubble + monad → the monad.ai one). */
   seed?: string;
+  /** Bubble only: the light behind the pixel grid. "matte" (default): flat matte with a faint grain, no inner disc
+   *  (as on the neurons.me index monad.ai card). "widget": the widget's own blob, glass and inkblot layers. */
+  texture?: 'matte' | 'widget';
 };
 
 export type JsonSearchIcon = string | { light: string; dark: string; monad?: JsonSearchMonadIcon };
