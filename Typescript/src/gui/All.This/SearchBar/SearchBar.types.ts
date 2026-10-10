@@ -4,7 +4,18 @@ import type { SxProps, Theme } from '@mui/material/styles';
  * One searchable entry. This is the generic schema the algorithm filters over —
  * any JSON array of this shape can be searched, regardless of source repo.
  */
-export type JsonSearchIcon = string | { light: string; dark: string };
+/**
+ * Render the entry's icon as the live .GUI orb (Monad) instead of an image. Entries keep `light`/`dark` images
+ * alongside it, so SearchBar versions without this field (and no-JS consumers) still show the picture.
+ */
+export type JsonSearchMonadIcon = {
+  variant?: 'identity';
+  kind?: 'me' | 'monad';
+  /** Identity seed, e.g. "jabellae". */
+  seed?: string;
+};
+
+export type JsonSearchIcon = string | { light: string; dark: string; monad?: JsonSearchMonadIcon };
 
 export type JsonSearchItem = {
   id: string;

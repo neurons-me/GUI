@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGuiTheme } from '@/gui-internals/Hooks';
 import type { SearchBarProps, JsonSearchIcon, JsonSearchItem } from './SearchBar.types';
+import SearchBarMonadIcon from './SearchBarMonadIcon';
 
 export type { SearchBarProps, JsonSearchItem };
 
@@ -94,6 +95,7 @@ function Icon({
   isLight: boolean;
   plate?: boolean;
 }) {
+  if (icon && typeof icon === 'object' && icon.monad) return <SearchBarMonadIcon monad={icon.monad} size={size} />;
   const resolved = resolveIcon(icon, isLight);
   if (isUrl(resolved)) {
     const img = (
