@@ -22,12 +22,37 @@ export function gatewayIdOf(identity: { gatewayId?: unknown } | null | undefined
   return typeof identity?.gatewayId === 'string' ? identity.gatewayId.trim() : '';
 }
 
+export type PublicIPDetectionView = {
+  state?: 'detected' | 'pending' | 'failed' | string;
+  observedAt?: string | null;
+  checkedAt?: string | null;
+  error?: string | null;
+} | null | undefined;
+
 export type PublicIPView = { text: string; configured: boolean };
 
-/** What to show for the public IP. An empty value is "not configured" -- netget stores one, it does not detect one. */
-export function describePublicIP(publicIP: string | null | undefined): PublicIPView {
+/**
+ * What to show for the public address. The gateway stores the address it last OBSERVED and says when and whether the
+ * latest check worked (`detection`); with that record the words are exactly what is known:
+ *   observed <day>                        a check succeeded
+ *   last known ...; the latest check failed   the value is older than the last attempt, and why
+ *   not detected yet / the check failed       nothing was ever observed
+ * Without a record (an older gateway) the earlier wording stays: an empty value is "not configured". Neither says the
+ * gateway is reachable from the internet: an address having been observed proves nothing about what answers on it.
+ */
+export function describePublicIP(publicIP: string | null | undefined, detection?: PublicIPDetectionView): PublicIPView {
   const value = String(publicIP ?? '').trim();
-  return value ? { text: value, configured: true } : { text: 'not configured', configured: false };
+  const day = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : '');
+  if (!detection || (detection.state !== 'detected' && detection.state !== 'failed' && detection.state !== 'pending')) {
+    return value ? { text: value, configured: true } : { text: 'not configured', configured: false };
+  }
+  if (value && detection.state === 'detected') return { text: `${value} · observed ${day(detection.observedAt)}`, configured: true };
+  if (value && detection.state === 'failed') {
+    return { text: `${value} · last known${detection.observedAt ? `, observed ${day(detection.observedAt)}` : ''}; the latest check failed${detection.error ? `: ${detection.error}` : ''}`, configured: true };
+  }
+  if (value) return { text: value, configured: true };
+  if (detection.state === 'failed') return { text: `not detected · the check failed${detection.error ? `: ${detection.error}` : ''}`, configured: false };
+  return { text: 'not detected yet', configured: false };
 }
 
 export type EntrypointsView =

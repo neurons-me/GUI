@@ -17,7 +17,7 @@ import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
-import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, describePort, type EntrypointsView, type PortView } from './mainServerPresentation';
+import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, describePort, type EntrypointsView, type PortView, type PublicIPDetectionView } from './mainServerPresentation';
 
 export interface MainServerViewProps {
   /** This netget's own base URL (its own backend, not a monad — same
@@ -87,6 +87,8 @@ type MainServerState = {
   // per request the way localIP is.
   localIP: string;
   publicIP: string;
+  // when/how publicIP was last checked, as the gateway reports it (absent from an older gateway)
+  publicIPDetection: PublicIPDetectionView;
   entrypoints: Entrypoint[];
   // whether /entrypoints answered: an unanswered request is not an empty list
   entrypointsView: EntrypointsView;
@@ -111,6 +113,7 @@ const EMPTY_STATE: MainServerState = {
   gatewayScheme: '',
   localIP: '',
   publicIP: '',
+  publicIPDetection: null,
   entrypoints: [],
   entrypointsView: { kind: 'unavailable' },
   identityAnswered: false,
@@ -258,6 +261,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         openrestyMode: String(openresty?.mode || '').toUpperCase(),
         localIP: ipInfo?.success ? String(ipInfo.localIP || '') : '',
         publicIP: ipInfo?.success ? String(ipInfo.publicIP || '') : '',
+        publicIPDetection: ipInfo?.success && ipInfo.publicIPDetection && typeof ipInfo.publicIPDetection === 'object' ? ipInfo.publicIPDetection : null,
         entrypoints: Array.isArray(entrypointsRes?.entrypoints) ? entrypointsRes.entrypoints : [],
         entrypointsView: describeEntrypoints(entrypointsRes),
         identityAnswered: Boolean(identity),
@@ -471,20 +475,23 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       </Box>
 
       <Box sx={{ display: 'flex', gap: 3 }}>
+        {/* The gateway omits its private address for a peer outside this machine/LAN: no row, not an empty one. */}
+        {state.localIP ? (
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             Local IP
           </Typography>
           <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-            {state.localIP || '—'}
+            {state.localIP}
           </Typography>
         </Box>
+        ) : null}
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             Public IP
           </Typography>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: describePublicIP(state.publicIP).configured ? 'text.primary' : 'text.disabled' }}>
-            {describePublicIP(state.publicIP).text}
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: describePublicIP(state.publicIP, state.publicIPDetection).configured ? 'text.primary' : 'text.disabled' }}>
+            {describePublicIP(state.publicIP, state.publicIPDetection).text}
           </Typography>
         </Box>
       </Box>

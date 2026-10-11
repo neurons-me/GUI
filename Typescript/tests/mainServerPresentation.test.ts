@@ -46,3 +46,14 @@ assert.equal(describePort({ ok: false, error: 'Unauthorized' }, 'httpsListening'
 assert.equal(describePort(null, 'httpListening', 404), 'unavailable', 'a 404 says nothing about who is asking');
 assert.equal(describePort(null, 'httpListening', 0), 'unavailable', 'no answer at all');
 assert.equal(describePort({ ok: true, httpListening: false }, 'httpListening', 200), 'not-listening');
+
+// the public address with the gateway's own detection record: only what is known, nothing about reachability
+const seen = { state: 'detected', observedAt: '2026-10-11T12:00:00.000Z', checkedAt: '2026-10-11T12:00:00.000Z' };
+assert.deepEqual(describePublicIP('34.28.109.244', seen), { text: '34.28.109.244 · observed 2026-10-11', configured: true });
+const stale = { state: 'failed', observedAt: '2026-10-11T12:00:00.000Z', checkedAt: '2026-10-12T12:00:00.000Z', error: 'HTTP 503' };
+assert.equal(describePublicIP('34.28.109.244', stale).text, '34.28.109.244 · last known, observed 2026-10-11; the latest check failed: HTTP 503');
+assert.deepEqual(describePublicIP('', { state: 'pending' }), { text: 'not detected yet', configured: false });
+assert.deepEqual(describePublicIP('', { state: 'failed', error: 'no answer within 3000 ms' }), { text: 'not detected · the check failed: no answer within 3000 ms', configured: false });
+assert.deepEqual(describePublicIP('', { state: 'bogus' } as any), { text: 'not configured', configured: false }, 'an unknown state falls back to the earlier wording');
+assert.doesNotMatch(describePublicIP('34.28.109.244', seen).text, /online|reachable|accessible/i);
+console.log('mainServerPresentation (public address detection): ok');
