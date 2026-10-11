@@ -66,10 +66,12 @@ export type CleakerProps = {
    */
   document?: GuiDocument;
   pages?: Record<string, React.ComponentType<any>>;
+  /** Left-bar item ids to leave out of the rail (icons only; the pages and routes stay). See NamespaceProps.hideBarItems. */
+  hideBarItems?: string[];
   footerExtras?: LeftBarElement[];
 };
 
-export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = String(namespaceProp || '').trim();
   const username = readMeUsername(found?.me);
@@ -113,6 +115,7 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         username={username || undefined}
         document={document}
         pages={pages}
+        hideBarItems={hideBarItems}
         footerExtras={footerExtras}
       />
     </SeedSessionProvider>

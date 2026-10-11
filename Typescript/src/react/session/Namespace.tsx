@@ -103,6 +103,13 @@ export interface NamespaceProps {
   pages?: Record<string, React.ComponentType<any>>;
   /** Extra LeftBar footer actions this app adds after Theme/Dev Tools (netget's Frontend Mode toggle). */
   footerExtras?: LeftBarElement[];
+  /**
+   * Ids of left-bar items to leave out of the rail (the element's `props.id`: `users`, `blockchain`, `url`, ...).
+   * Only the ICON is left out: the page and its route still exist, so a direct link keeps working. For a door that is
+   * an app rather than a namespace -- the main server's own door -- the namespace's directory views (Users,
+   * Blockchain, URL) are not that app's navigation.
+   */
+  hideBarItems?: string[];
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -1522,6 +1529,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
   const barSlots = leftBarSlots(doc, { authenticated });
+  const hiddenBarItems = useMemo(() => new Set((props.hideBarItems ?? []).map(String)), [props.hideBarItems]);
 
   // Routes whose page needs a layer that is off right now: their sidebar link is dimmed (still a link; the page it
   // opens says which layer is missing).
@@ -1700,7 +1708,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           // own first attempt; Users/Blockchain/URL (reached via
           // `resolved`, `useCleakerRootSidebar`'s cached composition)
           // never did, for exactly that reason.
-          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end].map((el): LeftBarElement =>
+          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end]
+            .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
+            .map((el): LeftBarElement =>
             el.type === 'link' && el.props.to === '/'
               ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: identityOpen || location.pathname === '/' } }
               : el.type === 'link'

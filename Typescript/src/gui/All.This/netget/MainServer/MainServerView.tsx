@@ -522,6 +522,12 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
             </Typography>
           )}
         </Box>
+        {state.httpListening === 'restricted' && state.httpsListening === 'restricted' ? (
+          // The operator's status route is not for this caller: say that once, instead of two rows of "not shown".
+          <Typography variant="body2" sx={{ color: 'text.secondary' }} data-gui-node-id={`${nodeId}.openresty.restricted`}>
+            Port status is not shown on this door.
+          </Typography>
+        ) : (
         <Box sx={{ display: 'flex', gap: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <StatusDot on={state.httpListening === 'listening'} />
@@ -532,6 +538,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
             <Typography variant="body2">HTTPS :443 {portText(state.httpsListening)}</Typography>
           </Box>
         </Box>
+        )}
       </Box>
 
       <SurfaceList
