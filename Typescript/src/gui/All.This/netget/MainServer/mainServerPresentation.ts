@@ -34,7 +34,7 @@ export type PublicIPView = { text: string; configured: boolean };
 /**
  * What to show for the public address. The gateway stores the address it last OBSERVED and says when and whether the
  * latest check worked (`detection`); with that record the words are exactly what is known:
- *   observed <day>                        a check succeeded
+ *   the address alone                     a check succeeded
  *   last known ...; the latest check failed   the value is older than the last attempt, and why
  *   not detected yet / the check failed       nothing was ever observed
  * Without a record (an older gateway) the earlier wording stays: an empty value is "not configured". Neither says the
@@ -46,7 +46,9 @@ export function describePublicIP(publicIP: string | null | undefined, detection?
   if (!detection || (detection.state !== 'detected' && detection.state !== 'failed' && detection.state !== 'pending')) {
     return value ? { text: value, configured: true } : { text: 'not configured', configured: false };
   }
-  if (value && detection.state === 'detected') return { text: `${value} · observed ${day(detection.observedAt)}`, configured: true };
+  // A successful check is the ordinary case: the address, nothing around it. The qualifiers below appear only when
+  // the value is old or missing, which is when they say something.
+  if (value && detection.state === 'detected') return { text: value, configured: true };
   if (value && detection.state === 'failed') {
     return { text: `${value} · last known${detection.observedAt ? `, observed ${day(detection.observedAt)}` : ''}; the latest check failed${detection.error ? `: ${detection.error}` : ''}`, configured: true };
   }
@@ -88,4 +90,58 @@ export function describePort(
   const value = response[key];
   if (typeof value !== 'boolean') return 'unavailable';
   return value ? 'listening' : 'not-listening';
+}
+
+/** A name that only means something on one machine's own mesh (`localhost`, `local.cleaker`): never a public name. */
+export function isLocalMeshValue(value: string): boolean {
+  const v = String(value ?? '').trim().toLowerCase();
+  return v === 'localhost' || v === '127.0.0.1' || v === 'local' || v.startsWith('local.');
+}
+
+export type DoorView = { door: string | null; namespace: string | null };
+
+/**
+ * The public name this main server answers at (`netget.site`) and the namespace that name points to (`cleaker.me`).
+ * Two facts shown as one line ("door -> namespace"); neither is derived from the other, and a local mesh name is not a
+ * public door.
+ */
+export function describeDoor(mainServerName: unknown, namespace: unknown): DoorView {
+  const name = typeof mainServerName === 'string' ? mainServerName.trim() : '';
+  const ns = typeof namespace === 'string' ? namespace.trim() : '';
+  return { door: name && !isLocalMeshValue(name) ? name : null, namespace: ns || null };
+}
+
+/** Where the admin session the operator signed in with is kept (the same key LogsView and the Domains page use). */
+export const ADMIN_SESSION_STORAGE_KEY = 'netget:admin-session-token';
+
+/** The stored admin session token, or null: no storage, a storage that throws (private mode), or nothing stored. */
+export function readAdminSessionToken(storage?: { getItem(key: string): string | null } | null): string | null {
+  try {
+    const found = storage ?? (typeof window !== 'undefined' ? window.localStorage : null);
+    const value = found?.getItem(ADMIN_SESSION_STORAGE_KEY);
+    return value ? String(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether to show the operator's part of the screen (OpenResty, the machine's own name, how the address was
+ * detected). It needs BOTH a stored session and a status route that did not refuse it: a stale token that the gateway
+ * rejects is a visitor, not an operator.
+ */
+export function isOperatorView(token: string | null | undefined, port: PortView): boolean {
+  return Boolean(token) && port !== 'restricted';
+}
+
+/** One line about the claim from what the identity payload says, or null when there is nothing to add. */
+export function describeClaim(identity: { bootstrapped?: unknown; adminCount?: unknown; updatedAt?: unknown } | null | undefined): string | null {
+  if (!identity || identity.bootstrapped !== true) return null;
+  const parts = ['claimed'];
+  const admins = Number(identity.adminCount);
+  if (Number.isInteger(admins) && admins >= 0) parts.push(`${admins} admin${admins === 1 ? '' : 's'}`);
+  const at = Number(identity.updatedAt);
+  const when = Number.isFinite(at) && at > 0 ? new Date(at) : null;
+  if (when && !Number.isNaN(when.getTime())) parts.push(`updated ${when.toISOString().slice(0, 10)}`);
+  return parts.join(' · ');
 }
