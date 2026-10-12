@@ -574,7 +574,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               Keys opens the keychain (its signing keys). Wallet is shown but off: a wallet credential (a
               secp256k1/EIP-191 key a dApp can verify) is not built -- `.wallet` is a separate Ethereum-only
               package with no link to `.me` -- so it opens nothing rather than a page that does not exist. */}
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 0.5 }}>
+          {/* mt: the container's own gap puts 20px under the QR; the icons sit closer to it than that so the
+              air above them matches the air below (icons to fingerprint). */}
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mt: -1.25, mb: 0.5 }}>
             <Box
               component="button"
               type="button"
