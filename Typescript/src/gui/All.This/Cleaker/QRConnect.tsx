@@ -570,6 +570,34 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
            name, not just the name alone -- it just no longer repeats the
            name alongside it. */
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+          {/* Between the name (on the QR's perimeter) and the fingerprint: the two things this identity holds.
+              Keys opens the keychain (its signing keys). Wallet is shown but off: a wallet credential (a
+              secp256k1/EIP-191 key a dApp can verify) is not built -- `.wallet` is a separate Ethereum-only
+              package with no link to `.me` -- so it opens nothing rather than a page that does not exist. */}
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 0.5 }}>
+            <Box
+              component="button"
+              type="button"
+              aria-label="Keychain"
+              title="Keychain"
+              onClick={() => navigate('/keychain')}
+              data-gui-node-id={`${nodeId}.keys`}
+              sx={{ display: 'flex', p: 0.75, border: '1px solid', borderColor: 'divider', borderRadius: 1, background: 'transparent', color: 'inherit', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+            >
+              <Icon name="key" fontSize="1.25rem" />
+            </Box>
+            <Box
+              component="button"
+              type="button"
+              disabled
+              aria-label="Wallet (not available yet)"
+              title="Wallet — not available yet"
+              data-gui-node-id={`${nodeId}.wallet`}
+              sx={{ display: 'flex', p: 0.75, border: '1px solid', borderColor: 'divider', borderRadius: 1, background: 'transparent', color: 'text.disabled', cursor: 'not-allowed', opacity: 0.6 }}
+            >
+              <Icon name="account_balance_wallet" fontSize="1.25rem" />
+            </Box>
+          </Box>
           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
             {label}
           </Typography>

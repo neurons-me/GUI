@@ -1421,6 +1421,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   //   * on the landing route itself ("/") the card is already the page, so the badge does not open a second copy.
   const [identityOpen, setIdentityOpen] = useState(false);
   const [identityMounted, setIdentityMounted] = useState(false);
+  // The card has controls that navigate (Keys -> /keychain): arriving at another page closes the dialog over it.
+  useEffect(() => { setIdentityOpen(false); }, [location.pathname]);
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
   const positionIdentity = authenticated && session?.semanticNamespace ? session.semanticNamespace : namespaceRootLabel;
   const positionExpression = `${positionIdentity}${currentNodePath}`;
