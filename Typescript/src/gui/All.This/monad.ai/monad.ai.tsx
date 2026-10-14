@@ -1,6 +1,7 @@
 // Monad.tsx — Floating .me badge wrapper
 // Renders the draggable animated .me orb and toggles the Session badge
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Box } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
@@ -8,6 +9,7 @@ import type { Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
+import { placeOrbLabel } from "./orbLabelPlacement";
 export type MonadProps = {
   variant?: "bubble" | "inline" | "identity";
   mode?: "float" | "contained";
@@ -121,8 +123,65 @@ function resolveMeContext(): MonadContextValue {
   return { hasMe: Boolean(me), me, meName };
 }
 
+/**
+ * The orb's hover label, drawn in the viewport (a portal) so it is not subject to any transform the orb sits under
+ * (a page that scales the orb, a card that clips it) and can be placed against the real margins:
+ *   - it starts over the RIGHT half of the orb (a little left of the orb's centre) and extends to the right;
+ *   - when the right margin is short it slides left to stay inside the viewport, and is capped at the viewport's width
+ *     (ellipsis) when even that is not enough;
+ *   - above the orb; below it when there is no room above.
+ */
+function OrbLabel({ anchor, text, dark }: { anchor: DOMRect; text: string; dark: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const placed = placeOrbLabel(
+      { left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height },
+      { width: el.offsetWidth, height: el.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    setPos({ left: placed.left, top: placed.top });
+  }, [anchor, text]);
+  return createPortal(
+    <Box
+      ref={ref}
+      role="tooltip"
+      sx={{
+        position: "fixed",
+        left: pos?.left ?? 0,
+        top: pos?.top ?? 0,
+        visibility: pos ? "visible" : "hidden",
+        maxWidth: "calc(100vw - 16px)",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        zIndex: 1600,
+        pointerEvents: "none",
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        color: dark ? "#baf3ff" : "#005a7a",
+        background: dark ? "rgba(10,14,18,0.85)" : "rgba(255,255,255,0.85)",
+        border: "1px solid rgba(255,255,255,0.2)",
+        backdropFilter: "blur(8px)",
+        borderRadius: "8px",
+        px: 1,
+        py: 0.4,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+      }}
+    >
+      {text}
+    </Box>,
+    document.body,
+  );
+}
+
 export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, core = "glass", scale: outerScale, tooltip = true, children }: MonadProps) {
   const overlayScale = typeof outerScale === "number" && outerScale > 0 ? 1 / outerScale : 1;
+  // where the hovered orb is in the viewport (null when not hovered); the label is placed against it
+  const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
   const hairline = typeof ring === "number" && ring > 0 ? ring : null;
   const flatCore = core === "flat";
   // the theme drives the colours of the circumference and of the code (icon mode and a flat core)
@@ -494,6 +553,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               }
             }}
             onMouseDown={mode === "contained" ? undefined : handleMouseDown}
+            onMouseEnter={(e: React.MouseEvent<HTMLElement>) => setLabelAnchor(e.currentTarget.getBoundingClientRect())}
+            onMouseLeave={() => setLabelAnchor(null)}
             sx={(t: Theme) => {
               const primary = t.palette.primary?.main || "#29bfff";
               const lightRing = `0 0 0 3px ${primary}, 0 0 20px 5px color-mix(in srgb, ${primary} 55%, transparent)`;
@@ -740,39 +801,15 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ) : null}
               </Box>
             ) : (
-              <Box
-                className="monad-tooltip"
-                sx={{
-                  display: tooltip ? undefined : "none",
-                  position: "absolute",
-                  bottom: "calc(100% + 8px)",
-                  left: "50%",
-                  transform: `translateX(-50%) translateY(4px) scale(${overlayScale})`,
-                  transformOrigin: "bottom center",
-                  opacity: 0,
-                  transition: "opacity 0.18s ease, transform 0.18s ease",
-                  pointerEvents: "none",
-                  whiteSpace: "nowrap",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  color: theme.palette?.mode === "light" ? "#005a7a" : "#baf3ff",
-                  background: theme.palette?.mode === "light" ? "rgba(255,255,255,0.85)" : "rgba(10,14,18,0.85)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  backdropFilter: "blur(8px)",
-                  borderRadius: "8px",
-                  px: 1,
-                  py: 0.4,
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                }}
-              >
-                {tooltipLabel}
-              </Box>
+              null
             )}
           </Box>
           </Box>
         </MonadContext.Provider>
       </Box>
+      {labelAnchor && tooltip && !(variant === "identity" && visualKind === "me") && visualKind !== "me" ? (
+        <OrbLabel anchor={labelAnchor} text={tooltipLabel} dark={theme.palette?.mode !== "light"} />
+      ) : null}
     </>
   );
 }
