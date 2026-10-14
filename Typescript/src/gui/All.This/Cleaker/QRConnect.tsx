@@ -34,7 +34,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
-import { positionExpression as composePosition } from '@/react/positionExpression';
+import { positionExpression as composePosition, cardNamespace } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
@@ -152,6 +152,12 @@ export type QRConnectProps = DocumentPageProps & {
   /** The semantic path the label shows after the namespace ('/' = its root). Never a GUI route. */
   semanticPath?: string;
   /**
+   * Where the namespace came from: `declared` (default) or only the page's `address`. An address-derived namespace is a
+   * draft of the transport: until the service answers (or the person selects one) the card is "resolving" and offers
+   * nothing that signs, proves or claims.
+   */
+  namespaceSource?: 'declared' | 'address';
+  /**
    * What is behind this door, layer by layer, and whether nothing answers (`doorOff`): then the QR is grey, the
    * sign-in form is not offered (it could not work) and the layers panel takes its place.
    */
@@ -163,7 +169,7 @@ export type QRConnectProps = DocumentPageProps & {
   probeDoor?: () => Promise<DoorLayers>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -233,10 +239,21 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // (localStorage + a kernel path) and is not wired in. It would trade the mismatch described above (a stale
   // override outliving the server's own idea of the root) for not retyping it. That trade is the owner's to make.
   const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
-  const namespaceRootLabel = useMemo(
-    () => namespaceOverride || deriveNamespaceRootLabel(resolvedEndpoint),
-    [namespaceOverride, resolvedEndpoint],
-  );
+  // The namespace this card acts on, in order: the one the person SELECTED (the link), the one the service at this
+  // origin ANSWERED for (a current confirmation), and only then the address -- which is a namespace only when someone
+  // declared it so (`namespaceSource`). `namespaceReady` is false while all that is the address: the card then resolves
+  // and does not sign, prove or claim with a hostname it merely guessed.
+  const addressGuess = deriveNamespaceRootLabel(resolvedEndpoint);
+  const card = cardNamespace({
+    selected: namespaceOverride,
+    root: sharedRootBinding
+      ? { status: sharedRootStatus, cleakerEndpoint: sharedRootBinding.cleakerEndpoint, answeredNamespace: sharedRootBinding.answeredNamespace, confirmedLabel: sharedRootBinding.confirmedLabel, lastAttemptFailed: sharedRootBinding.lastAttemptFailed }
+      : null,
+    address: addressGuess,
+    source: namespaceSource,
+  });
+  const namespaceReady = card.ready;
+  const namespaceRootLabel = card.namespace;
 
 
   // Real crypto capability of the page THIS component is actually running
@@ -282,9 +299,10 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // the very first submit — before anyone has touched the badge — already
   // matches whatever's on screen.
   useEffect(() => {
-    setActiveNamespaceRoot(namespaceRootLabel);
+    // Not while the namespace is only the address: signing code reads this root, and a guess is not to be signed for.
+    setActiveNamespaceRoot(namespaceReady ? namespaceRootLabel : null);
     return () => setActiveNamespaceRoot(null);
-  }, [namespaceRootLabel]);
+  }, [namespaceRootLabel, namespaceReady]);
 
   // The bubble IS the QR (QRme — flips to an avatar on hover/click) rather
   // than a separate icon with a QR shown below it. Same address CleakerQR
@@ -404,7 +422,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // The namespace this card reads, its semantic path, and -- unless the page's own origin was checked to answer for it --
   // the surface the page is on: `cleaker.me @ localhost`, or just `cleaker.me` when they coincide. Both parts stay
   // separate; only the text is abbreviated (react/positionExpression.ts).
-  const labelBase = authenticated
+  const labelBase = !namespaceReady
+    ? (sharedRootStatus === 'error' ? 'sin respuesta' : 'resolviendo…')
+    : authenticated
     ? beatleExpression
     : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
   const labelCut = String(labelBase || '').search(/[/?#]/);
@@ -424,9 +444,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
         }
       : null,
   });
-  const perimeterLabel = positionComposed.compact;
+  const perimeterLabel = namespaceReady ? positionComposed.compact : labelBase;
   // What to copy or execute is the full form (scheme included), never the drawn one.
-  const positionExpressionFull = positionComposed.full;
+  const positionExpressionFull = namespaceReady ? positionComposed.full : '';
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
   // real pointer to that identity's own surface, not just decoration.
@@ -466,6 +486,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   const topInset = Math.max(0, Number(insets?.top ?? 0)) + Math.max(0, Number(insets?.nav ?? 0));
 
   const handleEnter = async () => {
+    // A namespace that is still only the address is not signed in to.
+    if (!namespaceReady) return;
     if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
     // A root that is another host is signed in AT that host: the session's own default is this page's gateway.
     // The root is this link's own, said explicitly: not read back from the page-wide active root, which another mounted
@@ -671,7 +693,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
             </Box>
           </Box>
         </Box>
-      ) : mode === 'register' ? (
+      ) : namespaceReady && mode === 'register' ? (
         // Register has its own heading/copy (Claim.tsx) — showing
         // "Hello, I am…" above it too would repeat the same question this
         // form already answers ("who are you HERE"), just with a different
@@ -681,14 +703,14 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
           onSwitchToSignIn={() => setMode('signin')}
           onRegistered={() => setRegistrationComplete(true)}
         />
-      ) : mode === 'link' ? (
+      ) : namespaceReady && mode === 'link' ? (
         // Its own form, not part of Register: it creates nothing, it presents an identity that is already open in
         // another link of this context and asks for the claim here.
         <LinkIdentity
           namespace={namespaceRootLabel}
           onSwitchToSignIn={() => setMode('signin')}
         />
-      ) : mode === 'recover' ? (
+      ) : namespaceReady && mode === 'recover' ? (
         // Same reasoning as the register branch above — RecoverAccount is
         // its own complete page (own heading, own back-link), not another
         // thing stacked under "Hello, I am…".
@@ -715,6 +737,13 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
             <Typography variant="h4" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
               Hello, I am…
             </Typography>
+            {!namespaceReady && (
+              <Typography variant="body2" data-gui-node-id={`${nodeId}.resolving`} sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
+                {sharedRootStatus === 'error'
+                  ? 'This service did not say which namespace it serves. Nothing is signed or claimed until it does.'
+                  : 'Resolving which namespace this service serves…'}
+              </Typography>
+            )}
             {/* The connection badge that used to live here (a separate
                 "here" pill, click-to-switch local.cleaker/cleaker.me) is
                 gone — Beatle, now positioned right under the QR above (see

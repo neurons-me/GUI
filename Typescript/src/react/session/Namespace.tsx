@@ -118,6 +118,8 @@ export interface NamespaceProps {
    * so here (netget's main-server door points at `/netget`).
    */
   semanticPath?: string;
+  /** See CleakerProps.namespaceSource. */
+  namespaceSource?: 'declared' | 'address';
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -1440,7 +1442,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       lastAttemptFailed: verifiedRoot.lastAttemptFailed,
     },
     guess: namespaceRootLabel,
+    guessIsProvisional: props.namespaceSource === 'address',
   });
+  // Nothing has said which namespace this is yet (it was only the address): say so, do not name the hostname.
+  const resolvingNamespace = !positionIdentity;
   // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
   // page's own origin is CHECKED to answer for that namespace (verifiedRoot). positionExpression.ts.
   const positionComposed = composePosition({
@@ -1606,7 +1611,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.component === 'Welcome'
-            ? { ...props, welcome: { namespace: positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
+            ? { ...props, welcome: { namespace: resolvingNamespace ? (verifiedRoot.status === 'error' ? 'sin respuesta' : 'resolviendo…') : positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
             : isLanding
             ? landingProps
             : entry.id === 'GUI.content.netget'
@@ -1675,7 +1680,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
   // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
   // full, unambiguous form is its title.
-  const topBarLeftElements = positionExpression
+  const topBarLeftElements = (positionExpression || resolvingNamespace)
     ? [
         {
           type: 'action' as const,
@@ -1722,7 +1727,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     userSelect: 'text',
                   }}
                 >
-                  {positionExpression}
+                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
                 </Box>
               </Box>
             ),

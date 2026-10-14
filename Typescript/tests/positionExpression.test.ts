@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace } from '../src/react/positionExpression';
+import { isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace, cardNamespace } from '../src/react/positionExpression';
 import { bindingFactsAfter, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
 import { parseNRPExpression } from '../src/gui/All.This/NRP/Beatle/NRPExpression';
 
@@ -160,6 +160,36 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   assert.equal(shownNamespace({ root: root('y.test', { lastAttemptFailed: true }), guess: 'z.test' }), 'z.test');
   assert.equal(shownNamespace({ root: root('unknown'), guess: 'z.test' }), 'z.test');
   assert.equal(shownNamespace({ root: root(null), guess: 'z.test' }), 'z.test');
+  // an address-only guess is not a namespace: with nothing resolved nothing is named
+  assert.equal(shownNamespace({ root: root(null), guess: 'z.test', guessIsProvisional: true }), '');
+  assert.equal(shownNamespace({ root: root('y.test'), guess: 'z.test', guessIsProvisional: true }), 'y.test');
+}
+
+
+// ── the card acts on the LINK that was selected; the hostname never does ─────────────────────────────────────────────
+{
+  const conf = (ns: string | null) => ({ status: 'confirmed', cleakerEndpoint: 'https://fulltrailer.com.mx', answeredNamespace: ns });
+  // one page, address fulltrailer.com.mx, which the app did NOT declare as a namespace
+  const base = { address: 'fulltrailer.com.mx', source: 'address' as const };
+  // nothing has answered: resolving, and no operation may use the hostname
+  let c = cardNamespace({ ...base, root: { status: 'checking', cleakerEndpoint: 'x', answeredNamespace: null } });
+  assert.equal(c.ready, false);
+  assert.equal(c.from, 'address');
+  // the service answers: that is the link, and it is ready (the address is only the surface)
+  c = cardNamespace({ ...base, root: conf('fulltrailer.suis-macbook-air.local') });
+  assert.deepEqual([c.namespace, c.ready, c.from], ['fulltrailer.suis-macbook-air.local', true, 'answered']);
+  // the person selects another link: the card follows the selection, not the answer or the address
+  const a = cardNamespace({ ...base, selected: 'jabellae.cleaker.me', root: conf('fulltrailer.suis-macbook-air.local') });
+  assert.deepEqual([a.namespace, a.from], ['jabellae.cleaker.me', 'selected']);
+  // and back: the first link's target is intact, nothing was replaced
+  const back = cardNamespace({ ...base, selected: null, root: conf('fulltrailer.suis-macbook-air.local') });
+  assert.equal(back.namespace, 'fulltrailer.suis-macbook-air.local');
+  // a failed attempt is not an answer
+  assert.equal(cardNamespace({ ...base, root: { ...conf('y.test'), lastAttemptFailed: true } }).ready, false);
+  // an app that declares the namespace is ready without waiting
+  assert.deepEqual(cardNamespace({ address: 'cleaker.me', source: 'declared' }), { namespace: 'cleaker.me', ready: true, from: 'declared' });
+  // the main server's door declares its namespace; a selection still wins
+  assert.equal(cardNamespace({ address: 'cleaker.me', source: 'declared', selected: 'x.test' }).namespace, 'x.test');
 }
 
 console.log('positionExpression: ok');

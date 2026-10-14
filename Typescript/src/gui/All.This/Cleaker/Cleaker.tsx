@@ -70,10 +70,16 @@ export type CleakerProps = {
   hideBarItems?: string[];
   /** The semantic path the position label shows ('/' = the namespace's root). See NamespaceProps.semanticPath. */
   semanticPath?: string;
+  /**
+   * Where `namespace` came from. `declared` (default): the app or the gateway said which namespace this is. `address`: it
+   * is only the page's own hostname, a first draft of the transport, NOT a namespace: the shell says "resolving" until the
+   * service answers which namespace it serves, and signs nothing, proves nothing and claims nothing in the meantime.
+   */
+  namespaceSource?: 'declared' | 'address';
   footerExtras?: LeftBarElement[];
 };
 
-export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, semanticPath }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, semanticPath, namespaceSource }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = String(namespaceProp || '').trim();
   const username = readMeUsername(found?.me);
@@ -119,6 +125,7 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         pages={pages}
         hideBarItems={hideBarItems}
         semanticPath={semanticPath}
+        namespaceSource={namespaceSource}
         footerExtras={footerExtras}
       />
     </SeedSessionProvider>

@@ -176,6 +176,11 @@ export function shownNamespace(input: {
   selected?: string | null;
   root?: RootCheck | null;
   guess: string;
+  /**
+   * The guess came from the ADDRESS (nobody declared the namespace). Then it is not a namespace yet: with nothing
+   * resolved the result is '' and the caller says "resolving", instead of presenting the hostname as the namespace.
+   */
+  guessIsProvisional?: boolean;
 }): string {
   const pick = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim() : '');
   const own = pick(input.authenticated);
@@ -187,5 +192,29 @@ export function shownNamespace(input: {
     const answered = pick(root.answeredNamespace);
     if (answered && answered.toLowerCase() !== 'unknown') return answered;
   }
-  return pick(input.guess);
+  return input.guessIsProvisional ? '' : pick(input.guess);
+}
+
+/**
+ * The namespace a card ACTS on (what it signs for, proves, claims into) and whether it may yet. Order: the link the
+ * person selected, then what the service at this origin ANSWERED (a current confirmation), then the address -- which is
+ * a namespace only when the app declared it so; otherwise `ready` is false and the card resolves instead of acting.
+ * The hostname is the transport's first draft; it never authorizes an operation by itself.
+ */
+export function cardNamespace(input: {
+  selected?: string | null;
+  root?: RootCheck | null;
+  address: string;
+  source: 'declared' | 'address';
+}): { namespace: string; ready: boolean; from: 'selected' | 'answered' | 'declared' | 'address' } {
+  const sel = String(input.selected ?? '').trim();
+  if (sel) return { namespace: sel, ready: true, from: 'selected' };
+  const root = input.root;
+  if (root && root.status === 'confirmed' && !root.lastAttemptFailed) {
+    const a = String(root.answeredNamespace ?? '').trim();
+    if (a && a.toLowerCase() !== 'unknown') return { namespace: a, ready: true, from: 'answered' };
+  }
+  return input.source === 'declared'
+    ? { namespace: input.address, ready: true, from: 'declared' }
+    : { namespace: input.address, ready: false, from: 'address' };
 }
