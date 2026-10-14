@@ -37,6 +37,14 @@ export type MonadProps = {
    * `flat` also draws the circumference and the code in the theme's primary (red when unhealthy), as icon mode does.
    */
   core?: "glass" | "flat";
+  /**
+   * The factor the CALLER scales this orb by from outside (a page drawing it at 2x, an icon drawing it at 0.4x). The
+   * orb's overlays (the hover label, the identity QR) are drawn at 1/scale so they keep their own size: a label that
+   * doubles with the orb is not a label.
+   */
+  scale?: number;
+  /** Show the hover label. An icon that already has its own label (a rail link) turns it off. */
+  tooltip?: boolean;
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
   size?: number;
   children?: ReactNode;
@@ -113,7 +121,8 @@ function resolveMeContext(): MonadContextValue {
   return { hasMe: Boolean(me), me, meName };
 }
 
-export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, core = "glass", children }: MonadProps) {
+export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, core = "glass", scale: outerScale, tooltip = true, children }: MonadProps) {
+  const overlayScale = typeof outerScale === "number" && outerScale > 0 ? 1 / outerScale : 1;
   const hairline = typeof ring === "number" && ring > 0 ? ring : null;
   const flatCore = core === "flat";
   // the theme drives the colours of the circumference and of the code (icon mode and a flat core)
@@ -552,7 +561,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 mixBlendMode: "screen",
               } }),
               "&:hover": { transform: "scale(1.08)" },
-              "&:hover .monad-tooltip": { opacity: 1, transform: "translateX(-50%) translateY(-2px)" },
+              "&:hover .monad-tooltip": { opacity: 1, transform: `translateX(-50%) translateY(-2px) scale(${overlayScale})` },
             });
             }}
           >
@@ -693,7 +702,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                   position: "absolute",
                   bottom: "calc(100% + 10px)",
                   left: "50%",
-                  transform: "translateX(-50%) translateY(4px)",
+                  transform: `translateX(-50%) translateY(4px) scale(${overlayScale})`,
+                  transformOrigin: "bottom center",
                   opacity: 0,
                   transition: "opacity 0.18s ease, transform 0.18s ease",
                   pointerEvents: "auto",
@@ -733,10 +743,12 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               <Box
                 className="monad-tooltip"
                 sx={{
+                  display: tooltip ? undefined : "none",
                   position: "absolute",
                   bottom: "calc(100% + 8px)",
                   left: "50%",
-                  transform: "translateX(-50%) translateY(4px)",
+                  transform: `translateX(-50%) translateY(4px) scale(${overlayScale})`,
+                  transformOrigin: "bottom center",
                   opacity: 0,
                   transition: "opacity 0.18s ease, transform 0.18s ease",
                   pointerEvents: "none",
