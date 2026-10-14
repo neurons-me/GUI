@@ -23,6 +23,11 @@ export type MonadProps = {
    * steady opacity to hold it at (tone, not size: the orb keeps its own geometry).
    */
   solid?: boolean | number;
+  /**
+   * Hairline ring: the width, in px of the orb's own 60px geometry, of a single circumference line. Replaces the 2.5px
+   * border + 3px ring + halo of the badge, which at icon scale read as a heavy, glowing rim. No ring shadow, no halo.
+   */
+  ring?: number;
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
   size?: number;
   children?: ReactNode;
@@ -99,7 +104,8 @@ function resolveMeContext(): MonadContextValue {
   return { hasMe: Boolean(me), me, meName };
 }
 
-export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, children }: MonadProps) {
+export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, children }: MonadProps) {
+  const hairline = typeof ring === "number" && ring > 0 ? ring : null;
   const solidOpacity = solid === true ? 1 : typeof solid === "number" && solid > 0 && solid <= 1 ? solid : null;
   const [open, setOpen] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
@@ -476,13 +482,15 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               background: isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              boxShadow: isIdentity
+              boxShadow: isIdentity || hairline !== null
                 ? "none"
                 : (!status.active || status.error
                     ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
                     : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
               border: isIdentity
                 ? "none"
+                : hairline !== null
+                ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : (t.palette.mode === "light" ? primary : "#9ff6ff")}`
                 : (!status.active || status.error
                     ? "2.5px solid #ff1a1a"
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),

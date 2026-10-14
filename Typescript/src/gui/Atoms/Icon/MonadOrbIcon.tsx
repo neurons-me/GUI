@@ -11,6 +11,8 @@ const ORB_NATIVE_SIZE = 60;
 const ORB_ICON_SIZE = 24;
 /** Tone of the orb in the rail: stronger than the badge's 0.3-0.5 glow cycle, short of full (which read as heavy). */
 const ORB_ICON_OPACITY = 0.72;
+/** The circumference line, in px AT ICON SIZE (the orb's own geometry is 60px and is scaled down). A hairline, no halo. */
+const ORB_ICON_RING_PX = 1;
 
 export type MonadOrbIconProps = React.HTMLAttributes<HTMLSpanElement> & {
   /** Icon box in px (the registry passes the icon's fontSize). Defaults to 24, like a Material icon. */
@@ -45,7 +47,7 @@ export default function MonadOrbIcon({ fontSize, healthy = null, label = 'monad.
           transformOrigin: 'center',
         }}
       >
-        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid={ORB_ICON_OPACITY} />
+        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid={ORB_ICON_OPACITY} ring={ORB_ICON_RING_PX / scale} />
       </span>
     </span>
   );
