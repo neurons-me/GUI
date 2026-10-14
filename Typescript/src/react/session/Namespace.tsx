@@ -57,6 +57,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
+import { withSurface } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1424,8 +1425,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The card has controls that navigate (Keys -> /keychain): arriving at another page closes the dialog over it.
   useEffect(() => { setIdentityOpen(false); }, [location.pathname]);
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
-  const positionIdentity = authenticated && session?.semanticNamespace ? session.semanticNamespace : namespaceRootLabel;
-  const positionExpression = `${positionIdentity}${currentNodePath}`;
+  // The namespace the person SELECTED and that actually connected (the card's typed root, promoted by
+  // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
+  // the badge cannot name a namespace nothing answered for.
+  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null);
+  const positionIdentity = authenticated && session?.semanticNamespace
+    ? session.semanticNamespace
+    : (selectedNamespace || namespaceRootLabel);
+  // Two channels written together -- the namespace, then where the page is when that is a different place
+  // (`cleaker.me@localhost`). positionExpression.ts.
+  const positionExpression = withSurface(`${positionIdentity}${currentNodePath}`, typeof window !== 'undefined' ? window.location.host : '');
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace
@@ -1523,6 +1532,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // success -- this is what keeps the sidebar (and /netget) from silently
   // drifting from whatever Beatle's own resolution shows in the QR.
   const handleBeatleNamespaceResolved = useCallback((namespace: string) => {
+    setSelectedNamespace(namespace);
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
   }, [verifiedRoot.promote, rootSeed]);
 

@@ -454,8 +454,9 @@ export default function QRme({
   // pass pre-split segments -- perimeterLabel is already the single
   // source of truth for what's drawn; this only figures out where the
   // root starts inside it.
-  // The label reads `<handle>.<root><path>`: three things, three treatments. The root is found as a whole segment run
-  // (after a `.` or at the start, before the end or a `/ ? #`), so a path after it no longer hides it.
+  // The label reads `<handle>.<root>[@<where the page is>][<path>]`: the namespace, then the address bar's host when it
+  // is a different place (positionExpression.ts), then the path. The root is found as a whole segment run (after a `.`
+  // or at the start, before the end or a `/ ? # @`), so what follows it no longer hides it.
   const perimeterRootStart = (() => {
     if (!perimeterRootLabel || !perimeterLabel) return -1;
     let from = 0;
@@ -464,7 +465,7 @@ export default function QRme({
       if (at < 0) return -1;
       const next = perimeterLabel[at + perimeterRootLabel.length];
       const startsSegment = at === 0 || perimeterLabel[at - 1] === '.';
-      const endsSegment = next === undefined || next === '/' || next === '?' || next === '#';
+      const endsSegment = next === undefined || next === '/' || next === '?' || next === '#' || next === '@';
       if (startsSegment && endsSegment) return at;
       from = at + 1;
     }

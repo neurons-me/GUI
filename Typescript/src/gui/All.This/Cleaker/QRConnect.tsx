@@ -34,6 +34,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
+import { withSurface } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
@@ -392,9 +393,14 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // `username` live; this was the one remaining piece still frozen,
   // flagged live 2026-10-02: "cuando empecemos a typear el username
   // empiece a aparecer junto al namespace... j.cleaker.me ja.cleaker.me").
-  const perimeterLabel = authenticated
-    ? beatleExpression
-    : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
+  // Two channels, written together: the namespace this card reads, and -- only when it is a different place -- the
+  // address bar's host (`cleaker.me@localhost`). See react/positionExpression.ts.
+  const perimeterLabel = withSurface(
+    authenticated
+      ? beatleExpression
+      : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel),
+    typeof window !== 'undefined' ? window.location.host : '',
+  );
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
   // real pointer to that identity's own surface, not just decoration.
