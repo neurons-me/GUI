@@ -26,6 +26,8 @@ export type MonadProps = {
   /**
    * Hairline ring: the width, in px of the orb's own 60px geometry, of a single circumference line. Replaces the 2.5px
    * border + 3px ring + halo of the badge, which at icon scale read as a heavy, glowing rim. No ring shadow, no halo.
+   * Icon mode also takes its colour from the theme: the circumference and the inner code (identicon) are drawn in
+   * `palette.primary` in both light and dark (red when unhealthy). The floating badge keeps its own fixed palette.
    */
   ring?: number;
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
@@ -490,7 +492,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               border: isIdentity
                 ? "none"
                 : hairline !== null
-                ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : (t.palette.mode === "light" ? primary : "#9ff6ff")}`
+                ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
                 : (!status.active || status.error
                     ? "2.5px solid #ff1a1a"
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
@@ -624,9 +626,13 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                       sx={{
                         borderRadius: "1px",
                         bgcolor: cell.active
-                          ? cell.secondary
-                            ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
-                            : (theme.palette.mode === "light" ? "rgba(10,120,148,0.9)" : "rgba(225,239,236,0.95)")
+                          ? hairline !== null
+                            // icon mode: the code is drawn in the theme's own primary (red when the monad is not healthy),
+                            // the same colour as the circumference around it; the primary cells strong, the secondary softer
+                            ? `color-mix(in srgb, ${!status.active || status.error ? "#ff1a1a" : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
+                            : cell.secondary
+                              ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
+                              : (theme.palette.mode === "light" ? "rgba(10,120,148,0.9)" : "rgba(225,239,236,0.95)")
                           : "transparent",
                         opacity: cell.active ? 1 : 0,
                       }}
