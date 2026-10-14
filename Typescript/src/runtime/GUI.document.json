@@ -60,7 +60,7 @@
               "netget": {
                 "label": "Netget",
                 "to": "/netget",
-                "icon": "router",
+                "icon": "glyph:𓆣",
                 "placement": "end"
               }
             }
