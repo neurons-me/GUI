@@ -8,10 +8,12 @@ import * as React from 'react';
 import Monad from '@/gui/All.This/monad.ai/monad.ai';
 
 const ORB_NATIVE_SIZE = 60;
-const ORB_ICON_SIZE = 28;
+const ORB_ICON_SIZE = 24;
+/** Tone of the orb in the rail: stronger than the badge's 0.3-0.5 glow cycle, short of full (which read as heavy). */
+const ORB_ICON_OPACITY = 0.72;
 
 export type MonadOrbIconProps = React.HTMLAttributes<HTMLSpanElement> & {
-  /** Icon box in px (the registry passes the icon's fontSize). Defaults to 28: the orb is art, not a line glyph, and reads small at 24. */
+  /** Icon box in px (the registry passes the icon's fontSize). Defaults to 24, like a Material icon. */
   fontSize?: number | string;
   /** true = green/online, false = red/offline, null/undefined = the default glow. */
   healthy?: boolean | null;
@@ -43,7 +45,7 @@ export default function MonadOrbIcon({ fontSize, healthy = null, label = 'monad.
           transformOrigin: 'center',
         }}
       >
-        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid />
+        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid={ORB_ICON_OPACITY} />
       </span>
     </span>
   );

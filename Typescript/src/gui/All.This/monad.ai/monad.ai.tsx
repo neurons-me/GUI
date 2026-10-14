@@ -18,10 +18,11 @@ export type MonadProps = {
   /** Drive the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
   /**
-   * Draw the orb at full strength: no dimming glow cycle (the `glow` animation takes the whole orb down to 30-50%
-   * opacity, which is the right ambience for a floating badge and unreadable as an icon).
+   * Draw the orb without the dimming glow cycle (the `glow` animation takes the whole orb down to 30-50% opacity, the
+   * right ambience for a floating badge and too faint as an icon). `true` = full strength; a number in (0, 1] is the
+   * steady opacity to hold it at (tone, not size: the orb keeps its own geometry).
    */
-  solid?: boolean;
+  solid?: boolean | number;
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
   size?: number;
   children?: ReactNode;
@@ -99,6 +100,7 @@ function resolveMeContext(): MonadContextValue {
 }
 
 export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, children }: MonadProps) {
+  const solidOpacity = solid === true ? 1 : typeof solid === "number" && solid > 0 && solid <= 1 ? solid : null;
   const [open, setOpen] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
   const identitySize = size ?? 34;
@@ -491,10 +493,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               color: t.palette.mode === "light" ? primary : "#baf3ff",
               cursor: "pointer",
               userSelect: "none",
-              animation: solid
+              animation: solidOpacity !== null
                 ? "float 6s ease-in-out infinite"
                 : "float 6s ease-in-out infinite, glow 4.5s ease-in-out infinite",
-              ...(solid ? { opacity: 1 } : {}),
+              ...(solidOpacity !== null ? { opacity: solidOpacity } : {}),
               backdropFilter: "blur(10px) saturate(160%)",
               pointerEvents: "auto",
               ...(isIdentity ? {} : { "&::before": {
