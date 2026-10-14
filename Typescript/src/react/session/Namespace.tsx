@@ -1711,6 +1711,44 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     </Dialog>
   ) : null;
 
+  // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
+  // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
+  // full, unambiguous form is its title.
+  const topBarLeftElements = positionExpression
+    ? [
+        {
+          type: 'action' as const,
+          props: {
+            element: (
+              <Box
+                component="span"
+                data-gui-node-id="GUI.bars.top.namespace"
+                data-gui-component="namespace"
+                data-position-expression={positionExpressionFull}
+                title={positionExpressionFull}
+                sx={{
+                  display: 'block',
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'monospace',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  color: 'text.primary',
+                  userSelect: 'text',
+                }}
+              >
+                {positionExpression}
+              </Box>
+            ),
+          },
+        },
+      ]
+    : [];
+
   const topBarRightElements = [
     {
       type: 'action' as const,
@@ -1730,7 +1768,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       {identityCard}
       <Layout
-        TopBar={{ elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
+        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
           // `active` applied ONCE, HERE, uniformly across every element
           // regardless of which of the two sources below it came from --

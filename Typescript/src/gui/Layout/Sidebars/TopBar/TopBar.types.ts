@@ -8,6 +8,11 @@ import type { SideBarsCollectionInput } from '@/gui/Layout/Sidebars/Collections/
 export interface TopBarProps extends AppBarProps {
   title?: string;
   logo?: string;
+  /**
+   * Elements on the LEFT, after the brand (or at the bar's start when `hideBrand`): what names where you are, not an
+   * action. The lane shrinks and ellipsizes before it ever pushes the right elements out.
+   */
+  elementsLeft?: TopBarElement[];
   elementsCenter?: TopBarElement[];
   elementsRight?: TopBarElement[];
   collectionsCenter?: SideBarsCollectionInput[];

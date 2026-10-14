@@ -21,8 +21,8 @@ export type MonadNamespaceSleepingEntry = MonadMeshSleepingEntry;
 export type MonadNamespaceRestartStatus = MonadMeshRestartStatus;
 
 export interface MonadNamespaceCardProps {
-  /** The hostname/namespace this card represents, e.g. "suis-macbook-air.local" */
-  namespace: string;
+  /** The hostname/namespace this card represents, e.g. "suis-macbook-air.local". Omit it where the page already says so. */
+  namespace?: string;
   /** Drives the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
   /** Currently live/registered monads. */
@@ -68,9 +68,11 @@ export default function MonadNamespaceCard({
 }: MonadNamespaceCardProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Typography variant="overline" sx={{ opacity: 0.4, letterSpacing: '0.1em' }}>
-        {namespace}
-      </Typography>
+      {namespace ? (
+        <Typography variant="overline" sx={{ opacity: 0.4, letterSpacing: '0.1em' }}>
+          {namespace}
+        </Typography>
+      ) : null}
 
       <Box sx={cardSx}>
         {/* monad.ai orb */}

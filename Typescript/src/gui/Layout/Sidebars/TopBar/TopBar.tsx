@@ -87,6 +87,7 @@ export default function TopBar(props: TopBarProps) {
     collectionsRight = [],
     homeTo,
     noBorder = false,
+    elementsLeft = [],
     hideBrand = false,
     position = 'fixed',
     sx,
@@ -268,6 +269,28 @@ export default function TopBar(props: TopBarProps) {
                 {title}
               </Typography>
             )}
+          </Box>
+        )}
+        {/* Left Elements */}
+        {elementsLeft.length > 0 && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              minWidth: 0,
+              flex: '0 1 auto',
+              overflow: 'hidden',
+              pl: hideBrand ? 1.5 : 0,
+              color: theme.palette.text.secondary,
+            }}
+          >
+            {elementsLeft.map((item, idx) => {
+              if (item.type === 'link') return <TopBarLink showLabel={isDesktop} key={item.props.label ?? idx} {...item.props} />;
+              if (item.type === 'menu') return <TopBarMenu showLabel={isDesktop} key={item.props.label ?? idx} {...item.props} />;
+              if (item.type === 'action') return <TopBarAction key={idx} {...item.props} />;
+              return null;
+            })}
           </Box>
         )}
         {/* Center Elements */}
