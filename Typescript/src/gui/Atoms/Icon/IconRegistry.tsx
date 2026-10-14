@@ -202,8 +202,12 @@ function createLazyResolver(prefix: 'lucide' | 'mui', iconKey: string): React.La
   return iconRegistry[registryKey];
 }
 
+// `orb:monad` -- the monad.ai orb itself (MonadOrbIcon.tsx), loaded on first use.
+const MonadOrbLazy = React.lazy(() => import('./MonadOrbIcon'));
+
 export function resolveIcon(name: string): React.ComponentType<any> {
   if (String(name || '').startsWith('glyph:')) return GlyphIconResolver;
+  if (/^orb:monad$/i.test(String(name || '').trim())) return MonadOrbLazy;
   const normalizedName = normalizeIconName(name);
   const [prefix, iconKey] = normalizedName.includes(':')
     ? normalizedName.split(':') as ['lucide' | 'mui' | 'material', string]
