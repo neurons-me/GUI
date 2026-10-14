@@ -1434,7 +1434,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     : (selectedNamespace || namespaceRootLabel);
   // Two channels written together -- the namespace, then where the page is when that is a different place
   // (`cleaker.me@localhost`). positionExpression.ts.
-  const positionExpression = withSurface(`${positionIdentity}${currentNodePath}`, typeof window !== 'undefined' ? window.location.host : '');
+  const positionExpression = withSurface(`${positionIdentity}${currentNodePath}`, typeof window !== 'undefined' ? window.location.host : '', typeof window !== 'undefined' ? window.location.protocol : 'http:');
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace

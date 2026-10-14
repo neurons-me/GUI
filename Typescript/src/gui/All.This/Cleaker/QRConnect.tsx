@@ -400,6 +400,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
       ? beatleExpression
       : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel),
     typeof window !== 'undefined' ? window.location.host : '',
+    typeof window !== 'undefined' ? window.location.protocol : 'http:',
   );
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
