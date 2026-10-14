@@ -58,7 +58,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
-import { positionExpression as composePosition } from '@/react/positionExpression';
+import { positionExpression as composePosition, shownNamespace } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1429,9 +1429,18 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
   // the badge cannot name a namespace nothing answered for.
   const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null);
-  const positionIdentity = authenticated && session?.semanticNamespace
-    ? session.semanticNamespace
-    : (selectedNamespace || namespaceRootLabel);
+  const positionIdentity = shownNamespace({
+    authenticated: authenticated ? session?.semanticNamespace : null,
+    selected: selectedNamespace,
+    root: {
+      status: monadOff ? 'off' : verifiedRoot.status,
+      cleakerEndpoint: verifiedRoot.cleakerEndpoint,
+      answeredNamespace: verifiedRoot.answeredNamespace,
+      confirmedLabel: verifiedRoot.confirmedLabel,
+      lastAttemptFailed: verifiedRoot.lastAttemptFailed,
+    },
+    guess: namespaceRootLabel,
+  });
   // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
   // page's own origin is CHECKED to answer for that namespace (verifiedRoot). positionExpression.ts.
   const positionComposed = composePosition({

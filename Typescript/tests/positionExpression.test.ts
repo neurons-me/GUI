@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isBoundToPage, positionExpression, positionLabel, originOf } from '../src/react/positionExpression';
+import { isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace } from '../src/react/positionExpression';
 import { bindingFactsAfter, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
 import { parseNRPExpression } from '../src/gui/All.This/NRP/Beatle/NRPExpression';
 
@@ -126,6 +126,40 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   // a confirmation of ANOTHER label does not cover a namespace outside it, even if the names look related
   const other = bindingFactsAfter(NO_ROOT_BINDING, { label: 'acme.test', ok: true, answeredNamespace: 'acme.test' });
   assert.equal(isBoundToPage({ namespace: 'cleaker.me', pageOrigin: 'https://acme.test', root: { status: 'confirmed', cleakerEndpoint: 'https://acme.test', answeredNamespace: 'acme.test', confirmedLabel: other.confirmedLabel, lastAttemptFailed: false } }), false);
+}
+
+
+// ── which namespace is NAMED: what the monad answered, not what the address says ───────────────────────────────────
+{
+  const root = (answered: string | null, extra: object = {}) => ({ status: 'confirmed', cleakerEndpoint: 'https://fulltrailer.com.mx', answeredNamespace: answered, ...extra });
+  // loaded from fulltrailer.com.mx, the monad says it is fulltrailer.suis-macbook-air.local: that is the namespace
+  assert.equal(shownNamespace({ root: root('fulltrailer.suis-macbook-air.local'), guess: 'fulltrailer.com.mx' }), 'fulltrailer.suis-macbook-air.local');
+  // that origin is the one that was checked to answer for it, so the short form is the namespace alone; the address is
+  // still the surface and is in the full form (and in the Welcome's "served from")
+  const door = positionExpression({ namespace: 'fulltrailer.suis-macbook-air.local', page: page('https://fulltrailer.com.mx/'), root: root('fulltrailer.suis-macbook-air.local') });
+  assert.equal(door.bound, true);
+  assert.equal(door.compact, 'fulltrailer.suis-macbook-air.local');
+  assert.equal(door.full, 'fulltrailer.suis-macbook-air.local @ "https://fulltrailer.com.mx"');
+  // reached through ANOTHER address than the one that was confirmed (the LAN IP): same namespace, the surface is shown
+  const other = positionExpression({ namespace: 'fulltrailer.suis-macbook-air.local', page: page('http://192.168.1.57:4100/'), root: root('fulltrailer.suis-macbook-air.local') });
+  assert.equal(other.bound, false);
+  // http on a non-loopback host (a LAN address) is news: the scheme is written
+  assert.equal(other.compact, 'fulltrailer.suis-macbook-air.local @ "http://192.168.1.57:4100"');
+  // the same monad reached by its LAN address, and confirmed there: that origin answered, so it collapses
+  const lan = positionExpression({ namespace: 'fulltrailer.suis-macbook-air.local', page: page('http://192.168.1.57:4100/'), root: { status: 'confirmed', cleakerEndpoint: 'http://192.168.1.57:4100', answeredNamespace: 'fulltrailer.suis-macbook-air.local' } });
+  assert.equal(lan.bound, true, 'that origin is the one that answered');
+  assert.equal(lan.compact, 'fulltrailer.suis-macbook-air.local');
+  // if the owner makes the monad's own namespace fulltrailer.com.mx, the name IS the address and they collapse
+  assert.equal(shownNamespace({ root: root('fulltrailer.com.mx'), guess: 'fulltrailer.com.mx' }), 'fulltrailer.com.mx');
+  assert.equal(positionExpression({ namespace: 'fulltrailer.com.mx', page: page('https://fulltrailer.com.mx/'), root: root('fulltrailer.com.mx') }).compact, 'fulltrailer.com.mx');
+  // priority: identity > selection > answered > guess
+  assert.equal(shownNamespace({ authenticated: 'ana.cleaker.me', selected: 'x.test', root: root('y.test'), guess: 'z.test' }), 'ana.cleaker.me');
+  assert.equal(shownNamespace({ selected: 'x.test', root: root('y.test'), guess: 'z.test' }), 'x.test');
+  // an answer that is not current is not used: still checking, failed, off, or "unknown"
+  assert.equal(shownNamespace({ root: { status: 'checking', cleakerEndpoint: 'a', answeredNamespace: 'y.test' }, guess: 'z.test' }), 'z.test');
+  assert.equal(shownNamespace({ root: root('y.test', { lastAttemptFailed: true }), guess: 'z.test' }), 'z.test');
+  assert.equal(shownNamespace({ root: root('unknown'), guess: 'z.test' }), 'z.test');
+  assert.equal(shownNamespace({ root: root(null), guess: 'z.test' }), 'z.test');
 }
 
 console.log('positionExpression: ok');

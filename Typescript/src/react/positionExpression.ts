@@ -159,3 +159,33 @@ export function positionExpression(input: {
 export function positionLabel(input: Parameters<typeof positionExpression>[0]): string {
   return positionExpression(input).compact;
 }
+
+/**
+ * WHICH namespace the shell names, in order of how much is known:
+ *   1. the signed-in identity's own namespace;
+ *   2. the namespace the person selected and that connected;
+ *   3. the namespace the monad at this origin ANSWERED for (a current confirmation, never a failed attempt's):
+ *      what it says it is, whatever address it was reached by;
+ *   4. only then the address-derived guess (the page's hostname) -- a first draw, before anything has answered.
+ * The address is the surface. A page loaded from fulltrailer.com.mx, from the machine's .local name or from a LAN IP is
+ * the same namespace three times, so the name shown must not be taken from the address when the monad has said
+ * which namespace it is.
+ */
+export function shownNamespace(input: {
+  authenticated?: string | null;
+  selected?: string | null;
+  root?: RootCheck | null;
+  guess: string;
+}): string {
+  const pick = (v: string | null | undefined) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  const own = pick(input.authenticated);
+  if (own) return own;
+  const chosen = pick(input.selected);
+  if (chosen) return chosen;
+  const root = input.root;
+  if (root && root.status === 'confirmed' && !root.lastAttemptFailed) {
+    const answered = pick(root.answeredNamespace);
+    if (answered && answered.toLowerCase() !== 'unknown') return answered;
+  }
+  return pick(input.guess);
+}
