@@ -8,9 +8,10 @@ import * as React from 'react';
 import Monad from '@/gui/All.This/monad.ai/monad.ai';
 
 const ORB_NATIVE_SIZE = 60;
+const ORB_ICON_SIZE = 28;
 
 export type MonadOrbIconProps = React.HTMLAttributes<HTMLSpanElement> & {
-  /** Icon box in px (the registry passes the icon's fontSize). Defaults to 24, like a Material icon. */
+  /** Icon box in px (the registry passes the icon's fontSize). Defaults to 28: the orb is art, not a line glyph, and reads small at 24. */
   fontSize?: number | string;
   /** true = green/online, false = red/offline, null/undefined = the default glow. */
   healthy?: boolean | null;
@@ -18,7 +19,7 @@ export type MonadOrbIconProps = React.HTMLAttributes<HTMLSpanElement> & {
 };
 
 export default function MonadOrbIcon({ fontSize, healthy = null, label = 'monad.ai', className, style, ...rest }: MonadOrbIconProps) {
-  const size = typeof fontSize === 'number' ? fontSize : Number.parseFloat(String(fontSize ?? '')) || 24;
+  const size = typeof fontSize === 'number' ? fontSize : Number.parseFloat(String(fontSize ?? '')) || ORB_ICON_SIZE;
   const scale = size / ORB_NATIVE_SIZE;
   // name/iconColor/weight/... come through the registry's props: only the span's own attributes are kept
   const { name: _n, iconColor: _c, weight: _w, fill: _f, grade: _g, opticalSize: _o, ...domProps } = rest as any;
@@ -42,7 +43,7 @@ export default function MonadOrbIcon({ fontSize, healthy = null, label = 'monad.
           transformOrigin: 'center',
         }}
       >
-        <Monad mode="contained" kind="monad" label={label} healthy={healthy} />
+        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid />
       </span>
     </span>
   );

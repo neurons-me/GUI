@@ -24,6 +24,9 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
   const view = viewProp ?? contextView;
   const [expanded, setExpanded] = useState(false);
   const hasChildren = Boolean(children);
+  // An icon that is drawn art (the monad orb) rather than a glyph in a line box needs more air above and below it inside
+  // the selected outline than a line icon does.
+  const roomy = typeof icon === 'string' && /^orb:/i.test(icon);
 
   const handleClick = () => {
     if (hasChildren) setExpanded((prev) => !prev);
@@ -66,6 +69,7 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
         flexDirection: 'column',
         alignItems: view === 'rail' ? 'center' : 'flex-start',
         p: 1.123,
+        ...(roomy ? { py: 1.75 } : {}),
         backgroundColor: 'transparent',
         border: '1px solid',
         borderColor: active ? 'primary.main' : 'transparent',
