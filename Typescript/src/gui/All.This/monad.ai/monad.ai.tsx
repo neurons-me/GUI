@@ -31,13 +31,12 @@ export type MonadProps = {
    */
   ring?: number;
   /**
-   * What the disc BEHIND the pixel code is (only that: the circumference, halo and motion of the orb are not touched by
-   * it). `glass` (default) is the original sphere: highlights, inset shading and the animated "rorschach" texture on a
-   * translucent body. `flat` is one solid colour from the theme (rigid; kept for comparison). `soft` is a circle with
-   * tonal depth drawn from the theme (primary into secondary and the surface), soft edge, no texture, and a slow drift
-   * of its light so it is not fixed.
+   * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
+   * "rorschach" texture on a translucent body. `flat` is a plain circle, solid, one colour from the theme (palette.primary
+   * tinted into the surface colour), no highlight, no shading, no texture: the pixel code is what is drawn on it.
+   * `flat` also draws the circumference and the code in the theme's primary (red when unhealthy), as icon mode does.
    */
-  core?: "glass" | "flat" | "soft";
+  core?: "glass" | "flat";
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
   size?: number;
   children?: ReactNode;
@@ -117,10 +116,11 @@ function resolveMeContext(): MonadContextValue {
 export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, core = "glass", children }: MonadProps) {
   const hairline = typeof ring === "number" && ring > 0 ? ring : null;
   const flatCore = core === "flat";
-  const softCore = core === "soft";
-  // the theme drives the colours of the circumference and of the code in icon mode only
-  const themed = hairline !== null;
-  const solidOpacity = solid === true ? 1 : typeof solid === "number" && solid > 0 && solid <= 1 ? solid : null;
+  // the theme drives the colours of the circumference and of the code (icon mode and a flat core)
+  const themed = hairline !== null || flatCore;
+  // A flat core is a solid disc: the glow cycle that dims the WHOLE orb to 30-50% would make it translucent again, so
+  // a flat core holds full strength unless a steady opacity was asked for.
+  const solidOpacity = solid === true ? 1 : typeof solid === "number" && solid > 0 && solid <= 1 ? solid : core === "flat" ? 1 : null;
   const [open, setOpen] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
   const identitySize = size ?? 34;
@@ -132,10 +132,6 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
     error: healthy === false,
   };
   const theme = useTheme() as any;
-  // colours of the soft core, all from the theme (red instead of primary when the monad is not healthy)
-  const themePrimary = !status.active || status.error ? "#ff1a1a" : (theme?.palette?.primary?.main ?? "#29bfff");
-  const themeSecondary = !status.active || status.error ? "#ff1a1a" : (theme?.palette?.secondary?.main ?? themePrimary);
-  const paper = theme?.palette?.background?.paper ?? "#1e1e1e";
   const hasContent = Boolean(children);
   const [meContext, setMeContext] = useState<MonadContextValue>(() => resolveMeContext());
   const visualKind = kind || (meContext.hasMe ? "me" : "monad");
@@ -284,10 +280,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
             "50%": { transform: "translateY(-8px) scale(1.1)", borderRadius: "50% 60% 40% 55% / 55% 40% 60% 45%" },
             "75%": { transform: "translateY(-6px) scale(1.05)", borderRadius: "45% 55% 40% 60% / 40% 60% 55% 50%" },
           },
-          // the light of the soft core: a slow drift, not a texture
-          "@keyframes coreLight": {
-            "0%,100%": { backgroundPosition: "32% 26%, 50% 50%" },
-            "50%": { backgroundPosition: "62% 40%, 50% 50%" },
+          // a circle that stays a circle: only the vertical drift of `float`, none of its scale or blob morph
+          "@keyframes floatSteady": {
+            "0%,100%": { transform: "translateY(0)" },
+            "50%": { transform: "translateY(-3px)" },
           },
           "@keyframes glow": {
             "0%,100%": { opacity: 0.3, boxShadow: "0 0 4px rgba(255,255,255,0.2), 0 0 8px rgba(173,216,230,0.1)" },
@@ -507,7 +503,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
               boxShadow: isIdentity || hairline !== null
                 ? "none"
-
+                : flatCore
+                ? (!status.active || status.error
+                    ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
+                    : `0 0 0 3px ${primary}, 0 0 22px 6px color-mix(in srgb, ${primary} 55%, transparent)`)
                 : (!status.active || status.error
                     ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
                     : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
@@ -515,6 +514,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ? "none"
                 : hairline !== null
                 ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
+                : flatCore
+                ? `2.5px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
                 : (!status.active || status.error
                     ? "2.5px solid #ff1a1a"
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
@@ -525,7 +526,9 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               color: t.palette.mode === "light" ? primary : "#baf3ff",
               cursor: "pointer",
               userSelect: "none",
-              animation: solidOpacity !== null
+              animation: flatCore
+                ? "floatSteady 6s ease-in-out infinite"
+                : solidOpacity !== null
                 ? "float 6s ease-in-out infinite"
                 : "float 6s ease-in-out infinite, glow 4.5s ease-in-out infinite",
               ...(solidOpacity !== null ? { opacity: solidOpacity } : {}),
@@ -585,30 +588,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               </Box>
             ) : visualKind === "monad" ? (
               <>
-                {softCore ? (
-                  <Box
-                    aria-hidden="true"
-                    sx={{
-                      position: "absolute",
-                      inset: 5,
-                      borderRadius: "50%",
-                      // Tonal depth from the theme: a light (primary lifted toward the surface) that drifts slowly over a
-                      // base that goes from primary through secondary to the surface. Soft edge, no texture, no outline.
-                      backgroundImage: [
-                        `radial-gradient(circle at 36% 28%, color-mix(in srgb, ${themePrimary} 42%, ${paper}) 0%, transparent 62%)`,
-                        `radial-gradient(circle at 50% 50%, color-mix(in srgb, ${themePrimary} 22%, ${paper}) 0%, color-mix(in srgb, ${themeSecondary} 14%, ${paper}) 68%, color-mix(in srgb, ${themePrimary} 6%, ${paper}) 100%)`,
-                      ].join(", "),
-                      backgroundSize: "170% 170%, 100% 100%",
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "32% 26%, 50% 50%",
-                      // feathered edge: the disc fades into the body instead of ending on a hard line
-                      maskImage: "radial-gradient(circle at 50% 50%, #000 0 70%, transparent 100%)",
-                      WebkitMaskImage: "radial-gradient(circle at 50% 50%, #000 0 70%, transparent 100%)",
-                      animation: "coreLight 16s ease-in-out infinite",
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : flatCore ? (
+                {flatCore ? (
                   <Box
                     aria-hidden="true"
                     sx={{
