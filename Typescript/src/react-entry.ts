@@ -31,6 +31,8 @@ export type { CleakerProps } from '@/gui/All.This/Cleaker/Cleaker';
 // itself an app (e.g. local.host's own root). See Namespace above for
 // the identity/claim landing (local.cleaker) — two separate surfaces.
 export { default as HostSurface } from '@/gui/All.This/Host/HostSurface';
+export { default as MonadNamespaceCard } from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
+export type { MonadNamespaceCardProps } from '@/gui/All.This/monad.ai/Surface/MonadNamespaceCard';
 export type { HostSurfaceProps } from '@/gui/All.This/Host/HostSurface';
 export { useMe, useOptionalMe } from '@/react/useMe';
 export { readMeUsername } from '@/react/meIdentity';

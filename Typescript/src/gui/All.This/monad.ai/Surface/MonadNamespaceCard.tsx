@@ -37,6 +37,10 @@ export interface MonadNamespaceCardProps {
   restartStatus?: MonadNamespaceRestartStatus;
   restartError?: string | null;
   onRestartAll?: () => void;
+  /** Size of the orb relative to its badge size (1 = the 60px orb). A page that IS the monad's view draws it large. */
+  orbScale?: number;
+  /** Show the mesh list expanded (default: collapsed, as in a compact card). */
+  meshDefaultOpen?: boolean;
 }
 
 const cardSx = {
@@ -59,6 +63,8 @@ export default function MonadNamespaceCard({
   restartStatus = 'idle',
   restartError = null,
   onRestartAll,
+  orbScale = 1,
+  meshDefaultOpen = false,
 }: MonadNamespaceCardProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -68,8 +74,10 @@ export default function MonadNamespaceCard({
 
       <Box sx={cardSx}>
         {/* monad.ai orb */}
-        <Box sx={{ height: 130 }}>
-          <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} />
+        <Box sx={{ height: 130 * orbScale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: 120, height: 130, flexShrink: 0, transform: orbScale === 1 ? undefined : `scale(${orbScale})`, transformOrigin: 'center' }}>
+            <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} />
+          </Box>
         </Box>
 
         <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1.5 }}>
@@ -81,6 +89,7 @@ export default function MonadNamespaceCard({
             restartStatus={restartStatus}
             restartError={restartError}
             onRestartAll={onRestartAll}
+            defaultOpen={meshDefaultOpen}
           />
         </Box>
       </Box>
