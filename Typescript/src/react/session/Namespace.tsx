@@ -57,7 +57,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
-import { withSurface } from '@/react/positionExpression';
+import { positionLabel } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -111,6 +111,12 @@ export interface NamespaceProps {
    * Blockchain, URL) are not that app's navigation.
    */
   hideBarItems?: string[];
+  /**
+   * The semantic path the position label shows after the namespace; '/' (default) is the namespace's root. A GUI route
+   * is not a semantic path and is never taken for one: an app whose door points at another node of the namespace says
+   * so here (netget's main-server door points at `/netget`).
+   */
+  semanticPath?: string;
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -1432,9 +1438,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const positionIdentity = authenticated && session?.semanticNamespace
     ? session.semanticNamespace
     : (selectedNamespace || namespaceRootLabel);
-  // Two channels written together -- the namespace, then where the page is when that is a different place
-  // (`cleaker.me@localhost`). positionExpression.ts.
-  const positionExpression = withSurface(`${positionIdentity}${currentNodePath}`, typeof window !== 'undefined' ? window.location.host : '', typeof window !== 'undefined' ? window.location.protocol : 'http:');
+  // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
+  // page's own origin is CHECKED to answer for that namespace (verifiedRoot). positionExpression.ts.
+  const positionExpression = positionLabel({
+    namespace: positionIdentity,
+    // the SEMANTIC path only: `currentNodePath` is where the GUI navigated, not a node of the namespace
+    path: props.semanticPath ?? '/',
+    page: typeof window !== 'undefined'
+      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
+      : null,
+    root: { status: monadOff ? 'off' : verifiedRoot.status, cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace },
+  });
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace
@@ -1552,7 +1566,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   );
 
   // What the landing is given. The same object feeds the landing route and the identity card dialog.
-  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.

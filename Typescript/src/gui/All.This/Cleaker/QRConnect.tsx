@@ -34,7 +34,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
-import { withSurface } from '@/react/positionExpression';
+import { positionLabel, type RootCheck } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
@@ -144,6 +144,14 @@ export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
   /**
+   * What the shared verified root confirmed (verifiedRoot.cleakerEndpoint / .answeredNamespace). The label abbreviates
+   * `ns/ @ surface` to `ns/` only when this says the page's own origin answered for the namespace; without it nothing
+   * is abbreviated.
+   */
+  sharedRootBinding?: { cleakerEndpoint: string; answeredNamespace: string | null };
+  /** The semantic path the label shows after the namespace ('/' = its root). Never a GUI route. */
+  semanticPath?: string;
+  /**
    * What is behind this door, layer by layer, and whether nothing answers (`doorOff`): then the QR is grey, the
    * sign-in form is not offered (it could not work) and the layers panel takes its place.
    */
@@ -155,7 +163,7 @@ export type QRConnectProps = DocumentPageProps & {
   probeDoor?: () => Promise<DoorLayers>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -393,15 +401,23 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // `username` live; this was the one remaining piece still frozen,
   // flagged live 2026-10-02: "cuando empecemos a typear el username
   // empiece a aparecer junto al namespace... j.cleaker.me ja.cleaker.me").
-  // Two channels, written together: the namespace this card reads, and -- only when it is a different place -- the
-  // address bar's host (`cleaker.me@localhost`). See react/positionExpression.ts.
-  const perimeterLabel = withSurface(
-    authenticated
-      ? beatleExpression
-      : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel),
-    typeof window !== 'undefined' ? window.location.host : '',
-    typeof window !== 'undefined' ? window.location.protocol : 'http:',
-  );
+  // The namespace this card reads, its semantic path, and -- unless the page's own origin was checked to answer for it --
+  // the surface the page is on: `cleaker.me/ @ localhost`, or `cleaker.me/` when they coincide. Both parts stay
+  // separate; only the text is abbreviated (react/positionExpression.ts).
+  const labelBase = authenticated
+    ? beatleExpression
+    : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
+  const labelCut = String(labelBase || '').search(/[/?#]/);
+  const perimeterLabel = positionLabel({
+    namespace: labelCut < 0 ? String(labelBase || '') : String(labelBase).slice(0, labelCut),
+    path: labelCut < 0 ? semanticPath : String(labelBase).slice(labelCut),
+    page: typeof window !== 'undefined'
+      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
+      : null,
+    root: sharedRootBinding
+      ? { status: sharedRootStatus, cleakerEndpoint: sharedRootBinding.cleakerEndpoint, answeredNamespace: sharedRootBinding.answeredNamespace }
+      : null,
+  });
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
   // real pointer to that identity's own surface, not just decoration.

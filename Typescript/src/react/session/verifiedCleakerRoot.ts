@@ -316,6 +316,13 @@ export type VerifiedCleakerRoot = {
    */
   netget: NetgetGatewayCheck;
   /**
+   * The namespace the confirmed transport ANSWERED for (`target.namespace.me` of its /__surface), exactly as it said it,
+   * or null when it did not say. This is what the origin claims about itself -- not an authority over the namespace
+   * (see checkMonadSurfaceClaim). It exists so a caller can compare "the namespace I am showing" with "the namespace
+   * this origin answered for" instead of assuming the two from their names.
+   */
+  answeredNamespace: string | null;
+  /**
    * Re-verifies `seed` (both the Monad contract and Netget's, in
    * parallel) and, only if the Monad side succeeds, promotes ALL of the
    * above together to the shared confirmed context -- a failed promotion
@@ -351,6 +358,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
   const [signature, setSignature] = React.useState<SignatureCheck>('absent');
   const [monad, setMonad] = React.useState<ProbedMonad | null>(null);
   const [netget, setNetget] = React.useState<NetgetGatewayCheck>({ available: false, gatewayId: null });
+  const [answeredNamespace, setAnsweredNamespace] = React.useState<string | null>(null);
   const guardRef = React.useRef<GenerationGuard>({ current: 0 });
   const everConfirmedRef = React.useRef(false);
 
@@ -366,6 +374,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
         setSignature(result.signature);
         setMonad(result.monad);
         setNetget(netgetCheck);
+        setAnsweredNamespace(result.namespace ?? null);
       } else if (everConfirmedRef.current) {
         // A later promote() that fails must not undo an earlier real
         // confirmation -- transportOrigin/signature/netget already stayed
@@ -385,5 +394,5 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { status, transportOrigin, cleakerEndpoint, signature, monad, netget, promote: verify };
+  return { status, transportOrigin, cleakerEndpoint, signature, monad, netget, answeredNamespace, promote: verify };
 }
