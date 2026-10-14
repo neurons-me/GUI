@@ -14,6 +14,7 @@ import { RouterProvider } from '@/Router/Router';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
 import IconButton from '@/gui/Atoms/IconButton/IconButton';
+import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
@@ -1418,18 +1419,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // read as "signed in as someone"). One expression, one QR value, both built from the SAME three parts
   // here — not two independent derivations that could drift (the earlier gap this closes).
   const location = useLocation();
-  // The identity card (the landing's component) as a dialog over whatever page this is. The badge in the rail used to
-  // be a link to "/": using your identity meant leaving the page you were on. Now it opens the card here.
-  //   * `identityOpen` is only whether the dialog is showing. The card is mounted the first time it is opened and then
-  //     KEPT mounted (Dialog keepMounted), so closing and reopening resumes exactly where it was -- a registration at
-  //     its recovery-phrase step is still at its recovery-phrase step. Nothing it holds is torn down by closing.
-  //   * it renders inside this same tree, so it reads the page's one session/`.me`: opening or closing it never
-  //     creates another session and never signs the current one out.
-  //   * on the landing route itself ("/") the card is already the page, so the badge does not open a second copy.
-  const [identityOpen, setIdentityOpen] = useState(false);
-  const [identityMounted, setIdentityMounted] = useState(false);
-  // The card has controls that navigate (Keys -> /keychain): arriving at another page closes the dialog over it.
-  useEffect(() => { setIdentityOpen(false); }, [location.pathname]);
+  const navigate = useNavigate();
+  // The identity (the QR, the sign-in/register/recover card) is a PAGE of the namespace, at `/.me`: it has an address,
+  // survives a refresh, and Back returns to where you were. It used to open as a dialog over whatever page you were on;
+  // that is gone. `/` stays the namespace's home.
+  const IDENTITY_ROUTE = '/.me';
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
   // The namespace the person SELECTED and that actually connected (the card's typed root, promoted by
   // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
@@ -1586,10 +1580,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       // A page whose layer is off is replaced, here, by the one panel that says which layer is missing -- the
       // same on every route -- instead of each page printing its own error for the same missing thing. The
       // landing is exempt: it is the way in, and shows the panel itself next to the QR.
-      const blocked = entry.id !== LANDING_ID && entry.needs && doorBlocks(doorLayers, entry.needs);
+      const isLanding = entry.id === LANDING_ID || entry.component === 'Landing';
+      const blocked = !isLanding && entry.needs && doorBlocks(doorLayers, entry.needs);
       // Until the layer the page needs has been read, the page is not rendered at all (it would show its own
       // "HTTP 404" for the moment it takes to find out).
-      const waiting = entry.id !== LANDING_ID && entry.needs && !blocked && doorPending(doorLayers, entry.needs);
+      const waiting = !isLanding && entry.needs && !blocked && doorPending(doorLayers, entry.needs);
       const element = waiting ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
       ) : blocked ? (
@@ -1601,7 +1596,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         registry: pageRegistry,
         doc,
         props:
-          entry.id === LANDING_ID
+          isLanding
             ? landingProps
             : entry.id === 'GUI.content.netget'
               ? {
@@ -1635,28 +1630,15 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
   const RAIL_BADGE_SIZE = 38;
-  const landingIsThisPage = location.pathname === '/';
-  const openIdentityCard = () => {
-    if (landingIsThisPage) return;
-    setIdentityMounted(true);
-    setIdentityOpen(true);
-  };
-  // Closing returns the person to the badge they opened it from. The dialog's own focus restore is not relied on: the
-  // rail re-creates its elements while the dialog is open (the badge's `active` changes), so the node focus would be
-  // restored to may be gone. The badge is found by its document id at the moment the dialog has finished closing.
-  const closeIdentityCard = () => setIdentityOpen(false);
-  const focusIdentityBadge = () => {
-    const badge = document.querySelector('[data-gui-node-id="GUI.bars.left.identity"]') as HTMLElement | null;
-    badge?.focus();
+  const openIdentity = () => {
+    if (location.pathname !== IDENTITY_ROUTE) navigate(IDENTITY_ROUTE);
   };
   const positionBadge = (
     <Box
       component="button"
       type="button"
-      onClick={openIdentityCard}
+      onClick={openIdentity}
       aria-label="Identity"
-      aria-haspopup="dialog"
-      aria-expanded={identityOpen}
       title={positionExpressionFull}
       data-position-expression={positionExpressionFull}
       data-gui-node-id="GUI.bars.left.identity"
@@ -1679,38 +1661,6 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     </Box>
   );
 
-  // The card itself: the landing's own component with the landing's own props, so its flows (sign in, register,
-  // recover, link an identity, sign out) are the existing ones. Mounted on first open, then kept (see above).
-  const landingEntry = flattenGuiDocument(doc).find((entry) => entry.id === LANDING_ID);
-  const LandingComponent = landingEntry?.component ? pageRegistry[landingEntry.component] : undefined;
-  const identityCard = identityMounted && LandingComponent ? (
-    <Dialog
-      open={identityOpen}
-      onClose={closeIdentityCard}
-      TransitionProps={{ onExited: focusIdentityBadge }}
-      disableRestoreFocus
-      keepMounted
-      fullWidth
-      maxWidth="sm"
-      scroll="body"
-      aria-label="Identity"
-      data-gui-node-id="GUI.identity"
-    >
-      <Box sx={{ position: 'relative', p: { xs: 1, sm: 2 } }}>
-        <Box
-          component="button"
-          type="button"
-          onClick={closeIdentityCard}
-          aria-label="Close"
-          sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1, color: 'text.secondary' }}
-        >
-          ×
-        </Box>
-        <LandingComponent {...landingProps} data-gui-node-id="GUI.identity.card" />
-      </Box>
-    </Dialog>
-  ) : null;
-
   // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
   // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
   // full, unambiguous form is its title.
@@ -1720,28 +1670,49 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           type: 'action' as const,
           props: {
             element: (
-              <Box
-                component="span"
-                data-gui-node-id="GUI.bars.top.namespace"
-                data-gui-component="namespace"
-                data-position-expression={positionExpressionFull}
-                title={positionExpressionFull}
-                sx={{
-                  display: 'block',
-                  minWidth: 0,
-                  maxWidth: '100%',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontFamily: 'monospace',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  color: 'text.primary',
-                  userSelect: 'text',
-                }}
-              >
-                {positionExpression}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                {/* Home: the namespace's own home (`/`), always here, on every page. */}
+                <Box
+                  component={Link}
+                  to="/"
+                  aria-label="Home"
+                  title="Home"
+                  data-gui-node-id="GUI.bars.top.home"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    color: location.pathname === '/' ? 'primary.main' : 'text.secondary',
+                    textDecoration: 'none',
+                    '&:hover': { color: 'text.primary' },
+                  }}
+                >
+                  <Icon name="home" fontSize="1.25rem" />
+                </Box>
+                <Box
+                  component="span"
+                  data-gui-node-id="GUI.bars.top.namespace"
+                  data-gui-component="namespace"
+                  data-position-expression={positionExpressionFull}
+                  title={positionExpressionFull}
+                  sx={{
+                    display: 'block',
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    color: 'text.primary',
+                    userSelect: 'text',
+                  }}
+                >
+                  {positionExpression}
+                </Box>
               </Box>
             ),
           },
@@ -1766,7 +1737,6 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
-      {identityCard}
       <Layout
         TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
@@ -1787,7 +1757,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
             .map((el): LeftBarElement =>
             el.type === 'link' && el.props.to === '/'
-              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: identityOpen || location.pathname === '/' } }
+              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: location.pathname === IDENTITY_ROUTE || location.pathname === '/' } }
               : el.type === 'link'
                 ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
                 : el
