@@ -57,7 +57,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
-import { positionLabel } from '@/react/positionExpression';
+import { positionExpression as composePosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1440,15 +1440,24 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     : (selectedNamespace || namespaceRootLabel);
   // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
   // page's own origin is CHECKED to answer for that namespace (verifiedRoot). positionExpression.ts.
-  const positionExpression = positionLabel({
+  const positionComposed = composePosition({
     namespace: positionIdentity,
     // the SEMANTIC path only: `currentNodePath` is where the GUI navigated, not a node of the namespace
     path: props.semanticPath ?? '/',
     page: typeof window !== 'undefined'
       ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
       : null,
-    root: { status: monadOff ? 'off' : verifiedRoot.status, cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace },
+    root: {
+      status: monadOff ? 'off' : verifiedRoot.status,
+      cleakerEndpoint: verifiedRoot.cleakerEndpoint,
+      answeredNamespace: verifiedRoot.answeredNamespace,
+      confirmedLabel: verifiedRoot.confirmedLabel,
+      lastAttemptFailed: verifiedRoot.lastAttemptFailed,
+    },
   });
+  // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
+  const positionExpression = positionComposed.compact;
+  const positionExpressionFull = positionComposed.full;
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace
@@ -1566,7 +1575,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   );
 
   // What the landing is given. The same object feeds the landing route and the identity card dialog.
-  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
@@ -1648,6 +1657,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       aria-label="Identity"
       aria-haspopup="dialog"
       aria-expanded={identityOpen}
+      title={positionExpressionFull}
+      data-position-expression={positionExpressionFull}
       data-gui-node-id="GUI.bars.left.identity"
       sx={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: '10px 0', alignItems: 'center', justifyContent: 'center', p: 0, border: 'none', background: 'none', cursor: 'pointer' }}
     >

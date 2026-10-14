@@ -52,63 +52,110 @@ export type RootCheck = {
   cleakerEndpoint: string;
   /** What that transport answered for (verifiedRoot.answeredNamespace). */
   answeredNamespace: string | null;
+  /** The label that was actually confirmed (verifiedRoot.confirmedLabel). When given, the namespace must be under it. */
+  confirmedLabel?: string | null;
+  /** The latest attempt failed (verifiedRoot.lastAttemptFailed): an older confirmation says nothing about what is shown. */
+  lastAttemptFailed?: boolean;
 };
 
 const norm = (value: string) => String(value || '').trim().toLowerCase().replace(/\.$/, '');
+const under = (ns: string, root: string) => !!ns && !!root && (ns === root || ns.endsWith(`.${root}`));
+
+/** Is the confirmation CURRENT and about this namespace?  (Everything except which origin the page is on.) */
+function confirmationCovers(namespace: string, root: RootCheck | null | undefined): boolean {
+  if (!root || root.status !== 'confirmed') return false;
+  // `status` stays 'confirmed' after a later promote() fails; that confirmation is not about what is shown now.
+  if (root.lastAttemptFailed) return false;
+  const ns = norm(namespace);
+  const answered = norm(root.answeredNamespace || '');
+  if (!under(ns, answered)) return false;
+  if (root.confirmedLabel !== undefined && root.confirmedLabel !== null && !under(ns, norm(root.confirmedLabel))) return false;
+  return true;
+}
 
 /**
  * Is `namespace` bound to the page's own origin?  Requires, all of:
- *   - the root was confirmed (not checking / error / off);
- *   - the confirmed transport's origin IS the page's origin, exactly;
+ *   - the root was confirmed and the LATEST attempt did not fail (not checking / error / off / superseded by a failure);
+ *   - the confirmed transport's origin IS the page's origin, exactly (scheme, host and port);
  *   - that transport answered for the namespace: the same name, or `namespace` is a handle under the name it answered
- *     (the monad serves every door of a namespace, handles included).
+ *     (the monad serves every door of a namespace, handles included) -- and under the label that was confirmed.
  */
 export function isBoundToPage(input: { namespace: string; pageOrigin: string; root: RootCheck | null | undefined }): boolean {
   const { namespace, pageOrigin, root } = input;
-  if (!root || root.status !== 'confirmed') return false;
+  if (!confirmationCovers(namespace, root)) return false;
   const page = originOf(pageOrigin);
-  if (!page || originOf(root.cleakerEndpoint) !== page) return false;
-  const answered = norm(root.answeredNamespace || '');
-  const ns = norm(namespace);
-  if (!answered || !ns) return false;
-  return ns === answered || ns.endsWith(`.${answered}`);
+  return !!page && originOf(root!.cleakerEndpoint) === page;
+}
+
+/** Same host and port, different scheme: the confirmation covers the namespace but through the other scheme. */
+function onlySchemeDiffers(pageOrigin: string, endpoint: string): boolean {
+  try {
+    const a = new URL(pageOrigin);
+    const b = new URL(endpoint);
+    return a.host.toLowerCase() === b.host.toLowerCase() && a.protocol !== b.protocol;
+  } catch {
+    return false;
+  }
 }
 
 const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|[^.:\s]+\.localhost)(?::\d+)?$/i;
 
 /**
  * The surface as the grammar writes it, as short as it can be: a bare `host` or `host:port`; quoted with its scheme only
- * when the scheme is news (`http:` on a non-loopback host) or the host is not a bare token (an IPv6 literal).
+ * when the scheme is news (`http:` on a non-loopback host), is the REASON the page is not bound to the namespace
+ * (`forceScheme`), or the host is not a bare token (an IPv6 literal).
  */
-export function surfaceToken(pageUrl: { host: string; protocol: string }): string {
+export function surfaceToken(pageUrl: { host: string; protocol: string }, forceScheme = false): string {
   const host = String(pageUrl.host || '').trim().toLowerCase();
   if (!host) return '';
   const scheme = String(pageUrl.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
   const schemeIsNews = scheme === 'http:' && !LOOPBACK.test(host);
-  if (schemeIsNews || host.startsWith('[')) return `"${scheme}//${host}"`;
+  if (forceScheme || schemeIsNews || host.startsWith('[')) return `"${scheme}//${host}"`;
   return host;
 }
 
+export type PositionExpression = {
+  /** What is drawn: short, abbreviated where it is safe to. */
+  compact: string;
+  /**
+   * Unambiguous, for copying or executing: namespace, semantic path and the page's FULL origin (scheme included, quoted),
+   * whether or not the two coincide. The compact form is not to be pasted anywhere that has to mean the same thing.
+   */
+  full: string;
+  /** The namespace is bound to the page's own origin (checked), so `compact` leaves the surface out. */
+  bound: boolean;
+};
+
 /**
- * The position as it is displayed: `namespace[/path]`, then ` @ surface` unless the namespace is bound to the page.
- * `path` is the semantic path ('' or '/' = the namespace's root, which is not written). Both parts stay available to
- * the caller; this only composes the text.
+ * `namespace[/path]` and ` @ surface` unless the namespace is bound to the page. `path` is the semantic path ('' or '/'
+ * = the namespace's root, which is not written). Both parts stay available to the caller; this only composes the text.
  */
-export function positionLabel(input: {
+export function positionExpression(input: {
   namespace: string;
   /** Semantic path; '' or '/' is the root. */
   path?: string;
   page: { origin: string; host: string; protocol: string } | null;
   root: RootCheck | null | undefined;
-}): string {
+}): PositionExpression {
   const ns = String(input.namespace || '').trim();
-  if (!ns) return '';
+  if (!ns) return { compact: '', full: '', bound: false };
   const raw = String(input.path ?? '/').trim();
   // the root is the namespace itself: nothing is written for it
   const path = raw === '' || raw === '/' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
   const base = `${ns}${path}`;
   const page = input.page;
-  if (!page || !page.host) return base;
-  if (isBoundToPage({ namespace: ns, pageOrigin: page.origin, root: input.root })) return base;
-  return `${base} @ ${surfaceToken(page)}`;
+  if (!page || !page.host) return { compact: base, full: base, bound: false };
+  const scheme = String(page.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
+  const full = `${base} @ "${scheme}//${String(page.host).trim().toLowerCase()}"`;
+  const bound = isBoundToPage({ namespace: ns, pageOrigin: page.origin, root: input.root });
+  if (bound) return { compact: base, full, bound: true };
+  // Not collapsed. If the SCHEME is the only reason (same host and port, confirmed for this namespace), it is printed:
+  // `x @ x` would show that a difference exists and then hide which one.
+  const schemeExplains = confirmationCovers(ns, input.root) && onlySchemeDiffers(page.origin, input.root!.cleakerEndpoint);
+  return { compact: `${base} @ ${surfaceToken(page, schemeExplains)}`, full, bound: false };
+}
+
+/** The compact label (what is drawn). */
+export function positionLabel(input: Parameters<typeof positionExpression>[0]): string {
+  return positionExpression(input).compact;
 }

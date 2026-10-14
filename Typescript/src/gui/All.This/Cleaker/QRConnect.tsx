@@ -34,7 +34,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
-import { positionLabel, type RootCheck } from '@/react/positionExpression';
+import { positionExpression as composePosition } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
@@ -148,7 +148,7 @@ export type QRConnectProps = DocumentPageProps & {
    * `ns/ @ surface` to `ns/` only when this says the page's own origin answered for the namespace; without it nothing
    * is abbreviated.
    */
-  sharedRootBinding?: { cleakerEndpoint: string; answeredNamespace: string | null };
+  sharedRootBinding?: { cleakerEndpoint: string; answeredNamespace: string | null; confirmedLabel?: string | null; lastAttemptFailed?: boolean };
   /** The semantic path the label shows after the namespace ('/' = its root). Never a GUI route. */
   semanticPath?: string;
   /**
@@ -408,16 +408,25 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     ? beatleExpression
     : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
   const labelCut = String(labelBase || '').search(/[/?#]/);
-  const perimeterLabel = positionLabel({
+  const positionComposed = composePosition({
     namespace: labelCut < 0 ? String(labelBase || '') : String(labelBase).slice(0, labelCut),
     path: labelCut < 0 ? semanticPath : String(labelBase).slice(labelCut),
     page: typeof window !== 'undefined'
       ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
       : null,
     root: sharedRootBinding
-      ? { status: sharedRootStatus, cleakerEndpoint: sharedRootBinding.cleakerEndpoint, answeredNamespace: sharedRootBinding.answeredNamespace }
+      ? {
+          status: sharedRootStatus,
+          cleakerEndpoint: sharedRootBinding.cleakerEndpoint,
+          answeredNamespace: sharedRootBinding.answeredNamespace,
+          confirmedLabel: sharedRootBinding.confirmedLabel,
+          lastAttemptFailed: sharedRootBinding.lastAttemptFailed,
+        }
       : null,
   });
+  const perimeterLabel = positionComposed.compact;
+  // What to copy or execute is the full form (scheme included), never the drawn one.
+  const positionExpressionFull = positionComposed.full;
   // Same "visit this .me" pattern the directory search already uses
   // (visitUser, above) -- makes the handle drawn around your OWN QR a
   // real pointer to that identity's own surface, not just decoration.
@@ -522,6 +531,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
           role="button"
           tabIndex={0}
           data-gui-node-id={`${nodeId}.qr`}
+          title={positionExpressionFull}
+          data-position-expression={positionExpressionFull}
           aria-label={conn.executes ? `Connect to ${namespaceRootLabel}` : conn.expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
           onClick={conn.activate}
           onKeyDown={(event: React.KeyboardEvent) => {

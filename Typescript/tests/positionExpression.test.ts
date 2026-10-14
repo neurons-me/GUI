@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { isBoundToPage, positionLabel, originOf } from '../src/react/positionExpression';
+import { isBoundToPage, positionExpression, positionLabel, originOf } from '../src/react/positionExpression';
+import { bindingFactsAfter, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
 import { parseNRPExpression } from '../src/gui/All.This/NRP/Beatle/NRPExpression';
 
-const confirmed = (cleakerEndpoint: string, answeredNamespace: string | null) => ({ status: 'confirmed', cleakerEndpoint, answeredNamespace });
+const confirmed = (cleakerEndpoint: string, answeredNamespace: string | null, extra: object = {}) => ({ status: 'confirmed', cleakerEndpoint, answeredNamespace, ...extra });
 const page = (url: string) => { const u = new URL(url); return { origin: u.origin, host: u.host, protocol: u.protocol }; };
 
 // ── binding: a checked fact, never a resemblance of names ─────────────────────────────────────────────────────
@@ -72,4 +73,59 @@ assert.equal(one.syntaxValid, true);
 assert.equal(one.ast.kind, 'namespace');
 // and the longer spelling the label used to print is the same expression
 assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical, 'the root path is the namespace itself');
+
+// ── the scheme, when it is the reason the page is not bound: it is shown, never `x @ x` ───────────────────────────
+{
+  // confirmed through http://x, the page is on https://x: same names, the scheme is the whole difference
+  const e = positionExpression({ namespace: 'x.test', page: page('https://x.test/'), root: confirmed('http://x.test', 'x.test') });
+  assert.equal(e.bound, false);
+  assert.equal(e.compact, 'x.test @ "https://x.test"', 'the scheme explains why it did not collapse, so it is printed');
+  // not confirmed at all: that is not the scheme's doing, so nothing is added to the name
+  const checking = positionExpression({ namespace: 'x.test', page: page('https://x.test/'), root: { status: 'checking', cleakerEndpoint: 'http://x.test', answeredNamespace: null } });
+  assert.equal(checking.compact, 'x.test @ x.test');
+  // a port is its own, visible difference
+  const port = positionExpression({ namespace: 'x.test', page: page('https://x.test:8443/'), root: confirmed('https://x.test', 'x.test') });
+  assert.equal(port.compact, 'x.test @ x.test:8443');
+}
+
+// ── what is copied is unambiguous: full origin, scheme included, even when the drawn label is short ───────────────
+{
+  const bound = positionExpression({ namespace: 'cleaker.me', page: page('https://cleaker.me/'), root: confirmed('https://cleaker.me', 'cleaker.me') });
+  assert.equal(bound.compact, 'cleaker.me');
+  assert.equal(bound.full, 'cleaker.me @ "https://cleaker.me"');
+  const local = positionExpression({ namespace: 'cleaker.me', path: '/profile', page: page('http://localhost:3000/'), root: null });
+  assert.equal(local.compact, 'cleaker.me/profile @ localhost:3000');
+  assert.equal(local.full, 'cleaker.me/profile @ "http://localhost:3000"', '`localhost:3000` alone does not say http or https');
+  // the full form reads back, by the NRP parser, as the namespace with its path over the whole origin
+  for (const x of [bound, local]) {
+    const parsed: any = parseNRPExpression(x.full);
+    assert.equal(parsed.syntaxValid, true, x.full);
+    assert.equal(parsed.ast.kind, 'overlay');
+    assert.match(parsed.ast.surface, /^https?:\/\//);
+  }
+}
+
+// ── the verifiedRoot transition: a failed NEW resolution must not let the OLD confirmation abbreviate the new context ─
+{
+  // A confirmed
+  let facts = bindingFactsAfter(NO_ROOT_BINDING, { label: 'cleaker.me', ok: true, answeredNamespace: 'cleaker.me' });
+  const root = (f: typeof facts) => ({ status: 'confirmed', cleakerEndpoint: 'https://cleaker.me', answeredNamespace: f.answeredNamespace, confirmedLabel: f.confirmedLabel, lastAttemptFailed: f.lastAttemptFailed });
+  const here = (ns: string, f: typeof facts) => isBoundToPage({ namespace: ns, pageOrigin: 'https://cleaker.me', root: root(f) });
+  assert.equal(here('cleaker.me', facts), true);
+  assert.equal(here('ana.cleaker.me', facts), true, 'a handle under the confirmed root');
+  // the person selects ana.cleaker.me and that resolution FAILS: status stays confirmed (the sidebar keeps working
+  // against A), but the old confirmation is not about what is now being shown
+  facts = bindingFactsAfter(facts, { label: 'ana.cleaker.me', ok: false, answeredNamespace: null });
+  assert.equal(facts.confirmedLabel, 'cleaker.me', 'the older confirmation is kept for the rest of the app');
+  assert.equal(facts.lastAttemptFailed, true);
+  assert.equal(here('ana.cleaker.me', facts), false, 'a failed resolution is not abbreviated with the previous one');
+  assert.equal(here('cleaker.me', facts), false, 'nor the root, until a resolution succeeds again');
+  // and it recovers on the next success
+  facts = bindingFactsAfter(facts, { label: 'cleaker.me', ok: true, answeredNamespace: 'cleaker.me' });
+  assert.equal(here('cleaker.me', facts), true);
+  // a confirmation of ANOTHER label does not cover a namespace outside it, even if the names look related
+  const other = bindingFactsAfter(NO_ROOT_BINDING, { label: 'acme.test', ok: true, answeredNamespace: 'acme.test' });
+  assert.equal(isBoundToPage({ namespace: 'cleaker.me', pageOrigin: 'https://acme.test', root: { status: 'confirmed', cleakerEndpoint: 'https://acme.test', answeredNamespace: 'acme.test', confirmedLabel: other.confirmedLabel, lastAttemptFailed: false } }), false);
+}
+
 console.log('positionExpression: ok');
