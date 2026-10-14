@@ -402,7 +402,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // flagged live 2026-10-02: "cuando empecemos a typear el username
   // empiece a aparecer junto al namespace... j.cleaker.me ja.cleaker.me").
   // The namespace this card reads, its semantic path, and -- unless the page's own origin was checked to answer for it --
-  // the surface the page is on: `cleaker.me/ @ localhost`, or `cleaker.me/` when they coincide. Both parts stay
+  // the surface the page is on: `cleaker.me @ localhost`, or just `cleaker.me` when they coincide. Both parts stay
   // separate; only the text is abbreviated (react/positionExpression.ts).
   const labelBase = authenticated
     ? beatleExpression

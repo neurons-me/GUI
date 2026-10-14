@@ -25,6 +25,14 @@
 // namespace; a self-signed /__surface is internally consistent, nothing more. The label states a coincidence of
 // door, not an ownership.)
 //
+// Short on purpose (every character of the label is drawn around a QR):
+//   * the namespace's root is the namespace itself: `cleaker.me`, not `cleaker.me/` (the parser's canonical form drops
+//     the root slash; a path is shown only when it is not the root);
+//   * the surface is a bare `host` or `host:port` (both valid bare surfaces); the scheme is written only when it is news:
+//     `http:` on a host that is not loopback (`"http://cleaker.me"`). `https:` is the default and loopback http is the
+//     norm for a local page, so neither is printed. The scheme is still part of the origin the binding compares
+//     (exactly); it is only left out of the text. IPv6 literals are not bare surfaces and stay quoted.
+//
 // The path is the SEMANTIC path only. A GUI route (`/netget`, `/users`) is where the page navigates, not a node of the
 // namespace, and is never printed here unless the door declares it (the main server's door does: see the caller).
 
@@ -66,18 +74,25 @@ export function isBoundToPage(input: { namespace: string; pageOrigin: string; ro
   return ns === answered || ns.endsWith(`.${answered}`);
 }
 
-/** The surface as the grammar writes it: a bare hostname, or a quoted URI when the page has a port. */
+const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|[^.:\s]+\.localhost)(?::\d+)?$/i;
+
+/**
+ * The surface as the grammar writes it, as short as it can be: a bare `host` or `host:port`; quoted with its scheme only
+ * when the scheme is news (`http:` on a non-loopback host) or the host is not a bare token (an IPv6 literal).
+ */
 export function surfaceToken(pageUrl: { host: string; protocol: string }): string {
   const host = String(pageUrl.host || '').trim().toLowerCase();
   if (!host) return '';
-  if (/:\d+$/.test(host)) return `"${String(pageUrl.protocol || 'http:').replace(/:?$/, ':')}//${host}"`;
+  const scheme = String(pageUrl.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
+  const schemeIsNews = scheme === 'http:' && !LOOPBACK.test(host);
+  if (schemeIsNews || host.startsWith('[')) return `"${scheme}//${host}"`;
   return host;
 }
 
 /**
- * The position as it is displayed: `namespace/path`, then ` @ surface` unless the namespace is bound to the page.
- * `path` is the semantic path ('/' = the namespace's root, which is always shown). Both parts stay available to the
- * caller; this only composes the text.
+ * The position as it is displayed: `namespace[/path]`, then ` @ surface` unless the namespace is bound to the page.
+ * `path` is the semantic path ('' or '/' = the namespace's root, which is not written). Both parts stay available to
+ * the caller; this only composes the text.
  */
 export function positionLabel(input: {
   namespace: string;
@@ -89,7 +104,8 @@ export function positionLabel(input: {
   const ns = String(input.namespace || '').trim();
   if (!ns) return '';
   const raw = String(input.path ?? '/').trim();
-  const path = raw === '' ? '/' : raw.startsWith('/') ? raw : `/${raw}`;
+  // the root is the namespace itself: nothing is written for it
+  const path = raw === '' || raw === '/' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
   const base = `${ns}${path}`;
   const page = input.page;
   if (!page || !page.host) return base;
