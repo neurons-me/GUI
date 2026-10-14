@@ -1596,7 +1596,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         registry: pageRegistry,
         doc,
         props:
-          isLanding
+          entry.component === 'Welcome'
+            ? { ...props, welcome: { namespace: positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
+            : isLanding
             ? landingProps
             : entry.id === 'GUI.content.netget'
               ? {
@@ -1757,7 +1759,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
             .map((el): LeftBarElement =>
             el.type === 'link' && el.props.to === '/'
-              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: location.pathname === IDENTITY_ROUTE || location.pathname === '/' } }
+              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: location.pathname === IDENTITY_ROUTE } }
               : el.type === 'link'
                 ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
                 : el
@@ -1815,9 +1817,43 @@ const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: s
   );
 };
 
+// The namespace's home ("/"): the welcome. It says WHICH namespace this is (never with the port: the port belongs to
+// the surface, and the surface is said on its own line) and where you are being served from; the identity is a page of
+// its own (`/.me`), one link away.
+const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string; origin: string } }> = ({
+  welcome,
+  'data-gui-node-id': nodeId = 'GUI.content.home',
+  'data-gui-component': nodeComponent = 'Welcome',
+}) => (
+  <Box
+    data-gui-node-id={nodeId}
+    data-gui-component={nodeComponent}
+    sx={{ px: { xs: 3, sm: 6 }, py: { xs: 5, sm: 8 }, maxWidth: 720, mx: 'auto', boxSizing: 'border-box' }}
+  >
+    <Typography variant="overline" sx={{ opacity: 0.55, letterSpacing: '0.12em', display: 'block' }}>
+      Home
+    </Typography>
+    <Typography variant="h4" component="h1" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+      Welcome to{' '}
+      <Box component="span" data-gui-node-id={`${nodeId}.namespace`} sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
+        {welcome?.namespace || ''}
+      </Box>
+    </Typography>
+    {welcome?.origin ? (
+      <Typography variant="body2" sx={{ mt: 1.5, opacity: 0.65, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+        served from {welcome.origin}
+      </Typography>
+    ) : null}
+    <Typography variant="body2" sx={{ mt: 4 }}>
+      <Link to="/.me" data-gui-node-id={`${nodeId}.me`}>Open your .me</Link>
+    </Typography>
+  </Box>
+);
+
 // Components the GUI document may name (`component`), by that name.
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   Landing: QRConnect,
+  Welcome: WelcomePage,
   Users: CleakerUsersView,
   Blockchain: CleakerBlockchainView,
   Url: CleakerUrlView,

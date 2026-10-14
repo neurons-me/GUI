@@ -81,7 +81,7 @@
         "children": {
           "landing": {
             "component": "Landing",
-            "route": "/",
+            "route": "/.me",
             "note": "The .me QR and sign-in / register / recover. Behavior stays in the component.",
             "label": "Landing",
             "children": {
@@ -129,6 +129,11 @@
                 "label": "Recover"
               }
             }
+          },
+          "home": {
+            "label": "Home",
+            "component": "Welcome",
+            "route": "/"
           },
           "users": {
             "component": "Users",
@@ -343,11 +348,6 @@
                 }
               }
             }
-          },
-          "me": {
-            "label": "Me",
-            "component": "Landing",
-            "route": "/.me"
           }
         },
         "label": "Content"
