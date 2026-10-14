@@ -76,7 +76,7 @@ export default function MonadNamespaceCard({
         {/* monad.ai orb */}
         <Box sx={{ height: 130 * orbScale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Box sx={{ width: 120, height: 130, flexShrink: 0, transform: orbScale === 1 ? undefined : `scale(${orbScale})`, transformOrigin: 'center' }}>
-            <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} />
+            <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} core="flat" ring={1.25} />
           </Box>
         </Box>
 

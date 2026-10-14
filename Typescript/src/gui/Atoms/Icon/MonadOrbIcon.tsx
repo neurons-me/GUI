@@ -47,7 +47,7 @@ export default function MonadOrbIcon({ fontSize, healthy = null, label = 'monad.
           transformOrigin: 'center',
         }}
       >
-        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid={ORB_ICON_OPACITY} ring={ORB_ICON_RING_PX / scale} />
+        <Monad mode="contained" kind="monad" label={label} healthy={healthy} solid={ORB_ICON_OPACITY} ring={ORB_ICON_RING_PX / scale} core="flat" />
       </span>
     </span>
   );
