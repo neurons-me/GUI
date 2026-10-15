@@ -38,6 +38,7 @@ import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useLeftSidebar } from '@/gui-internals/Hooks';
 import { endpointForRoot } from '@/react/session/remoteRoot';
+import { linkQrValue } from '@/react/linkQr';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
@@ -60,7 +61,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
-import { positionExpression as composePosition, shownNamespace } from '@/react/positionExpression';
+import { positionExpression as composePosition, shownNamespace, cardNamespace } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1480,7 +1481,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
   // address for its own roots, the chosen host for another root. The GUI route is not part of it (that is the surface;
   // a QR for a link does not carry where the page happens to be).
-  const selectedRoot = ctx?.selectedLink?.namespace || namespaceRootLabel;
+  const selectedRoot = cardNamespace({
+    selected: ctx?.selectedLink?.namespace,
+    root: { status: verifiedRoot.status, cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed },
+    address: namespaceRootLabel,
+    source: props.namespaceSource ?? 'declared',
+  }).namespace;
   const linkEndpoint = endpointForRoot(selectedRoot, {
     resolvedEndpoint,
     localRoot: namespaceRootLabel,
@@ -1491,11 +1497,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       const authedUsername = authenticated && session?.semanticNamespace
         ? String(session.semanticNamespace).split('.')[0]
         : undefined;
-      return buildCleakerNamespaceUrl(linkEndpoint, authedUsername);
+      return linkQrValue({ endpoint: linkEndpoint, namespace: selectedRoot, handle: authedUsername });
     } catch {
       return linkEndpoint;
     }
-  }, [linkEndpoint, authenticated, session?.semanticNamespace]);
+  }, [linkEndpoint, selectedRoot, authenticated, session?.semanticNamespace]);
   // The exact size the position QRme badge will render at for
   // `positionQrValue` -- read via `resolveTopbarQrSize()` (QR.me.tsx's own
   // exported single source of truth, see its doc comment) so the search
@@ -1810,7 +1816,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
-        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
+        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 0.25 } }}
         LeftBar={{
           toggle: ({ view, toggle }) => positionBadgeFor(toggle, view === 'expanded' ? 'Collapse sidebar' : view === 'mobile' ? 'Open navigation' : 'Expand sidebar'),
           // Shown while the bar is open: where you are, written out, and the way to the identity page.
@@ -1825,7 +1831,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               sx={{
                 display: 'block',
                 minWidth: 0,
-                ml: 1,
+                // The QR stays exactly where it is in the rail (its cell is as wide as the rail), and the address pulls in
+                // over the cell's empty right margin so it hangs ~6px from the QR instead of ~25px.
+                ml: '-10px',
+                position: 'relative',
+                zIndex: 1,
                 fontFamily: 'monospace',
                 fontSize: '0.74rem',
                 fontWeight: 600,

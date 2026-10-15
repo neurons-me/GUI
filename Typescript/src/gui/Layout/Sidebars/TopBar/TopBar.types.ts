@@ -39,6 +39,8 @@ export interface TopBarProps extends AppBarProps {
   sx?: SxProps<Theme>;
   appBarSx?: SxProps<Theme>;
   toolbarSx?: SxProps<Theme>;
+  /** Styles for the box holding `elementsLeft` (e.g. to bring them closer to the bar they hang from). */
+  elementsLeftSx?: SxProps<Theme>;
   brandSx?: SxProps<Theme>;
   logoSx?: SxProps<Theme>;
   titleSx?: SxProps<Theme>;

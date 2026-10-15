@@ -208,6 +208,16 @@ function deriveConstantAndPrefix(base: string): {
   const normalized = normalizeBaseToken(base);
   const portSuffix = normalized.port == null ? "" : `:${normalized.port}`;
 
+  // An IPv4 address is one host, not four labels: its first octet is not a handle and the rest is not a root.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(normalized.host)) {
+    return {
+      fqdn: `${normalized.host}${portSuffix}`,
+      prefix: null,
+      constant: `${normalized.host}${portSuffix}`,
+      labels: normalized.labels,
+    };
+  }
+
   if (normalized.labels.length === 2 && normalized.labels[1] === "localhost") {
     return {
       fqdn: `${normalized.host}${portSuffix}`,

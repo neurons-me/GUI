@@ -280,6 +280,35 @@ async function main() {
       await context.close();
     }
 
+    // ── 7. Two namespaces on ONE transport: the code recovers WHICH one, not only the door ──────────────────────────
+    {
+      // The door is the namespace `door.test`; `b.local` and `c.local` are other names the same door serves.
+      const door = fakeMonad({ origin: 'http://door.test', namespace: 'door.test' });
+      const { context, page } = await open(browser, harness, [door], { ns: 'door.test', transport: 'http://door.test' });
+      const values = () => page.evaluate(() => {
+        const all = [...document.querySelectorAll('[data-qr-value]')];
+        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.bars.top.position');
+        const card = all.find((e) => e !== badge);
+        return { badge: badge ? badge.getAttribute('data-qr-value') : null, card: card ? card.getAttribute('data-qr-value') : null };
+      });
+      // what a scanner can recover: the parameter when present, otherwise the host
+      const recover = (v) => { try { const u = new URL(v); return { namespace: u.searchParams.get('namespace') || u.hostname, door: u.origin }; } catch { return null; } };
+      const first = await values();
+      const pick = async (ns) => { const ok = await selectLink(page, ns); await page.waitForTimeout(700); return ok ? values() : null; };
+      const b = await pick('b.local');
+      const c = await pick('c.local');
+      check('7.1 B and C share the transport, so the door is the same', !!b && !!c && recover(b.badge)?.door === recover(c.badge)?.door && recover(b.badge)?.door === recover(first.badge)?.door,
+        `${b && b.badge} | ${c && c.badge}`);
+      check('7.2 yet the codes differ: each carries its own namespace', !!b && !!c && b.badge !== c.badge && b.badge !== first.badge && c.badge !== first.badge);
+      check('7.3 the corner code gives back the selected namespace', recover(b && b.badge)?.namespace === 'b.local' && recover(c && c.badge)?.namespace === 'c.local',
+        `${recover(b && b.badge)?.namespace} / ${recover(c && c.badge)?.namespace}`);
+      check('7.4 the card code gives back the same namespace', !!b && !!c && b.card === b.badge && c.card === c.badge && recover(c.card)?.namespace === 'c.local');
+      check('7.5 and the first link still names itself', recover(first.badge)?.namespace === 'door.test' && first.badge === first.card, first.badge || '');
+      const back = await pick('door.test');
+      check('7.6 going back returns to the first code exactly', !!back && back.badge === first.badge, `${back && back.badge}`);
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

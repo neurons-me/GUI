@@ -42,6 +42,7 @@ import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
 import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
+import { linkQrValue } from '@/react/linkQr';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -327,11 +328,13 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     try {
       // The link's own endpoint: the page's for its own roots, the host's for another root (the corner badge asks the same
       // function, so the two codes name the same link).
-      return buildCleakerNamespaceUrl(linkEndpoint, username || undefined);
+      // and the link's namespace, whenever the address does not already name it: a door can serve several, and a code that
+      // holds only the door would be the same code for all of them (react/linkQr.ts).
+      return linkQrValue({ endpoint: linkEndpoint, namespace: namespaceRootLabel, handle: username || undefined });
     } catch {
       return linkEndpoint;
     }
-  }, [linkEndpoint, username]);
+  }, [linkEndpoint, namespaceRootLabel, username]);
 
 
   const qrValue = defaultQrValue;

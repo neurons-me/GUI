@@ -93,6 +93,7 @@ export default function TopBar(props: TopBarProps) {
     sx,
     appBarSx,
     toolbarSx,
+    elementsLeftSx,
     brandSx,
     logoSx,
     titleSx,
@@ -274,7 +275,7 @@ export default function TopBar(props: TopBarProps) {
         {/* Left Elements */}
         {elementsLeft.length > 0 && (
           <Box
-            sx={{
+            sx={sxN({
               display: 'flex',
               alignItems: 'center',
               gap: 1.25,
@@ -283,7 +284,7 @@ export default function TopBar(props: TopBarProps) {
               overflow: 'hidden',
               pl: hideBrand ? 1.5 : 0,
               color: theme.palette.text.secondary,
-            }}
+            } as SxProps<Theme>, elementsLeftSx)}
           >
             {elementsLeft.map((item, idx) => {
               if (item.type === 'link') return <TopBarLink showLabel={isDesktop} key={item.props.label ?? idx} {...item.props} />;

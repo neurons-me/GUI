@@ -370,7 +370,7 @@ const LeftSidebar = ({
             justifyContent: headerJustify,
             px: customToggle ? 0 : 1.5,
             py: 0,
-            gap: 1.25,
+            gap: customToggle ? 0 : 1.25,
           }}
         >
           {headerContent(false, () => setView('expanded'), 'rail')}
@@ -478,7 +478,7 @@ const LeftSidebar = ({
               alignItems: 'center',
               justifyContent: headerJustify,
               px: customToggle ? 0 : 1.5,
-              gap: 1.25,
+              gap: customToggle ? 0 : 1.25,
             }}
           >
             {headerContent(true, () => setMobileOpen(false), 'expanded')}
@@ -544,7 +544,7 @@ const LeftSidebar = ({
           justifyContent: headerJustify,
           px: customToggle ? 0 : 1.5,
           py: 0,
-          gap: 1.25,
+          gap: customToggle ? 0 : 1.25,
         }}
       >
         {headerContent(true, () => setView('rail'), 'expanded')}
