@@ -26,3 +26,15 @@ export function remoteRootFor(
   // Only a name that can be a host: labels, no scheme, port, path or spaces.
   return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(r) ? r : null;
 }
+
+/**
+ * Where the QR of a root points. The page's own roots point at the page's own address; another host's root points at
+ * that host (`https://<root>`). One function so the card and the corner badge cannot name different links.
+ */
+export function endpointForRoot(
+  root: string | null | undefined,
+  context: { resolvedEndpoint: string; localRoot?: string | null; confirmedRoot?: string | null },
+): string {
+  const remote = remoteRootFor(root, { localRoot: context.localRoot, confirmedRoot: context.confirmedRoot });
+  return remote ? `https://${remote}` : context.resolvedEndpoint;
+}

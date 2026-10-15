@@ -37,6 +37,7 @@ import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { endpointForRoot } from '@/react/session/remoteRoot';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
@@ -1476,20 +1477,25 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
   const positionExpression = positionComposed.compact;
   const positionExpressionFull = positionComposed.full;
+  // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
+  // address for its own roots, the chosen host for another root. The GUI route is not part of it (that is the surface;
+  // a QR for a link does not carry where the page happens to be).
+  const selectedRoot = ctx?.selectedLink?.namespace || namespaceRootLabel;
+  const linkEndpoint = endpointForRoot(selectedRoot, {
+    resolvedEndpoint,
+    localRoot: namespaceRootLabel,
+    confirmedRoot: verifiedRoot.confirmedLabel,
+  });
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace
         ? String(session.semanticNamespace).split('.')[0]
         : undefined;
-      // buildCleakerNamespaceUrl has no path parameter of its own (namespace/identity only) — the current
-      // node path is appended here, after it. Verified correct for the plain-namespace case (no handle
-      // prefix); the interaction with its own "/@handle" form for a localish surface is a real, named,
-      // unverified edge case, not silently assumed to compose the same way.
-      return `${buildCleakerNamespaceUrl(resolvedEndpoint, authedUsername)}${currentNodePath}`;
+      return buildCleakerNamespaceUrl(linkEndpoint, authedUsername);
     } catch {
-      return resolvedEndpoint;
+      return linkEndpoint;
     }
-  }, [resolvedEndpoint, authenticated, session?.semanticNamespace, currentNodePath]);
+  }, [linkEndpoint, authenticated, session?.semanticNamespace]);
   // The exact size the position QRme badge will render at for
   // `positionQrValue` -- read via `resolveTopbarQrSize()` (QR.me.tsx's own
   // exported single source of truth, see its doc comment) so the search
@@ -1512,8 +1518,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const positionStatusLabel = monadOff ? 'No .me here'
     : verifiedRoot.status === 'checking' ? 'Checking…'
     : verifiedRoot.status === 'error' ? 'Could not connect'
-    : verifiedRoot.status === 'confirmed' ? 'Connected'
+    : verifiedRoot.status === 'confirmed' ? 'Service answered'
     : '';
+  // Three different facts, never one: the service at this link answered; a session is open through it; and its authority
+  // was checked. The client can establish the first two. The third has no source here yet, so it is always stated as not
+  // verified, and nothing drawn on the badge stands for it.
+  const linkFacts = [
+    positionStatusLabel || 'Not checked',
+    authenticated && session?.semanticNamespace ? `Signed in as ${session.semanticNamespace}` : 'No session',
+    'Authority not verified',
+  ].join(' · ');
 
   // The gateway is reached at the address this page was loaded from when that address answers it
   // (every host of a namespace -- its root, www, a handle -- is served by the same monad). Browser
@@ -1664,10 +1678,29 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       type="button"
       onClick={onToggle}
       aria-label={label}
-      title={positionExpressionFull}
+      aria-description={`${positionExpressionFull} — ${linkFacts}`}
+      title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
       data-gui-node-id="GUI.bars.left.identity"
-      sx={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: 0, alignItems: 'center', justifyContent: 'center', p: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+      sx={{
+        // The whole cell is the control, flush with the corner: a corner is a target that cannot be overshot.
+        position: 'relative',
+        display: 'flex',
+        width: '100%',
+        height: '100%',
+        minWidth: 56,
+        minHeight: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 0,
+        m: 0,
+        border: 'none',
+        background: 'none',
+        cursor: 'pointer',
+        color: 'inherit',
+        '&:hover': { backgroundColor: 'action.hover' },
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+      }}
     >
       <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
       <QRme
@@ -1679,10 +1712,37 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         perimeterLabel={positionExpression}
         perimeterRootLabel={namespaceRootLabel}
         clickFlip={false}
+        hoverFlip={false}
         cursor="pointer"
         data-gui-node-id="GUI.bars.top.position"
       />
       </Box>
+      {/* A session is open through this link: its own mark, apart from the ring (which says only that the service answered). */}
+      {authenticated && session?.semanticNamespace ? (
+        <Box
+          aria-hidden
+          data-gui-node-id="GUI.bars.left.session"
+          sx={{
+            position: 'absolute',
+            right: 6,
+            bottom: 5,
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            backgroundColor: 'primary.main',
+            color: 'primary.contrastText',
+            fontSize: 9,
+            fontWeight: 700,
+            lineHeight: '14px',
+            textAlign: 'center',
+            textTransform: 'uppercase',
+            fontFamily: 'monospace',
+            boxShadow: '0 0 0 2px var(--mui-palette-background-nav, rgba(0,0,0,0.4))',
+          }}
+        >
+          {String(session.semanticNamespace).charAt(0)}
+        </Box>
+      ) : null}
     </Box>
   );
 

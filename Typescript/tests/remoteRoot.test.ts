@@ -1,6 +1,6 @@
 // A root typed into the QR that is not this page's own is asked directly by the browser; the page's own roots are not.
 import assert from 'node:assert/strict';
-import { isLocalRoot, remoteRootFor } from '../src/react/session/remoteRoot';
+import { endpointForRoot, isLocalRoot, remoteRootFor } from '../src/react/session/remoteRoot';
 
 const here = { localRoot: 'localhost', confirmedRoot: null };
 
@@ -21,5 +21,14 @@ assert.equal(remoteRootFor('netget.site', here), 'netget.site');
 // anything that is not a bare host name is never turned into a socket address
 for (const bad of ['https://cleaker.me', 'cleaker.me/path', 'cleaker.me:8443', 'cleaker me', 'x', '.me', 'a..b', 'cleaker.me@evil.test', 'jabellae.cleaker.me?x=1']) {
   assert.equal(remoteRootFor(bad, here), null, `${bad} is not a host name`);
+}
+// where a root's QR points: the page's own address for its own roots, the host itself for another's
+{
+  const ctx = { resolvedEndpoint: 'http://localhost:55858', localRoot: 'localhost', confirmedRoot: null };
+  assert.equal(endpointForRoot('localhost', ctx), 'http://localhost:55858');
+  assert.equal(endpointForRoot('', ctx), 'http://localhost:55858');
+  assert.equal(endpointForRoot('cleaker.me', ctx), 'https://cleaker.me');
+  assert.equal(endpointForRoot('Cleaker.ME', ctx), 'https://cleaker.me');
+  assert.equal(endpointForRoot('cleaker.me/path', ctx), 'http://localhost:55858', 'not a host: stays with the page');
 }
 console.log('remoteRoot: ok');

@@ -195,6 +195,8 @@ export type SeedSessionContextValue = {
   readonly openLinks: readonly OpenLink[];
   /** The id (link.ts `targetKey`) of the link the fields above describe; null before any link has opened or been selected. */
   readonly selectedLinkId: string | null;
+  /** The link the person chose on the card, or null while the view follows the page's own. */
+  readonly selectedLink: LinkTarget | null;
   /**
    * Selects the link the session view follows: a namespace and, for a root served by another host, its transport
    * (omitted = this provider's own). It opens nothing, closes nothing and changes no session: a link with no session
@@ -1202,6 +1204,7 @@ export function SeedSessionProvider({
       openedAt: snapshot.openedAt,
       openLinks,
       selectedLinkId: selectedKey || null,
+      selectedLink: explicit,
       selectLink,
       activateSession,
       loginWithSeed,
@@ -1240,6 +1243,7 @@ export function SeedSessionProvider({
       snapshot,
       openLinks,
       selectedKey,
+      explicit,
       selectLink,
       status,
       sync,

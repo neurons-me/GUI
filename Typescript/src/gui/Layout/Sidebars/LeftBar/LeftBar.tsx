@@ -142,7 +142,8 @@ const LeftSidebar = ({
   // `headerNode` sits beside it); otherwise the arrow, at the end of the header.
   const toggleControl = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView) =>
     customToggle ? (
-      <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      // Flush with the corner and as tall as the header: the control is the whole cell, not the glyph inside it.
+      <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: view === 'rail' ? '100%' : '72px', height: '100%' }}>
         {customToggle({ view: viewForApp, toggle: onToggle })}
       </Box>
     ) : (
@@ -162,7 +163,7 @@ const LeftSidebar = ({
     const control = <React.Fragment key="toggle">{toggleControl(expanded, onToggle, viewForApp)}</React.Fragment>;
     return customToggle ? [control, text] : [text, control];
   };
-  const headerJustify = customToggle ? (view === 'rail' ? 'center' : 'flex-start') : headerNode ? 'space-between' : 'flex-end';
+  const headerJustify = customToggle ? 'flex-start' : headerNode ? 'space-between' : 'flex-end';
 
   useEffect(() => {
     if (typeof setInsets !== 'function') return;
@@ -367,7 +368,7 @@ const LeftSidebar = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: headerJustify,
-            px: 1.5,
+            px: customToggle ? 0 : 1.5,
             py: 0,
             gap: 1.25,
           }}
@@ -412,7 +413,11 @@ const LeftSidebar = ({
         >
           {customToggle ? (
             // The app's own element (the position QR) is the corner control while the bar is off; tapping it opens the bar.
-            <Box data-gui-node-id={`${adminNodeId}.toggle.mobile`} data-gui-component="toggle" sx={{ display: 'flex', ml: 1 }}>
+            <Box
+              data-gui-node-id={`${adminNodeId}.toggle.mobile`}
+              data-gui-component="toggle"
+              sx={{ display: 'flex', width: 56, height: 56, bgcolor: 'background.nav', borderRight: '1px solid', borderBottom: '1px solid', borderColor: 'divider', borderRadius: '0 0 12px 0', overflow: 'hidden' }}
+            >
               {customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) })}
             </Box>
           ) : (
@@ -472,7 +477,7 @@ const LeftSidebar = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: headerJustify,
-              px: 1.5,
+              px: customToggle ? 0 : 1.5,
               gap: 1.25,
             }}
           >
@@ -537,7 +542,7 @@ const LeftSidebar = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: headerJustify,
-          px: 1.5,
+          px: customToggle ? 0 : 1.5,
           py: 0,
           gap: 1.25,
         }}

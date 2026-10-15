@@ -228,6 +228,58 @@ async function main() {
       check('5.3 ...and the semantic path is the new one', /a\.test\/ideas/.test(await bodyText(page)), '');
       await context.close();
     }
+    // ── 6. The corner: a stable, whole-cell control that names the selected link and keeps the facts apart ──────────
+    {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      const b = fakeMonad({ origin: 'http://b.test', namespace: 'b.test' });
+      const { context, page } = await open(browser, harness, [a, b]);
+      const corner = () => page.evaluate(() => {
+        const btn = document.querySelector('button[aria-label$="sidebar"], button[aria-label="Open navigation"]');
+        if (!btn) return null;
+        const r = btn.getBoundingClientRect();
+        const qr = btn.querySelector('[data-gui-node-id="GUI.bars.top.position"]');
+        return { x: r.x, y: r.y, w: r.width, h: r.height, title: btn.getAttribute('title') || '', face: qr ? qr.getAttribute('aria-label') : null };
+      });
+      const qrValues = () => page.evaluate(() => {
+        const all = [...document.querySelectorAll('[data-qr-value]')];
+        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.bars.top.position');
+        const card = all.find((e) => e !== badge);
+        return { badge: badge ? badge.getAttribute('data-qr-value') : null, card: card ? card.getAttribute('data-qr-value') : null };
+      });
+      const c0 = await corner();
+      check('6.1 the control is the whole corner cell, flush with the window', !!c0 && c0.x === 0 && c0.y === 0 && c0.w >= 56 && c0.h >= 48, c0 ? `x=${c0.x} y=${c0.y} ${c0.w}x${c0.h}` : 'no control');
+      await page.hover('button[aria-label="Expand sidebar"]');
+      await page.waitForTimeout(250);
+      const c1 = await corner();
+      check('6.2 pointing at it does not change its face', !!c0 && !!c1 && c0.face === c1.face && /Show avatar/.test(c1.face || ''), `face before/after: ${c0 && c0.face} / ${c1 && c1.face}`);
+      await page.focus('button[aria-label="Expand sidebar"]');
+      const outline = await page.evaluate(() => getComputedStyle(document.querySelector('button[aria-label="Expand sidebar"]')).outlineStyle);
+      check('6.3 keyboard focus is visible', outline !== 'none', `outline: ${outline}`);
+
+      // three facts, kept apart
+      check('6.4 service answered, no session, authority not verified are stated separately',
+        /Service answered/.test(c0.title) && /No session/.test(c0.title) && /Authority not verified/.test(c0.title), c0.title);
+      const v0 = await qrValues();
+      check('6.5 the corner QR and the card QR name the same link', !!v0.badge && v0.badge === v0.card, `corner: ${v0.badge} card: ${v0.card}`);
+
+      // another link selected: both follow it, together
+      const selected = await selectLink(page, 'b.test');
+      await page.waitForTimeout(800);
+      const v1 = await qrValues();
+      check('6.6 selecting B moves both codes to B, together', selected && !!v1.badge && v1.badge === v1.card && v1.badge !== v0.badge && /b\.test/.test(v1.badge || ''), `corner: ${v1.badge} card: ${v1.card}`);
+
+      // signing in through A is a fact about A: the session mark and the sentence appear, the answer statement does not change
+      const backA = await selectLink(page, 'a.test');
+      await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
+      await signIn(page, 'ana', 'secret-a');
+      const inA = await signedInAs(page);
+      const c2 = await corner();
+      const mark = await page.locator('[data-gui-node-id="GUI.bars.left.session"]').count();
+      check('6.7 a session is its own mark and sentence, apart from the answer', backA && inA && mark === 1 && /Signed in as ana\.a\.test/.test(c2.title) && /Service answered/.test(c2.title), c2 ? c2.title : '');
+      check('6.8 nothing drawn claims verified authority', !/authority verified|Authority: verified/i.test(c2.title.replace(/Authority not verified/, '')) && /Authority not verified/.test(c2.title));
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

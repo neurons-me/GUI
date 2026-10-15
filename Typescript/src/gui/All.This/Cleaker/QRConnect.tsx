@@ -41,7 +41,7 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
-import { remoteRootFor } from '@/react/session/remoteRoot';
+import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -318,13 +318,20 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // would compute (buildCleakerNamespaceUrl is the shared utility both
   // wrap), just resolved directly here since QRme takes a raw value, not a
   // username+endpoint pair to derive one from itself.
+  const linkEndpoint = endpointForRoot(namespaceRootLabel, {
+    resolvedEndpoint,
+    localRoot: deriveNamespaceRootLabel(resolvedEndpoint),
+    confirmedRoot: sharedRootBinding?.confirmedLabel ?? null,
+  });
   const defaultQrValue = useMemo(() => {
     try {
-      return buildCleakerNamespaceUrl(resolvedEndpoint, username || undefined);
+      // The link's own endpoint: the page's for its own roots, the host's for another root (the corner badge asks the same
+      // function, so the two codes name the same link).
+      return buildCleakerNamespaceUrl(linkEndpoint, username || undefined);
     } catch {
-      return resolvedEndpoint;
+      return linkEndpoint;
     }
-  }, [resolvedEndpoint, username]);
+  }, [linkEndpoint, username]);
 
 
   const qrValue = defaultQrValue;
