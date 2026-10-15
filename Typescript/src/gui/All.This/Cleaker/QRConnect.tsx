@@ -41,6 +41,7 @@ import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
+import { remoteRootFor } from '@/react/session/remoteRoot';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -239,6 +240,14 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // (localStorage + a kernel path) and is not wired in. It would trade the mismatch described above (a stale
   // override outliving the server's own idea of the root) for not retyping it. That trade is the owner's to make.
   const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
+  // Choosing a namespace on the card selects a LINK: the session view follows it (the session of the one that was
+  // selected before stays open, and this one has none until it signs in). Its transport is this page's own for a root
+  // that is this page's, or that host's for another.
+  const selectNamespace = useCallback((root: string) => {
+    setNamespaceOverride(root);
+    const remote = remoteRootFor(root, { localRoot: deriveNamespaceRootLabel(resolvedEndpoint), confirmedRoot: sharedRootBinding?.confirmedLabel ?? null });
+    seedSessionCtx?.selectLink({ namespace: root, ...(remote ? { transport: `https://${remote}` } : {}) });
+  }, [resolvedEndpoint, sharedRootBinding?.confirmedLabel, seedSessionCtx]);
   // The namespace this card acts on, in order: the one the person SELECTED (the link), the one the service at this
   // origin ANSWERED for (a current confirmation), and only then the address -- which is a namespace only when someone
   // declared it so (`namespaceSource`). `namespaceReady` is false while all that is the address: the card then resolves
@@ -463,7 +472,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   const qrActive = !((mode === 'register' && !registrationComplete) || (mode === 'recover' && !recoveryComplete));
   const conn = useQRConnect({
     expression: namespaceRootLabel,
-    onExpressionChange: setNamespaceOverride,
+    onExpressionChange: selectNamespace,
     localRoot: deriveNamespaceRootLabel(resolvedEndpoint),
     door: { off: doorOff, checking: doorChecking, layers: doorLayers, probe: probeDoor },
     sharedRootStatus,
@@ -581,9 +590,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
             perimeterHandleHref={perimeterHandleHref}
             // Editable only pre-auth -- once a real session is open, the namespace is whatever that session actually
             // claimed/opened, not a guess left to edit further.
-            editableRoot={!authenticated}
+            editableRoot
             editableRootValue={namespaceRootLabel}
-            onEditableRootChange={setNamespaceOverride}
+            onEditableRootChange={selectNamespace}
             data-gui-node-id={`${nodeId}.qr.code`}
             style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
           />

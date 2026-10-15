@@ -65,8 +65,20 @@ Status: inventory only, 2026-10-14. No code moved, no component names fixed. Lin
 ## Proposed order (no names fixed)
 
 1. **Done 2026-10-14** (`src/react/link.ts`, `tests/link.test.ts`, values only, no component uses it yet): Link (target + verification for that target), Session (per link), Context (links + selection + sessions), Location and Surface (two independent paths). Verification distinguishes `answered` (capability) from `authorized` (evidence held independently); today's probes produce at most `answered`. A reading carries the target it was made for, so a late answer for an old target does not confirm a new one. Selection belongs to the context, not to a link.
-2. Make the surface an input instead of `window.location`.
+2. (not yet) Make the surface an input instead of `window.location`.
 3. Move the netget pages out of `Namespace.tsx` into netget's own document/pages (props `pages` already supports it).
 4. Only then decide how `Cleaker` and `AppShell` compose.
 
 Not in scope: renaming components, moving `/.me`, URL reflection of the selection (pending owner decision).
+
+## Status 2026-10-14 (step 3, partial)
+
+- `tests/integration/links.browser.test.mjs` runs the conditions against the real `<Cleaker>` in Chromium with fake
+  monads at the network layer (23 checks). It was red first (10/20): the card could not select another link while a
+  session was open because `SeedSessionProvider` held ONE snapshot and `QRConnect` set `editableRoot={!authenticated}`.
+- `SeedSessionProvider` now keeps a snapshot, status and error PER LINK (`targetKey`), exposes `openLinks`,
+  `selectedLinkId`, `selectLink`; an operation commits to the link it was started for (a late reply lands on its own
+  link). With nothing selected the view follows the link that most recently opened (what a single link always did).
+- Still true: ONE provider and one shell per `<Cleaker>`; the shell's `verifiedRoot` and `doorLayers` are still those of
+  the page's own link. Not done: the surface as an input, netget pages out of `Namespace.tsx`, Cleaker/AppShell
+  composition, URL reflection of the selection.

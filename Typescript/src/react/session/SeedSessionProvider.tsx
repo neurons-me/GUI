@@ -27,6 +27,7 @@ import {
 import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase, hexToBytes } from '@/core/identity/recoveryPhrase';
 import { hasLocalIdentityVault, loadLocalIdentityVault, saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { targetKey, type LinkTarget } from '@/react/link';
 
 export type SeedSessionStatus = 'idle' | 'pending' | 'ready' | 'error';
 
@@ -186,6 +187,20 @@ export type SeedSessionContextValue = {
   readonly semanticNamespace: string | null;
   readonly identityHash: string | null;
   readonly openedAt: number | null;
+  /**
+   * The links this provider holds a session for, each with its own session. The fields above (`session`,
+   * `authenticated`, `semanticNamespace`, ...) are those of the SELECTED link; the others stay open, and operations
+   * run against the link they were started for (a reply that arrives after the selection moved lands on its own link).
+   */
+  readonly openLinks: readonly OpenLink[];
+  /** The id (link.ts `targetKey`) of the link the fields above describe; null before any link has opened or been selected. */
+  readonly selectedLinkId: string | null;
+  /**
+   * Selects the link the session view follows: a namespace and, for a root served by another host, its transport
+   * (omitted = this provider's own). It opens nothing, closes nothing and changes no session: a link with no session
+   * is simply unauthenticated. Until one is selected, the view follows the link that most recently opened.
+   */
+  selectLink(target: { namespace: string; transport?: string }): void;
   activateSession(session: SeedSession | null): SeedSession | null;
   loginWithSeed(input: SeedSessionLoginInput): Promise<SeedSession>;
   loginWithCredentials(input: SeedCredentialsLoginInput): Promise<SeedSession>;
@@ -249,6 +264,14 @@ export type SeedSessionContextValue = {
   ): Promise<MonadWriteResult>;
   logout(): void;
   clearError(): void;
+};
+
+/** A link that holds a session in this provider (link.ts: the target's id, and who is signed in through it). */
+export type OpenLink = {
+  readonly id: string;
+  readonly semanticNamespace: string | null;
+  readonly identityHash: string | null;
+  readonly transportOrigin: string;
 };
 
 type SessionSnapshot = {
@@ -468,53 +491,106 @@ export function SeedSessionProvider({
     () => normalizeMonadTransportOrigin(transportOrigin),
     [transportOrigin],
   );
-  const [snapshot, setSnapshot] = React.useState<SessionSnapshot>(() =>
-    createEmptySnapshot(defaultTransportOrigin),
+  // One snapshot per LINK (link.ts targetKey: namespace + transport origin), not one for the provider: a session opened
+  // through one link stays open while another is selected, and what a reply changes is the link it was asked for.
+  const [snapshots, setSnapshots] = React.useState<Record<string, SessionSnapshot>>({});
+  const [activity, setActivity] = React.useState<Record<string, { status: SeedSessionStatus; error: Error | null }>>({});
+  // The link the person selected (the card's namespace), and the link that most recently opened. With nothing selected
+  // the view follows the latter, which is what a provider with a single link always did.
+  const [explicit, setExplicit] = React.useState<LinkTarget | null>(null);
+  const [lastKey, setLastKey] = React.useState<string | null>(null);
+  const explicitRef = React.useRef<LinkTarget | null>(explicit);
+  explicitRef.current = explicit;
+
+  const selectedKey = explicit ? targetKey(explicit) : lastKey ?? '';
+  const selectedSnapshot = snapshots[selectedKey];
+  const snapshot = React.useMemo<SessionSnapshot>(
+    () => selectedSnapshot ?? createEmptySnapshot(explicit ? normalizeMonadTransportOrigin(explicit.transport) : defaultTransportOrigin),
+    [selectedSnapshot, explicit, defaultTransportOrigin],
   );
-  const [status, setStatus] = React.useState<SeedSessionStatus>('idle');
-  const [error, setError] = React.useState<Error | null>(null);
+  const status: SeedSessionStatus = activity[selectedKey]?.status ?? (snapshot.session ? 'ready' : 'idle');
+  const error: Error | null = activity[selectedKey]?.error ?? null;
 
-  React.useEffect(() => {
-    if (snapshot.session) return;
-    setSnapshot((current) => {
-      if (current.session || current.transportOrigin === defaultTransportOrigin) {
-        return current;
-      }
-      return createEmptySnapshot(defaultTransportOrigin);
-    });
-  }, [defaultTransportOrigin, snapshot.session]);
+  /** The link an operation is about: the selected one when it is the same transport (and a name under its root), else its own. */
+  const linkKeyFor = React.useCallback((namespace: string, transport: string): string => {
+    const t = normalizeMonadTransportOrigin(transport || defaultTransportOrigin);
+    const ns = String(namespace || '').trim();
+    const chosen = explicitRef.current;
+    if (chosen && targetKey({ namespace: '', transport: chosen.transport }) === targetKey({ namespace: '', transport: t })) {
+      const root = chosen.namespace.trim().toLowerCase().replace(/\.$/, '');
+      const name = ns.toLowerCase().replace(/\.$/, '');
+      if (!name || name === root || name.endsWith(`.${root}`)) return targetKey(chosen);
+    }
+    return targetKey({ namespace: ns, transport: t });
+  }, [defaultTransportOrigin]);
 
-  const commitSnapshot = React.useCallback(
-    (nextSession: SeedSession | null) => {
-      const nextSnapshot = nextSession
-        ? snapshotSession(nextSession)
-        : createEmptySnapshot(defaultTransportOrigin);
+  const selectLink = React.useCallback((target: { namespace: string; transport?: string }) => {
+    const next: LinkTarget = {
+      namespace: String(target.namespace || '').trim(),
+      transport: normalizeMonadTransportOrigin(target.transport || defaultTransportOrigin),
+    };
+    setExplicit((current) => (current && targetKey(current) === targetKey(next) ? current : next));
+  }, [defaultTransportOrigin]);
 
+  // What an operation reports, always for the link it was started for.
+  const commitSnapshotFor = React.useCallback(
+    (nextSession: SeedSession | null, key: string) => {
       React.startTransition(() => {
-        setSnapshot(nextSnapshot);
-        setStatus(nextSession ? 'ready' : 'idle');
-        setError(null);
+        setSnapshots((current) => {
+          if (nextSession) return { ...current, [key]: snapshotSession(nextSession) };
+          if (!(key in current)) return current;
+          const { [key]: _closed, ...rest } = current;
+          return rest;
+        });
+        if (nextSession) setLastKey(key);
+        setActivity((current) => ({ ...current, [key]: { status: nextSession ? 'ready' : 'idle', error: null } }));
       });
 
       onSessionChange?.(nextSession);
       return nextSession;
     },
-    [defaultTransportOrigin, onSessionChange],
+    [onSessionChange],
   );
 
-  const activateSession = React.useCallback(
-    (nextSession: SeedSession | null) => commitSnapshot(nextSession),
-    [commitSnapshot],
-  );
+  const beginFor = React.useCallback((key: string) => {
+    React.startTransition(() => {
+      setActivity((current) => ({ ...current, [key]: { status: 'pending', error: null } }));
+    });
+  }, []);
 
-  const fail = React.useCallback((cause: unknown) => {
+  const failFor = React.useCallback((cause: unknown, key: string) => {
     const normalized = toError(cause);
     React.startTransition(() => {
-      setStatus('error');
-      setError(normalized);
+      setActivity((current) => ({ ...current, [key]: { status: 'error', error: normalized } }));
     });
     throw normalized;
   }, []);
+
+  /** An operation scoped to one link. `key` may be refined once its target is known (before the first `begin`). */
+  const scope = React.useCallback((key: string) => {
+    const op = {
+      key,
+      begin: () => beginFor(op.key),
+      commit: (nextSession: SeedSession | null) => commitSnapshotFor(nextSession, op.key),
+      fail: (cause: unknown) => failFor(cause, op.key),
+    };
+    return op;
+  }, [beginFor, commitSnapshotFor, failFor]);
+
+  // Called from outside with a session of its own: it opens (or replaces) the link it belongs to.
+  const activateSession = React.useCallback(
+    (nextSession: SeedSession | null) => {
+      if (nextSession) {
+        const key = linkKeyFor(nextSession.semanticNamespace || '', nextSession.transportOrigin);
+        return commitSnapshotFor(nextSession, key);
+      }
+      return commitSnapshotFor(null, selectedKey);
+    },
+    [commitSnapshotFor, linkKeyFor, selectedKey],
+  );
+
+  // Compatibility for the operations below that act on the selected link (their `fail` has no link of its own to name).
+  const fail = React.useCallback((cause: unknown) => failFor(cause, selectedKey), [failFor, selectedKey]);
 
   const requireSession = React.useCallback(() => {
     if (snapshot.session) return snapshot.session;
@@ -526,16 +602,14 @@ export function SeedSessionProvider({
 
   const loginWithSeed = React.useCallback(
     async (input: SeedSessionLoginInput) => {
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
-
+      const op = scope(selectedKey);
       const options = buildSeedSessionOptions(input, {
         transportOrigin: defaultTransportOrigin,
         fetchImpl,
         headers,
       });
+      op.key = linkKeyFor(options.semanticNamespace || '', options.transportOrigin || defaultTransportOrigin);
+      op.begin();
       if (createRuntime) {
         const me = (new ME(options.seed) as unknown) as MeLike;
         // This branch constructs `me` itself, before createSeedSession()
@@ -557,7 +631,7 @@ export function SeedSessionProvider({
         if (shouldAutoOpen && options.semanticNamespace) {
           await openExistingNamespace(nextSession, options.semanticNamespace);
         }
-        commitSnapshot(nextSession);
+        op.commit(nextSession);
         return nextSession;
       } catch (cause) {
         try {
@@ -565,11 +639,11 @@ export function SeedSessionProvider({
         } catch {
           // Best-effort cleanup for failed logins.
         }
-        commitSnapshot(null);
-        return fail(cause);
+        op.commit(null);
+        return op.fail(cause);
       }
     },
-    [commitSnapshot, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers],
+    [createRuntime, defaultTransportOrigin, fetchImpl, headers, linkKeyFor, scope, selectedKey],
   );
 
   // sessionBackend: 'cleaker' path — bypasses resolveSeedFromCredentials
@@ -581,11 +655,12 @@ export function SeedSessionProvider({
   // the full namespace itself via ME.bindNamespace().
   const loginWithCleaker = React.useCallback(
     async (input: SeedCredentialsLoginInput) => {
+      const op = scope(selectedKey);
       const username = String(input.username || input.email || '').trim();
       const password = String(input.password || '');
 
       if (!username) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
       }
 
       // Mirrors resolveNetgetSeedFromCredentials' own fallback chain
@@ -599,16 +674,16 @@ export function SeedSessionProvider({
         try {
           rootNamespace = await fetchGatewayHostname();
         } catch (cause) {
-          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+          return op.fail(cause instanceof Error ? cause : new Error(String(cause)));
         }
       }
       if (!rootNamespace) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
       // A name under another namespace is refused up front, never read as a handle of this one.
       if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
-        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+        return op.fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
       }
 
       // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
@@ -635,18 +710,15 @@ export function SeedSessionProvider({
           // everywhere else (the field label, RegisterMe/RecoverAccount)
           // never uses "password," and a lone message that did read as an
           // inconsistency, flagged live.
-          return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect secret.'));
+          return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect secret.'));
         }
       }
-
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
 
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
+      op.key = linkKeyFor(rootNamespace, cleakerTransportOrigin);
+      op.begin();
       // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
       // pending.
       let nextSession: SeedSession;
@@ -665,7 +737,7 @@ export function SeedSessionProvider({
           context,
         });
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
       const shouldAutoOpen = input.autoOpen !== false;
 
@@ -673,7 +745,7 @@ export function SeedSessionProvider({
         if (shouldAutoOpen) {
           await openExistingNamespace(nextSession, fullNamespace, { hasLocalVault: hasLocalIdentityVault(fullNamespace) });
         }
-        commitSnapshot(nextSession);
+        op.commit(nextSession);
         return nextSession;
       } catch (cause) {
         try {
@@ -681,20 +753,21 @@ export function SeedSessionProvider({
         } catch {
           // Best-effort cleanup for failed logins.
         }
-        commitSnapshot(null);
-        return fail(cause);
+        op.commit(null);
+        return op.fail(cause);
       }
     },
-    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [context, createRuntime, defaultTransportOrigin, fetchImpl, headers, live, linkKeyFor, scope, selectedKey],
   );
 
   const registerWithCredentials = React.useCallback(
     async (input: SeedCredentialsLoginInput) => {
+      const op = scope(selectedKey);
       const username = String(input.username || input.email || '').trim();
       const password = String(input.password || '');
 
       if (!username) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
       }
 
       let rootNamespace = String(input.namespace || '').trim() || getActiveNamespaceRoot() || '';
@@ -702,26 +775,23 @@ export function SeedSessionProvider({
         try {
           rootNamespace = await fetchGatewayHostname();
         } catch (cause) {
-          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+          return op.fail(cause instanceof Error ? cause : new Error(String(cause)));
         }
       }
       if (!rootNamespace) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
       // A name under another namespace is refused up front, never read as a handle of this one.
       if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
-        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+        return op.fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
       }
-
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
 
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
+      op.key = linkKeyFor(rootNamespace, cleakerTransportOrigin);
+      op.begin();
       // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
       // pending.
       let nextSession: SeedSession;
@@ -740,7 +810,7 @@ export function SeedSessionProvider({
           context,
         });
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
       // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
@@ -752,7 +822,7 @@ export function SeedSessionProvider({
         // path allowed to, because the caller (a real "Register User"
         // form/button) has already said so on purpose.
         await nextSession.claimAndOpen(fullNamespace);
-        commitSnapshot(nextSession);
+        op.commit(nextSession);
         return nextSession;
       } catch (cause) {
         try {
@@ -760,11 +830,11 @@ export function SeedSessionProvider({
         } catch {
           // Best-effort cleanup for failed registration.
         }
-        commitSnapshot(null);
-        return fail(cause);
+        op.commit(null);
+        return op.fail(cause);
       }
     },
-    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [context, createRuntime, defaultTransportOrigin, fetchImpl, headers, live, linkKeyFor, scope, selectedKey],
   );
 
   // The identities held under this link's context. The registry is module-level and keyed by the context object; this
@@ -794,16 +864,17 @@ export function SeedSessionProvider({
   // same signed proof, but the root is the one an open link already holds. Nothing is generated and no phrase is shown.
   const linkExistingIdentity = React.useCallback(
     async (input: LinkExistingIdentityInput) => {
+      const op = scope(selectedKey);
       const username = String(input.username || '').trim();
       const password = String(input.password || '');
 
       if (!username) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
       }
 
       const source = sessionHolding(context, String(input.identityHash || ''));
       if (!source) {
-        return fail(new SeedSessionContextError(
+        return op.fail(new SeedSessionContextError(
           'IDENTITY_NOT_HELD',
           'That identity is not open in any link here: open it first, or create a new identity.',
         ));
@@ -814,23 +885,20 @@ export function SeedSessionProvider({
         try {
           rootNamespace = await fetchGatewayHostname();
         } catch (cause) {
-          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+          return op.fail(cause instanceof Error ? cause : new Error(String(cause)));
         }
       }
       if (!rootNamespace) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
       if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
-        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+        return op.fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
       }
 
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
-
       const linkTransportOrigin = normalizeMonadTransportOrigin(input.transportOrigin || defaultTransportOrigin);
+      op.key = linkKeyFor(rootNamespace, linkTransportOrigin);
+      op.begin();
       let nextSession: SeedSession;
       try {
         nextSession = createCleakerSession({
@@ -845,7 +913,7 @@ export function SeedSessionProvider({
           identityFrom: source,
         });
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
 
@@ -857,10 +925,10 @@ export function SeedSessionProvider({
         } catch {
           // Best-effort cleanup for a refused claim.
         }
-        commitSnapshot(null);
-        return fail(cause);
+        op.commit(null);
+        return op.fail(cause);
       }
-      commitSnapshot(nextSession);
+      op.commit(nextSession);
 
       // Sealing is a separate, optional step after the claim is accepted: a failure here is reported, and the link that
       // was accepted stays open (it was claimed; only the way back in by password is missing).
@@ -870,21 +938,22 @@ export function SeedSessionProvider({
           if (!rootHex) throw new Error('The identity is no longer held by this link.');
           await saveLocalIdentityVault(buildGuessedFullNamespace(username, rootNamespace), hexToBytes(rootHex), password);
         } catch (cause) {
-          return fail(cause);
+          return op.fail(cause);
         }
       }
       return nextSession;
     },
-    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [context, createRuntime, defaultTransportOrigin, fetchImpl, headers, live, linkKeyFor, scope, selectedKey],
   );
 
   const recoverWithPhrase = React.useCallback(
     async (input: SeedRecoveryInput) => {
+      const op = scope(selectedKey);
       const username = String(input.username || '').trim();
       const words = Array.isArray(input.words) ? input.words : [];
 
       if (!username) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Username is required.'));
       }
 
       let rootNamespace = String(input.namespace || '').trim() || getActiveNamespaceRoot() || '';
@@ -892,16 +961,16 @@ export function SeedSessionProvider({
         try {
           rootNamespace = await fetchGatewayHostname();
         } catch (cause) {
-          return fail(cause instanceof Error ? cause : new Error(String(cause)));
+          return op.fail(cause instanceof Error ? cause : new Error(String(cause)));
         }
       }
       if (!rootNamespace) {
-        return fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
+        return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'A root namespace is required.'));
       }
 
       // A name under another namespace is refused up front, never read as a handle of this one.
       if (splitTypedNamespace(username, rootNamespace).kind === 'foreign') {
-        return fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
+        return op.fail(new SeedSessionContextError('INVALID_CLAIM', foreignNamespaceMessage(username, rootNamespace)));
       }
 
       // Derived and validated BEFORE flipping to 'pending' — an invalid
@@ -911,17 +980,14 @@ export function SeedSessionProvider({
       try {
         identityRootHex = bytesToHex(await deriveIdentityRootBytesFromPhrase(words));
       } catch (cause) {
-        return fail(new SeedSessionContextError('INVALID_RECOVERY_PHRASE', 'That phrase is not a valid recovery phrase.'));
+        return op.fail(new SeedSessionContextError('INVALID_RECOVERY_PHRASE', 'That phrase is not a valid recovery phrase.'));
       }
-
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
 
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
       );
+      op.key = linkKeyFor(rootNamespace, cleakerTransportOrigin);
+      op.begin();
       // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
       // pending.
       let nextSession: SeedSession;
@@ -939,7 +1005,7 @@ export function SeedSessionProvider({
           context,
         });
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
       // The root is never added twice: a complete name stays as typed (see splitTypedNamespace).
       const { fullNamespace } = splitTypedNamespace(username, rootNamespace);
@@ -954,7 +1020,7 @@ export function SeedSessionProvider({
         // exactly like a normal sign-in's wrong-secret case, so this can't
         // be used to enumerate which usernames exist either.
         await openExistingNamespace(nextSession, fullNamespace);
-        commitSnapshot(nextSession);
+        op.commit(nextSession);
         return nextSession;
       } catch (cause) {
         try {
@@ -962,30 +1028,29 @@ export function SeedSessionProvider({
         } catch {
           // Best-effort cleanup for a failed recovery attempt.
         }
-        commitSnapshot(null);
-        return fail(cause);
+        op.commit(null);
+        return op.fail(cause);
       }
     },
-    [commitSnapshot, context, createRuntime, defaultTransportOrigin, fail, fetchImpl, headers, live],
+    [context, createRuntime, defaultTransportOrigin, fetchImpl, headers, live, linkKeyFor, scope, selectedKey],
   );
 
   const loginWithCredentials = React.useCallback(
     async (input: SeedCredentialsLoginInput) => {
+      const op = scope(selectedKey);
       if (sessionBackend === 'cleaker') {
         return loginWithCleaker(input);
       }
 
       if (typeof resolveSeedFromCredentials !== 'function') {
-        return fail(new SeedSessionContextError(
+        return op.fail(new SeedSessionContextError(
           'CREDENTIAL_LOGIN_UNAVAILABLE',
           'No credential resolver was provided to SeedSessionProvider.',
         ));
       }
 
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
+      op.key = linkKeyFor(String(input.namespace || ''), input.transportOrigin || '');
+      op.begin();
 
       try {
         const resolved = await resolveSeedFromCredentials(input);
@@ -1002,75 +1067,67 @@ export function SeedSessionProvider({
           autoOpen: input.autoOpen,
         });
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
     },
-    [defaultTransportOrigin, fail, loginWithCleaker, loginWithSeed, resolveSeedFromCredentials, sessionBackend],
+    [defaultTransportOrigin, loginWithCleaker, loginWithSeed, resolveSeedFromCredentials, sessionBackend, linkKeyFor, scope, selectedKey],
   );
 
   const claim = React.useCallback(async (namespace: string) => {
+    const op = scope(selectedKey);
     const session = requireSession();
-    React.startTransition(() => {
-      setStatus('pending');
-      setError(null);
-    });
+    op.begin();
 
     try {
       const result = await session.claim(namespace);
-      commitSnapshot(session);
+      op.commit(session);
       return result;
     } catch (cause) {
-      return fail(cause);
+      return op.fail(cause);
     }
-  }, [commitSnapshot, fail, requireSession]);
+  }, [requireSession, scope, selectedKey]);
 
   const open = React.useCallback(async (namespace?: string | null) => {
+    const op = scope(selectedKey);
     const session = requireSession();
-    React.startTransition(() => {
-      setStatus('pending');
-      setError(null);
-    });
+    op.begin();
 
     try {
       const result = await session.open(namespace);
-      commitSnapshot(session);
+      op.commit(session);
       return result;
     } catch (cause) {
-      return fail(cause);
+      return op.fail(cause);
     }
-  }, [commitSnapshot, fail, requireSession]);
+  }, [requireSession, scope, selectedKey]);
 
   const claimAndOpen = React.useCallback(async (namespace: string) => {
+    const op = scope(selectedKey);
     const session = requireSession();
-    React.startTransition(() => {
-      setStatus('pending');
-      setError(null);
-    });
+    op.begin();
 
     try {
       const result = await session.claimAndOpen(namespace);
-      commitSnapshot(session);
+      op.commit(session);
       return result;
     } catch (cause) {
-      return fail(cause);
+      return op.fail(cause);
     }
-  }, [commitSnapshot, fail, requireSession]);
+  }, [requireSession, scope, selectedKey]);
 
   const sync = React.useCallback(async () => {
+    const op = scope(selectedKey);
     const session = requireSession();
-    React.startTransition(() => {
-      setStatus('pending');
-      setError(null);
-    });
+    op.begin();
 
     try {
       const result = await session.sync();
-      commitSnapshot(session);
+      op.commit(session);
       return result;
     } catch (cause) {
-      return fail(cause);
+      return op.fail(cause);
     }
-  }, [commitSnapshot, fail, requireSession]);
+  }, [requireSession, scope, selectedKey]);
 
   const read = React.useCallback(<TValue,>(path: string): TValue | undefined => {
     if (!snapshot.session) return undefined;
@@ -1087,23 +1144,22 @@ export function SeedSessionProvider({
       value: TValue,
       options?: SeedSessionWriteOptions<TValue>,
     ) => {
+      const op = scope(selectedKey);
       const session = requireSession();
-      React.startTransition(() => {
-        setStatus('pending');
-        setError(null);
-      });
+      op.begin();
 
       try {
         const result = await session.write(expression, value, options);
-        commitSnapshot(session);
+        op.commit(session);
         return result;
       } catch (cause) {
-        return fail(cause);
+        return op.fail(cause);
       }
     },
-    [commitSnapshot, fail, requireSession],
+    [requireSession, scope, selectedKey],
   );
 
+  // Signs out of the SELECTED link only; the others keep their sessions.
   const logout = React.useCallback(() => {
     if (snapshot.session) {
       try {
@@ -1112,15 +1168,24 @@ export function SeedSessionProvider({
         // Ignore logout cleanup failures and always clear local state.
       }
     }
-    commitSnapshot(null);
-  }, [commitSnapshot, snapshot.session]);
+    commitSnapshotFor(null, selectedKey);
+  }, [commitSnapshotFor, selectedKey, snapshot.session]);
 
   const clearError = React.useCallback(() => {
     React.startTransition(() => {
-      setError(null);
-      setStatus(snapshot.session ? 'ready' : 'idle');
+      setActivity((current) => ({ ...current, [selectedKey]: { status: snapshot.session ? 'ready' : 'idle', error: null } }));
     });
-  }, [snapshot.session]);
+  }, [selectedKey, snapshot.session]);
+
+  const openLinks = React.useMemo<readonly OpenLink[]>(
+    () => Object.entries(snapshots).map(([id, entry]) => ({
+      id,
+      semanticNamespace: entry.semanticNamespace,
+      identityHash: entry.identityHash,
+      transportOrigin: entry.transportOrigin,
+    })),
+    [snapshots],
+  );
 
   const contextValue = React.useMemo<SeedSessionContextValue>(
     () => ({
@@ -1135,6 +1200,9 @@ export function SeedSessionProvider({
       semanticNamespace: snapshot.semanticNamespace,
       identityHash: snapshot.identityHash,
       openedAt: snapshot.openedAt,
+      openLinks,
+      selectedLinkId: selectedKey || null,
+      selectLink,
       activateSession,
       loginWithSeed,
       loginWithCredentials,
@@ -1170,6 +1238,9 @@ export function SeedSessionProvider({
       open,
       read,
       snapshot,
+      openLinks,
+      selectedKey,
+      selectLink,
       status,
       sync,
       write,

@@ -113,11 +113,12 @@ async function main() {
       const selected = await selectLink(page, 'b.test');
       check('1.1 while A is signed in, the card can select another link', selected, selected ? '' : 'no control to choose another namespace once a session is open (QRConnect: editableRoot={!authenticated})');
       const notReached = 'not reached: B cannot be selected while A holds the only session';
-      if (selected) await until(page, () => true, null, 500);
+      // B answers through its own channel; the card offers its form once it has
+      if (selected) await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
       const text = selected ? await bodyText(page) : '';
       check('1.2 the card is now about B', selected && /b\.test/.test(await cardTarget(page)), selected ? `target: ${await cardTarget(page)}` : notReached);
       check('1.3 B does not borrow A\'s session', selected && !/Sign out/i.test(text) && (await page.locator('input[type=password]').count()) > 0,
-        selected ? (/Sign out/i.test(text) ? 'B\'s card shows A\'s session (Sign out)' : '') : notReached);
+        selected ? (/Sign out/i.test(text) ? 'B\'s card shows A\'s session (Sign out)' : `form offered: ${(await page.locator('input[type=password]').count()) > 0}`) : notReached);
       check('1.4 selecting B asked A for nothing', selected && a.count(/POST \/claims\/signIn/) === aOpensBefore, selected ? '' : notReached);
       const back = selected && await selectLink(page, 'a.test');
       check('1.5 selecting A again finds its session still open, unchanged', back && (await signedInAs(page)) && a.count(/POST \/claims\/signIn/) === aOpensBefore,
@@ -181,7 +182,28 @@ async function main() {
       await context.close();
     }
 
-    // ── 4. The surface and the semantic path are independent ───────────────────────────────────────────────────────
+    // ── 4. A reply that arrives after the selection moved lands on the link it was asked for ───────────────────────
+    {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      const b = fakeMonad({ origin: 'http://b.test', namespace: 'b.test' });
+      const { context, page } = await open(browser, harness, [a, b]);
+      const releaseSignIn = a.gate('open');                // A's sign-in is held in flight
+      await fillCredentials(page, 'ana', 'secret-a');
+      await page.click('button:has-text(".me"):not([disabled])', { timeout: 3000 });
+      const selected = await selectLink(page, 'b.test');   // the person moves on to B meanwhile
+      check('4.0 B selected while A\'s sign-in is still in flight (setup)', selected);
+      await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
+      releaseSignIn();                                     // A's reply arrives now, late
+      await page.waitForTimeout(1500);
+      const text = await bodyText(page);
+      check('4.1 the late reply does not make B look signed in', !/Sign out/i.test(text) && !/ana\.a\.test/.test(await cardTarget(page)),
+        /Sign out/i.test(text) ? 'B\'s card shows A\'s late session' : '');
+      const back = await selectLink(page, 'a.test');
+      check('4.2 it did land on A', back && (await signedInAs(page)) && /ana\.a\.test/.test(await bodyText(page)), back ? '' : 'could not select A');
+      await context.close();
+    }
+
+    // ── 5. The surface and the semantic path are independent ───────────────────────────────────────────────────────
     {
       const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
       const { context, page } = await open(browser, harness, [a]);
@@ -189,21 +211,21 @@ async function main() {
       await until(page, () => true, null, 400);
       const labelBefore = await cardTarget(page);
       const pathBefore = await page.evaluate(() => window.location.pathname);
-      check('4.0 the semantic path is shown with the link (setup)', /a\.test\/netget/.test(labelBefore), labelBefore);
+      check('5.0 the semantic path is shown with the link (setup)', /a\.test\/netget/.test(labelBefore), labelBefore);
 
       // navigate the surface: a route of the page
       await page.evaluate(() => { window.history.pushState({}, '', '/users'); window.dispatchEvent(new PopStateEvent('popstate')); });
       await until(page, () => true, null, 500);
       const labelAfterNav = await page.evaluate(() => [...document.querySelectorAll('svg text, a, span')].map((e) => e.textContent || '').find((t) => /a\.test/.test(t)) || '');
-      check('4.1 navigating the surface keeps the link and the semantic path', /a\.test\/netget/.test(labelAfterNav) || /a\.test\/netget/.test(await bodyText(page)),
+      check('5.1 navigating the surface keeps the link and the semantic path', /a\.test\/netget/.test(labelAfterNav) || /a\.test\/netget/.test(await bodyText(page)),
         `after /users: ${labelAfterNav.replace(/\s+/g, ' ').slice(0, 60)}`);
 
       // change the semantic path: the surface does not move
       await page.evaluate(() => window.__harness.setSemanticPath('/ideas'));
       await until(page, () => true, null, 500);
       const pathAfter = await page.evaluate(() => window.location.pathname);
-      check('4.2 changing the semantic path leaves the surface where it was', pathAfter === '/users', `pathname: ${pathAfter} (was ${pathBefore} before navigating)`);
-      check('4.3 ...and the semantic path is the new one', /a\.test\/ideas/.test(await bodyText(page)), '');
+      check('5.2 changing the semantic path leaves the surface where it was', pathAfter === '/users', `pathname: ${pathAfter} (was ${pathBefore} before navigating)`);
+      check('5.3 ...and the semantic path is the new one', /a\.test\/ideas/.test(await bodyText(page)), '');
       await context.close();
     }
   } finally {
