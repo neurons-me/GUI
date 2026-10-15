@@ -70,6 +70,7 @@ const LeftSidebar = ({
   footerElements = [],
   footerCollections = [],
   header,
+  toggle: customToggle,
   ['data-gui-node-id']: dataGuiNodeId,
   ['data-gui-component']: dataGuiComponent,
 }: LeftSidebarProps & {
@@ -137,6 +138,31 @@ const LeftSidebar = ({
     return null;
   })();
   const headerNode = view === 'rail' ? null : rawHeaderNode;
+  // The control that changes the bar's width. The app's own element when it gave one (it leads the header and
+  // `headerNode` sits beside it); otherwise the arrow, at the end of the header.
+  const toggleControl = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView) =>
+    customToggle ? (
+      <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {customToggle({ view: viewForApp, toggle: onToggle })}
+      </Box>
+    ) : (
+      <LeftSidebarToggleButton
+        expanded={expanded}
+        onToggle={onToggle}
+        data-gui-node-id={toggleButtonNodeId}
+        data-gui-component="toggle"
+      />
+    );
+  const headerContent = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView) => {
+    const text = headerNode ? (
+      <Box key="header-text" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: customToggle ? 1 : undefined }}>
+        {headerNode}
+      </Box>
+    ) : null;
+    const control = <React.Fragment key="toggle">{toggleControl(expanded, onToggle, viewForApp)}</React.Fragment>;
+    return customToggle ? [control, text] : [text, control];
+  };
+  const headerJustify = customToggle ? (view === 'rail' ? 'center' : 'flex-start') : headerNode ? 'space-between' : 'flex-end';
 
   useEffect(() => {
     if (typeof setInsets !== 'function') return;
@@ -340,23 +366,13 @@ const LeftSidebar = ({
             height: `${headerHeight}px`,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: headerNode ? 'space-between' : 'flex-end',
+            justifyContent: headerJustify,
             px: 1.5,
             py: 0,
             gap: 1.25,
           }}
         >
-          {headerNode && (
-            <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-              {headerNode}
-            </Box>
-          )}
-          <LeftSidebarToggleButton
-            expanded={view === ('expanded' as any)}
-            onToggle={() => setView(view === 'rail' ? 'expanded' : 'rail')}
-            data-gui-node-id={toggleButtonNodeId}
-            data-gui-component="toggle"
-          />
+          {headerContent(false, () => setView('expanded'), 'rail')}
         </Box>
         <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
         {hasFooterElements && (
@@ -394,25 +410,32 @@ const LeftSidebar = ({
             display: mobileOpen ? 'none' : 'flex',
           }}
         >
-          <IconButton
-            aria-label="Open navigation"
-            data-gui-node-id={`${adminNodeId}.toggle.mobile`}
-            onClick={() => setMobileOpen(true)}
-            sx={{
-              borderRadius: '0 16px 16px 0',
-              border: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              color: 'text.secondary',
-              boxShadow: 3,
-              '&:hover': {
-                bgcolor: 'background.nav',
-                color: 'text.primary',
-              },
-            }}
-          >
-            <Icon name="menu" />
-          </IconButton>
+          {customToggle ? (
+            // The app's own element (the position QR) is the corner control while the bar is off; tapping it opens the bar.
+            <Box data-gui-node-id={`${adminNodeId}.toggle.mobile`} data-gui-component="toggle" sx={{ display: 'flex', ml: 1 }}>
+              {customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) })}
+            </Box>
+          ) : (
+            <IconButton
+              aria-label="Open navigation"
+              data-gui-node-id={`${adminNodeId}.toggle.mobile`}
+              onClick={() => setMobileOpen(true)}
+              sx={{
+                borderRadius: '0 16px 16px 0',
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                color: 'text.secondary',
+                boxShadow: 3,
+                '&:hover': {
+                  bgcolor: 'background.nav',
+                  color: 'text.primary',
+                },
+              }}
+            >
+              <Icon name="menu" />
+            </IconButton>
+          )}
         </Box>
         <Drawer
           anchor="left"
@@ -448,22 +471,12 @@ const LeftSidebar = ({
               height: `${headerHeight}px`,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: headerNode ? 'space-between' : 'flex-end',
+              justifyContent: headerJustify,
               px: 1.5,
               gap: 1.25,
             }}
           >
-            {headerNode && (
-              <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                {headerNode}
-              </Box>
-            )}
-            <LeftSidebarToggleButton
-              expanded
-              onToggle={() => setMobileOpen(false)}
-              data-gui-node-id={toggleButtonNodeId}
-              data-gui-component="toggle"
-            />
+            {headerContent(true, () => setMobileOpen(false), 'expanded')}
           </Box>
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
           {hasFooterElements && (
@@ -523,23 +536,13 @@ const LeftSidebar = ({
           height: `${headerHeight}px`,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: headerNode ? 'space-between' : 'flex-end',
+          justifyContent: headerJustify,
           px: 1.5,
           py: 0,
           gap: 1.25,
         }}
       >
-        {headerNode && (
-          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-            {headerNode}
-          </Box>
-        )}
-        <LeftSidebarToggleButton
-          expanded={view === ('expanded' as any)}
-          onToggle={() => setView(view === 'expanded' ? 'rail' : 'expanded')}
-          data-gui-node-id={toggleButtonNodeId}
-          data-gui-component="toggle"
-        />
+        {headerContent(true, () => setView('rail'), 'expanded')}
       </Box>
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
       {hasFooterElements && (

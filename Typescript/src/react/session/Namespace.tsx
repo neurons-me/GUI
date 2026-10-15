@@ -36,6 +36,7 @@ import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
+import { useLeftSidebar } from '@/gui-internals/Hooks';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
@@ -1351,6 +1352,15 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 // /keychain/claim and /keychain/admin-sign are deliberately NOT nested
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
+/**
+ * Shows its children unless the left bar is expanded. The position is written once: beside the QR in the bar when the
+ * bar is open, and in the top bar otherwise (the bar's `view` is only known inside the Layout, hence a component).
+ */
+const UnlessLeftBarExpanded: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { view } = useLeftSidebar();
+  return view === 'expanded' ? null : <>{children}</>;
+};
+
 const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
@@ -1646,19 +1656,18 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
   const RAIL_BADGE_SIZE = 38;
-  const openIdentity = () => {
-    if (location.pathname !== IDENTITY_ROUTE) navigate(IDENTITY_ROUTE);
-  };
-  const positionBadge = (
+  // The QR IS the bar's control: it expands and contracts the left bar (and, with the bar off on a narrow screen, it is the
+  // small corner QR that brings it back). The identity page is reached from the address beside it.
+  const positionBadgeFor = (onToggle: () => void, label: string) => (
     <Box
       component="button"
       type="button"
-      onClick={openIdentity}
-      aria-label="Identity"
+      onClick={onToggle}
+      aria-label={label}
       title={positionExpressionFull}
       data-position-expression={positionExpressionFull}
       data-gui-node-id="GUI.bars.left.identity"
-      sx={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: '10px 0', alignItems: 'center', justifyContent: 'center', p: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+      sx={{ display: 'flex', width: RAIL_BADGE_SIZE, height: RAIL_BADGE_SIZE, margin: 0, alignItems: 'center', justifyContent: 'center', p: 0, border: 'none', background: 'none', cursor: 'pointer' }}
     >
       <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
       <QRme
@@ -1706,6 +1715,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 >
                   <Icon name="home" fontSize="1.25rem" />
                 </Box>
+                <UnlessLeftBarExpanded>
                 <Box
                   component="span"
                   data-gui-node-id="GUI.bars.top.namespace"
@@ -1729,6 +1739,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 >
                   {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
                 </Box>
+                </UnlessLeftBarExpanded>
               </Box>
             ),
           },
@@ -1756,6 +1767,33 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true }}
         LeftBar={{
+          toggle: ({ view, toggle }) => positionBadgeFor(toggle, view === 'expanded' ? 'Collapse sidebar' : view === 'mobile' ? 'Open navigation' : 'Expand sidebar'),
+          // Shown while the bar is open: where you are, written out, and the way to the identity page.
+          header: (
+            <Box
+              component={Link}
+              to={IDENTITY_ROUTE}
+              title={positionExpressionFull}
+              data-position-expression={positionExpressionFull}
+              data-gui-node-id="GUI.bars.left.position"
+              data-gui-component="namespace"
+              sx={{
+                display: 'block',
+                minWidth: 0,
+                ml: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                lineHeight: 1.25,
+                color: 'text.primary',
+                textDecoration: 'none',
+                wordBreak: 'break-word',
+                '&:hover': { textDecoration: 'underline' },
+              }}
+            >
+              {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
+            </Box>
+          ),
           // `active` applied ONCE, HERE, uniformly across every element
           // regardless of which of the two sources below it came from --
           // not inside `leftBarSlots()` itself (see that function's own
@@ -1771,10 +1809,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           // never did, for exactly that reason.
           elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end]
             .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
+            // Home is the top bar's; the bar leads with the QR (its toggle, below), not with another way back to `/`.
+            .filter((el) => !(el.type === 'link' && el.props.to === '/'))
             .map((el): LeftBarElement =>
-            el.type === 'link' && el.props.to === '/'
-              ? { type: 'action', props: { label: 'Identity', element: positionBadge, tooltip: false, active: location.pathname === IDENTITY_ROUTE } }
-              : el.type === 'link'
+            el.type === 'link'
                 ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
                 : el
           ),
