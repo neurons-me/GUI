@@ -355,6 +355,26 @@ async function main() {
       await context.close();
     }
 
+    // ── 10. The mechanism is said BEFORE anything is signed ─────────────────────────────────────────────────────────────
+    {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      const { context, page } = await open(browser, harness, [a]);
+      const vaultModule = `/@fs${path.join(root, 'src/core/identity/localIdentityVault.ts')}`;
+      await page.evaluate(async ({ vaultModule }) => {
+        const m = await import(/* @vite-ignore */ vaultModule);
+        await m.saveLocalIdentityVault('saved.a.test:8080', new Uint8Array(32).fill(0x77), 'a-long-secret-1');   // a legacy key
+      }, { vaultModule });
+      a.reset();
+      await page.fill('input[type=text]:not([placeholder])', 'nobody');
+      const none = await page.locator('[data-gui-node-id$=".mechanism"]').first().innerText().catch(() => '');
+      check('10.1 no saved key: it says the derived identity will be used, before signing', /derived from your name and secret/.test(none), none);
+      await page.fill('input[type=text]:not([placeholder])', 'saved');
+      const saved = await page.locator('[data-gui-node-id$=".mechanism"]').first().innerText().catch(() => '');
+      check('10.2 a saved key (even under a legacy spelling): it says that one will be used', /saved key for this name/.test(saved) && !/derived/.test(saved), saved);
+      check('10.3 saying it sent nothing', a.count(/POST \/claims\/signIn/) === 0);
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

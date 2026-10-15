@@ -37,12 +37,13 @@ import { connectTrace } from '@/react/session/connectTrace';
 import { positionExpression as composePosition, cardNamespace } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
-import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
+import { setActiveNamespaceRoot, splitTypedNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import type { SeedSession } from '@/core/session/createSeedSession';
 import { useMeLauncherView } from '@/react/session/MeLauncher';
 import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
+import { hasIdentityVault } from '@/core/identity/localIdentityVault';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -839,6 +840,20 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
                 fullWidth
               />
             </>
+          )}
+          {credentialsForm && credentialsForm.username.trim() && namespaceReady && (
+            // BEFORE anything is signed: which key this sign-in will use, and where it comes from. A saved key in this
+            // browser is used if there is one (under any spelling of the name); otherwise the identity derived from the
+            // name and the secret is what is attempted, as an open only. Nothing here changes what is sent.
+            <Typography
+              variant="caption"
+              data-gui-node-id={`${nodeId}.mechanism`}
+              sx={{ color: 'text.secondary', display: 'block' }}
+            >
+              {hasIdentityVault(splitTypedNamespace(credentialsForm.username.trim(), namespaceRootLabel).fullNamespace)
+                ? 'This browser has a saved key for this name: it will be used with your secret.'
+                : 'No saved key for this name in this browser: signing in uses the identity derived from your name and secret.'}
+            </Typography>
           )}
           {error && (
             <Typography variant="body2" sx={{ color: 'error.main' }}>
