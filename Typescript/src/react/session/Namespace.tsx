@@ -1696,28 +1696,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           props: {
             element: (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                {/* Home: the namespace's own home (`/`), always here, on every page. */}
+                <UnlessLeftBarExpanded>
+                {/* No home icon: being at the namespace is being home. The address is the way back to `/`. */}
                 <Box
                   component={Link}
                   to="/"
                   aria-label="Home"
-                  title="Home"
-                  data-gui-node-id="GUI.bars.top.home"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    color: location.pathname === '/' ? 'primary.main' : 'text.secondary',
-                    textDecoration: 'none',
-                    '&:hover': { color: 'text.primary' },
-                  }}
-                >
-                  <Icon name="home" fontSize="1.25rem" />
-                </Box>
-                <UnlessLeftBarExpanded>
-                <Box
-                  component="span"
                   data-gui-node-id="GUI.bars.top.namespace"
                   data-gui-component="namespace"
                   data-position-expression={positionExpressionFull}
@@ -1733,8 +1717,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     fontSize: '0.82rem',
                     fontWeight: 600,
                     letterSpacing: '0.02em',
-                    color: 'text.primary',
-                    userSelect: 'text',
+                    color: location.pathname === '/' ? 'primary.main' : 'text.primary',
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
                   }}
                 >
                   {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
