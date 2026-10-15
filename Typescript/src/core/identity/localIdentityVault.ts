@@ -170,3 +170,41 @@ export async function saveIdentityVault(namespace: string, rootBytes: Uint8Array
 export function hasIdentityVault(namespace: string): boolean {
   return storedVaultKeysFor(namespace).length > 0;
 }
+
+
+// ── which identity a sign-in attempts, and where it comes from ───────────────────────────────────────────────────────
+//
+// A sign-in is by name and secret. There are exactly two sources of the key that signs the OPEN proof, and the attempt
+// states which one it used; there is no third, and no "try the other one if the first did not work":
+//
+//   vault     the root stored in this browser for the namespace (a phrase-made identity), unlocked with the secret;
+//   password  the identity DERIVED from the name and the secret (deriveCompoundSeed(username, secret)): the mechanism of
+//             the form itself, the one every password-made identity has. It is used only when there is NO vault for the
+//             namespace in this browser under any spelling, it is never used after a vault was found or in conflict, and
+//             it is only ever an `open` (never a claim): the monad answers whether that derived key is the registered
+//             one, and a refusal offers recovery instead of creating anything.
+//
+// An `open` is signed: the derived key's proof is sent to the transport the person signs in through. That is the
+// mechanism the person chose by typing a name and a secret in this form; it is reported (`source`), not hidden.
+export type IdentityMechanism =
+  | { kind: 'vault'; source: 'vault'; key: string; rootHex: string }
+  | { kind: 'password'; source: 'password' }
+  | { kind: 'conflict'; candidates: VaultCandidate[] }
+  | { kind: 'conflict-unresolved-choice'; candidates: VaultCandidate[]; choice: string };
+
+export function chooseIdentityMechanism(
+  finding: VaultFinding,
+  choice: string | null | undefined,
+  toHex: (bytes: Uint8Array) => string,
+): IdentityMechanism {
+  if (finding.status === 'found') return { kind: 'vault', source: 'vault', key: finding.key, rootHex: toHex(finding.root) };
+  if (finding.status === 'conflict') {
+    const wanted = String(choice || '').trim().toLowerCase();
+    if (!wanted) return { kind: 'conflict', candidates: finding.candidates };
+    const pick = finding.candidates.find((c) => c.key === wanted);
+    return pick
+      ? { kind: 'vault', source: 'vault', key: pick.key, rootHex: toHex(pick.root) }
+      : { kind: 'conflict-unresolved-choice', candidates: finding.candidates, choice: wanted };
+  }
+  return { kind: 'password', source: 'password' };
+}

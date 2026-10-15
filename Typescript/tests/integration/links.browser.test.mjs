@@ -339,6 +339,22 @@ async function main() {
       await context.close();
     }
 
+    // ── 9. A written door that contradicts the transport of the link: reported, nothing sent ───────────────────────────
+    {
+      const a = fakeMonad({ origin: 'http://a.test:7000', namespace: 'a.test' });
+      const { context, page } = await open(browser, harness, [a], { ns: 'a.test', transport: 'http://a.test:7000' });
+      const selected = await selectLink(page, 'a.test:9999');             // the root, written with ANOTHER port than the link's
+      await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
+      a.reset();
+      await fillCredentials(page, 'zed', 'a-long-secret-1');
+      await page.click('button:has-text(".me"):not([disabled])', { timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const text = await bodyText(page);
+      check('9.1 the card names the contradiction instead of choosing a door', selected && /port 9999/.test(text) && /port 7000/.test(text), text.match(/The address names[^.]*\./)?.[0] || `form shown: ${selected}`);
+      check('9.2 nothing was sent for it', a.count(/POST \/claims\/signIn/) === 0, `sign-ins: ${a.count(/POST \/claims\/signIn/)}`);
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

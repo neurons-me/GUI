@@ -158,7 +158,9 @@ export function splitTypedNamespace(
   rootNamespace: string,
 ): { handle: string; fullNamespace: string; kind: TypedNamespaceKind } {
   const text = String(typed || '').trim();
-  const root = String(rootNamespace || '').trim();
+  // A port written after the root is the DOOR it is reached through, not part of the namespace: the full name, the
+  // vault's key and what is signed are all port-free.
+  const root = String(rootNamespace || '').trim().replace(/:\d{1,5}$/, '');
   const suffix = root ? `.${root.toLowerCase()}` : '';
   if (suffix && text.toLowerCase().endsWith(suffix) && text.length > suffix.length) {
     return { handle: text.slice(0, text.length - suffix.length), fullNamespace: text.toLowerCase(), kind: 'complete' };

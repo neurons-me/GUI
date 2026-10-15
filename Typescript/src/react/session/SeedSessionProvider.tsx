@@ -27,7 +27,8 @@ import {
 } from '@/core/session/monadClient';
 import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase, hexToBytes } from '@/core/identity/recoveryPhrase';
-import { findLocalIdentityVault, hasIdentityVault, saveIdentityVault } from '@/core/identity/localIdentityVault';
+import { chooseIdentityMechanism, findLocalIdentityVault, hasIdentityVault, saveIdentityVault } from '@/core/identity/localIdentityVault';
+import { checkWrittenDoor } from '@/react/link';
 import { targetKey, type LinkTarget } from '@/react/link';
 
 export type SeedSessionStatus = 'idle' | 'pending' | 'ready' | 'error';
@@ -147,7 +148,9 @@ export type SeedSessionContextErrorCode =
   | 'INVALID_RECOVERY_PHRASE'
   | 'IDENTITY_NOT_HELD'
   /** Two stored vaults of the same namespace hold DIFFERENT identities: the person chooses, nothing is picked silently. */
-  | 'VAULT_CONFLICT';
+  | 'VAULT_CONFLICT'
+  /** The port written in the address and the explicit port of the transport it goes through disagree: nothing is sent. */
+  | 'TRANSPORT_PORT_CONFLICT';
 
 export type SeedRecoveryInput = {
   username: string;
@@ -467,7 +470,7 @@ async function openExistingNamespace(
       if (opts.hasLocalVault === false) {
         throw new SeedSessionContextError(
           'INVALID_CLAIM',
-          "This browser has no key for that identity on this address (browser storage is separate for each address, such as cleaker.me and www.cleaker.me). Sign in at the address where you created it, or use Recover Account here.",
+          "This browser has no saved key for that identity on this address (browser storage is separate for each address, such as cleaker.me and www.cleaker.me), so this sign-in tried the identity derived from your name and secret, and it is not the registered one. Sign in at the address where you created it, or use Recover Account here.",
         );
       }
       throw new SeedSessionContextError(
@@ -729,29 +732,25 @@ export function SeedSessionProvider({
       let vaultFailure: SeedSessionContextError | null = null;
       try {
         const found = await findLocalIdentityVault(fullNamespace, password);
-        if (found.status === 'found') {
-          identityRootHex = bytesToHex(found.root);
+        const mechanism = chooseIdentityMechanism(found, input.vaultChoice, bytesToHex);
+        if (mechanism.kind === 'vault') {
+          identityRootHex = mechanism.rootHex;
           vaultFound = true;
-        } else if (found.status === 'conflict') {
-          const chosen = String(input.vaultChoice || '').trim().toLowerCase();
-          const pick = found.candidates.find((c) => c.key === chosen);
-          if (!pick) {
-            // Fingerprints are computed locally: nothing is signed in, bound or sent for identities not yet chosen.
-            const candidates: VaultConflictCandidate[] = found.candidates.map((c) => {
-              let identityHash = '';
-              try { identityHash = identityHashOfRoot(bytesToHex(c.root)); } catch { identityHash = ''; }
-              return { key: c.key, identityHash };
-            });
-            vaultFailure = new SeedSessionContextError(
-              'VAULT_CONFLICT',
-              'This browser holds more than one saved identity for this name. Choose which one to use; nothing was changed.',
-              candidates,
-            );
-          } else {
-            identityRootHex = bytesToHex(pick.root);
-            vaultFound = true;
-          }
+        } else if (mechanism.kind === 'conflict' || mechanism.kind === 'conflict-unresolved-choice') {
+          // Fingerprints are computed locally: nothing is signed in, bound or sent for identities not yet chosen.
+          const candidates: VaultConflictCandidate[] = mechanism.candidates.map((c) => {
+            let identityHash = '';
+            try { identityHash = identityHashOfRoot(bytesToHex(c.root)); } catch { identityHash = ''; }
+            return { key: c.key, identityHash };
+          });
+          vaultFailure = new SeedSessionContextError(
+            'VAULT_CONFLICT',
+            'This browser holds more than one saved identity for this name. Choose which one to use; nothing was changed.',
+            candidates,
+          );
         }
+        // kind === 'password': no vault in this browser under any spelling -> the identity derived from the name and the
+        // secret is what this form attempts, as an open only (see chooseIdentityMechanism).
       } catch (cause) {
         // "Incorrect secret," not "password" -- this app's own vocabulary everywhere else (the field label,
         // RegisterMe/RecoverAccount) never uses "password," and a lone message that did read as an inconsistency, flagged live.
@@ -764,6 +763,19 @@ export function SeedSessionProvider({
         input.transportOrigin || defaultTransportOrigin,
       );
       op.key = linkKeyFor(rootNamespace, cleakerTransportOrigin);
+      // A port written in the root against the explicit port of the transport this sign-in goes through: both are
+      // statements about the door, and they disagree. Reported; neither is dropped.
+      {
+        const writtenPort = Number(String(rootNamespace).match(/:(\d{1,5})$/)?.[1] || 0) || null;
+        const door = checkWrittenDoor({ namespace: rootNamespace.replace(/:\d{1,5}$/, ''), transport: cleakerTransportOrigin }, writtenPort);
+        if (door.state === 'conflict') {
+          return op.fail(new SeedSessionContextError(
+            'TRANSPORT_PORT_CONFLICT',
+            `The address names port ${door.written}, but this sign-in goes through port ${door.link}. Nothing was sent; choose one door.`,
+            door,
+          ));
+        }
+      }
       op.begin();
       // Creating the session can be refused; that is a result like any other, not an exception that leaves the form
       // pending.

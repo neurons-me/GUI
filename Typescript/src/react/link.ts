@@ -370,3 +370,29 @@ export function navigatePage(ws: Workspace, namespace: string, openingId: string
   if (!ctx || !surface || !ctx.openings.some((o) => o.id === openingId)) return ws;
   return replaceContext(ws, { ...ctx, openings: ctx.openings.map((o) => (o.id === openingId ? { ...o, surface } : o)) });
 }
+
+// ── a written address against an existing link ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The door a person wrote (`name.space:8080`) against the transport of a link that already exists for that namespace.
+ * Neither is ignored: when both name a port and they differ it is a conflict the caller reports; when the link names
+ * none, the written port is the door asked for; when the person wrote none, the link's own transport stands.
+ */
+export type WrittenDoor =
+  | { state: 'none' }
+  | { state: 'agrees'; port: number }
+  | { state: 'refines'; port: number }
+  | { state: 'conflict'; written: number; link: number };
+
+export function checkWrittenDoor(link: LinkTarget, writtenPort: number | null): WrittenDoor {
+  if (!writtenPort) return { state: 'none' };
+  let explicit: number | null = null;
+  try {
+    const u = new URL(link.transport);
+    explicit = u.port ? Number(u.port) : null;
+  } catch {
+    explicit = null;
+  }
+  if (explicit === null) return { state: 'refines', port: writtenPort };
+  return explicit === writtenPort ? { state: 'agrees', port: writtenPort } : { state: 'conflict', written: writtenPort, link: explicit };
+}

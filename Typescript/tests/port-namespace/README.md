@@ -53,3 +53,25 @@ fingerprint, no network) and the card asks; `vaultChoice` is the pick. A missing
 identity: the compound seed is tried only as an OPEN (never a claim), and a refusal offers Recover Account.
 
 NOT in this change (next, separate): the parser's `constant`/`fqdn`, the transport dropping a written port, NS1.
+
+## Change 2 (this branch): the port is the transport
+
+Parser (GUI `namespaceExpression.ts`, and `cleaker` branch `fix/port-not-in-namespace`): `fqdn` and `constant` no longer
+include the port; it lives in `transport.port` / `transport.origin` and in the written `expression` (round trip).
+`splitTypedNamespace` ignores a port written in the root. A port written against a link whose transport names a DIFFERENT
+explicit port is `TRANSPORT_PORT_CONFLICT`: reported, nothing sent (`checkWrittenDoor` in `src/react/link.ts`).
+
+COMPATIBILITY CHANGE: cleaker's NS1 asserted `localhost:8191` has constant `localhost:8191` (several local monads, one
+namespace each). It now asserts `localhost` + `transport.port 8191`: `localhost` keeps its namespace when the port changes and
+each origin is a distinct transport. Namespaces that must differ need different names.
+
+"No vault": `chooseIdentityMechanism` (core/identity/localIdentityVault.ts). Exactly two sources sign an open: the stored vault
+root, or the identity DERIVED from name + secret (the form's own mechanism; used only when no vault exists under any spelling,
+never after a vault was found or in conflict, only as an `open`). The failure message states that the derived identity was
+tried. The legacy `monad` session backend is NOT covered and is not claimed compatible.
+
+Not in the parser change on purpose: `useCleakerNamespace`'s seed fallback (`normalizeNamespaceSeed(constant)`) would derive from
+a port-free root now; it has no consumers (the hook is not wired in), so no identity is affected today. Documented here before
+anyone wires it.
+
+Live (disposable monad, new cleaker): 11/11. Browser integration: 43/43.

@@ -204,43 +204,31 @@ function deriveConstantAndPrefix(base: string): {
   prefix: string | null;
   constant: string;
   labels: string[];
+  port: number | null;
 } {
+  // The port is NOT part of the namespace: it belongs to the transport (`transport.port`, `transport.origin`). `fqdn` and
+  // `constant` name the space; `name.space` and `name.space:8080` are one namespace reached through two doors.
   const normalized = normalizeBaseToken(base);
-  const portSuffix = normalized.port == null ? "" : `:${normalized.port}`;
 
   // An IPv4 address is one host, not four labels: its first octet is not a handle and the rest is not a root.
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(normalized.host)) {
-    return {
-      fqdn: `${normalized.host}${portSuffix}`,
-      prefix: null,
-      constant: `${normalized.host}${portSuffix}`,
-      labels: normalized.labels,
-    };
+    return { fqdn: normalized.host, prefix: null, constant: normalized.host, labels: normalized.labels, port: normalized.port };
   }
 
   if (normalized.labels.length === 2 && normalized.labels[1] === "localhost") {
-    return {
-      fqdn: `${normalized.host}${portSuffix}`,
-      prefix: normalized.labels[0] || null,
-      constant: `localhost${portSuffix}`,
-      labels: normalized.labels,
-    };
+    return { fqdn: normalized.host, prefix: normalized.labels[0] || null, constant: "localhost", labels: normalized.labels, port: normalized.port };
   }
 
   if (normalized.labels.length <= 2) {
-    return {
-      fqdn: `${normalized.host}${portSuffix}`,
-      prefix: null,
-      constant: `${normalized.host}${portSuffix}`,
-      labels: normalized.labels,
-    };
+    return { fqdn: normalized.host, prefix: null, constant: normalized.host, labels: normalized.labels, port: normalized.port };
   }
 
   return {
-    fqdn: `${normalized.host}${portSuffix}`,
+    fqdn: normalized.host,
     prefix: normalized.labels[0] || null,
-    constant: `${normalized.labels.slice(1).join(".")}${portSuffix}`,
+    constant: normalized.labels.slice(1).join("."),
     labels: normalized.labels,
+    port: normalized.port,
   };
 }
 
@@ -343,11 +331,14 @@ function splitNamespaceAndOperation(head: string): { namespaceToken: string; ope
 
 function stringifyNamespaceExpression(input: {
   fqdn: string;
+  port?: number | null;
   contextRaw: string | null;
   operation: string | null;
   path: string;
 }): string {
-  const base = String(input.fqdn || "").trim().toLowerCase();
+  // the written door (`:port`) is kept so the expression round-trips, though it is not part of `fqdn`
+  const host = String(input.fqdn || "").trim().toLowerCase();
+  const base = input.port ? `${host}:${input.port}` : host;
   const contextRaw = String(input.contextRaw || "").trim();
   const operation = String(input.operation || "").trim();
   const path = String(input.path || "").trim().replace(/^\/+/, "");
@@ -371,6 +362,7 @@ export function parseCleakerNamespaceExpression(input: string): CleakerNamespace
   const transport = resolveTransport(namespace.base, namespace.context);
   const expression = stringifyNamespaceExpression({
     fqdn: derived.fqdn,
+    port: derived.port,
     contextRaw: namespace.contextRaw,
     operation: head.operation,
     path: parts.path,

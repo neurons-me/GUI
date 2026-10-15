@@ -1,4 +1,5 @@
-// What the GUI does TODAY with a port in the root it signs in under. Passes on the base.
+// What the GUI did with a port in the root it signs in under at the BASE. PINS that behavior: it passes against the
+// base and is EXPECTED TO FAIL after the change (G1-2 now differ: that is the compatibility change). Not in test:runtime.
 import assert from 'node:assert/strict';
 import './shim';
 import { vaultStore } from './shim';
