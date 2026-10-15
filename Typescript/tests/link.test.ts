@@ -3,6 +3,7 @@ import {
   EMPTY_CONTEXT, NOWHERE, addLink, applyReading, applyReadingTo, attachSession, closeLink, detachSession,
   isAuthorized, isReady, moveSemantic, navigateSurface, openLink, operationsTarget, parseSurface, retarget,
   retargetLink, select, selectedLink, targetKey, verificationHolds,
+  EMPTY_WORKSPACE, attachLink, closeContext, closePage, contextOf, navigatePage, openContext, openPage, selectContext, selectPage, setLocation,
   type Link, type LinkContext,
 } from '../src/react/link';
 
@@ -190,6 +191,87 @@ const answerFor = (key: string, ns: string | null, signature: 'absent' | 'valid'
   // a place can hold either channel without the other (a namespace with no external content, and the reverse)
   assert.equal(moveSemantic(NOWHERE, 'a.test', '/').surface, null);
   assert.equal(navigateSurface(NOWHERE, 'https://x.test/').location, null);
+}
+
+
+// ── workspace: contexts with zero, one or several open pages ────────────────────────────────────────────────────────
+{
+  let ws = EMPTY_WORKSPACE;
+  for (const ns of ['ns1.test', 'ns2.test', 'ns3.test', 'ns4.test']) ws = openContext(ws, ns);
+  ws = setLocation(ws, 'ns1.test', '/notas');          // 1: a tree route, no page
+  ws = openPage(ws, 'ns3.test', 'https://example.com/articulos/transporte');
+  ws = openPage(ws, 'ns3.test', 'https://example.org/otra');
+  ws = openPage(ws, 'ns4.test', 'https://example.com/articulos/transporte');  // the SAME url, under another context
+  assert.deepEqual(['ns1.test', 'ns2.test', 'ns3.test', 'ns4.test'].map((n) => contextOf(ws, n)!.openings.length), [0, 0, 2, 1]);
+  assert.equal(contextOf(ws, 'ns1.test')!.location, '/notas');
+  assert.equal(contextOf(ws, 'ns2.test')!.location, null, 'nothing selected, nothing open');
+  assert.equal(ws.selected, null, 'opening contexts and pages selects nothing');
+
+  // the same URL under two contexts is two openings, with ids of their own
+  const o3 = contextOf(ws, 'ns3.test')!.openings[0];
+  const o4 = contextOf(ws, 'ns4.test')!.openings[0];
+  assert.equal(o3.surface.url, o4.surface.url);
+  assert.notEqual(o3.id, o4.id);
+
+  // navigating / selecting / closing in ns3 leaves ns4 as the very same value
+  const ns4Before = contextOf(ws, 'ns4.test');
+  let w2 = navigatePage(ws, 'ns3.test', o3.id, 'https://example.com/articulos/otro');
+  w2 = selectPage(w2, 'ns3.test', o3.id);
+  assert.equal(contextOf(w2, 'ns4.test'), ns4Before, 'ns4 untouched by ns3 navigating and selecting');
+  assert.equal(contextOf(w2, 'ns4.test')!.openings[0].surface.path, '/articulos/transporte');
+  w2 = closePage(w2, 'ns3.test', o3.id);
+  assert.equal(contextOf(w2, 'ns4.test'), ns4Before, 'ns4 untouched by ns3 closing a page');
+  assert.equal(contextOf(w2, 'ns3.test')!.openings.length, 1);
+  assert.equal(contextOf(w2, 'ns3.test')!.selectedOpening, null, 'closing the selected page does not choose another');
+
+  // the tree location and the pages' routes are independent
+  const pagesBefore = contextOf(ws, 'ns3.test')!.openings;
+  const moved = setLocation(ws, 'ns3.test', 'investigacion');
+  assert.equal(contextOf(moved, 'ns3.test')!.location, '/investigacion');
+  assert.equal(contextOf(moved, 'ns3.test')!.openings, pagesBefore, 'moving in the tree does not touch the pages');
+  const browsed = navigatePage(moved, 'ns3.test', o3.id, 'https://example.com/otra/ruta');
+  assert.equal(contextOf(browsed, 'ns3.test')!.location, '/investigacion', 'navigating a page does not move the tree location');
+
+  // the link is a pointer: losing it keeps the context and its pages; closing a page keeps the link
+  let c = attachLink(ws, 'ns3.test', 'ns3.test@https://ns3.test');
+  c = selectPage(c, 'ns3.test', o3.id);
+  const disconnected = attachLink(c, 'ns3.test', null);
+  assert.equal(contextOf(disconnected, 'ns3.test')!.openings.length, 2);
+  assert.equal(contextOf(disconnected, 'ns3.test')!.selectedOpening, o3.id);
+  assert.equal(contextOf(disconnected, 'ns3.test')!.linkId, null);
+  const closedPage = closePage(c, 'ns3.test', o3.id);
+  assert.equal(contextOf(closedPage, 'ns3.test')!.linkId, 'ns3.test@https://ns3.test');
+
+  // closing a context closes its pages and nothing else
+  const gone = closeContext(selectContext(ws, 'ns3.test'), 'ns3.test');
+  assert.equal(contextOf(gone, 'ns3.test'), null);
+  assert.equal(gone.selected, null);
+  assert.equal(contextOf(gone, 'ns4.test'), ns4Before);
+
+  // not a web page, not an opening; unknown ids change nothing
+  assert.equal(openPage(ws, 'ns3.test', 'ns3.test/notas'), ws);
+  assert.equal(closePage(ws, 'ns3.test', 'nope#1'), ws);
+  assert.equal(openContext(ws, 'NS1.test.'), ws, 'a context is its namespace; opening it again changes nothing');
+}
+
+// ── a port is a different transport, not a different namespace; nothing is inherited across ports ──────────────────
+{
+  const p80 = { namespace: 'name.space', transport: 'https://name.space' };
+  const p8080 = { namespace: 'name.space', transport: 'https://name.space:8080' };
+  assert.notEqual(targetKey(p80), targetKey(p8080), 'two ports are two links');
+  // one context (the namespace) can be reached by either link; the verification lives on the links
+  let ctx = addLink(addLink(EMPTY_CONTEXT, p80), p8080);
+  ctx = applyReadingTo(ctx, answerFor(targetKey(p80), 'name.space'));
+  assert.equal(isReady(ctx.links.find((l) => l.id === targetKey(p80))!), true);
+  assert.equal(isReady(ctx.links.find((l) => l.id === targetKey(p8080))!), false, 'the other port did not inherit it');
+  ctx = attachSession(ctx, targetKey(p80), 'ana');
+  assert.equal(ctx.sessions[targetKey(p8080)], undefined, 'nor the session');
+  // pointing the namespace's context at the other port's link does not move verification or credentials with it
+  let ws = openContext(EMPTY_WORKSPACE, 'name.space', { linkId: targetKey(p80) });
+  ws = attachLink(ws, 'name.space', targetKey(p8080));
+  assert.equal(contextOf(ws, 'name.space')!.linkId, targetKey(p8080));
+  assert.equal(isReady(ctx.links.find((l) => l.id === contextOf(ws, 'name.space')!.linkId)!), false);
+  assert.equal(operationsTarget(select(ctx, targetKey(p8080)))!.session, null);
 }
 
 console.log('link: ok');

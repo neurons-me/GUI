@@ -249,3 +249,124 @@ export function navigateSurface(place: Place, url: string): Place {
   const surface = parseSurface(url);
   return surface ? { location: place.location, surface } : place;
 }
+
+// ── workspace: namespace contexts, each with its own open pages ─────────────────────────────────────────────────────
+//
+// The `.me` keeps contexts of namespaces. A context has a semantic location (a path in the tree, or none) and ZERO,
+// ONE or SEVERAL open pages; opening a page does not require one, and working in the tree does not require a page.
+// Three things stay apart and move independently:
+//
+//   context   the namespace's own workspace: location + its openings
+//   link      the way it is reached (a transport, with its verification) -- `linkId` only POINTS at one
+//   page      an opening of an external URL under a context
+//
+// A page belongs to the context that opened it. The same URL opened under two contexts is TWO openings, each with its
+// own selection and navigation. Losing the link (`attachLink(..., null)`) does not close the context or its pages:
+// remote operations are simply unreachable. Closing a page does not close the link. Closing a context closes its pages.
+
+export type Opening = { readonly id: string; readonly surface: Surface };
+
+export type NamespaceContext = {
+  /** Normalized namespace: the identity of the context. The transport is NOT part of it. */
+  readonly key: string;
+  readonly namespace: string;
+  /** Semantic path in the tree, or null when none is selected. Independent of every page's own route. */
+  readonly location: string | null;
+  readonly openings: readonly Opening[];
+  /** The opening the context is looking at, chosen explicitly; closing it does not choose another. */
+  readonly selectedOpening: string | null;
+  /** The link that currently reaches this namespace (a `Link.id`), or null while disconnected. */
+  readonly linkId: string | null;
+};
+
+export type Workspace = {
+  readonly contexts: readonly NamespaceContext[];
+  readonly selected: string | null;
+  /** Counter that makes opening ids unique within the workspace. */
+  readonly seq: number;
+};
+
+export const EMPTY_WORKSPACE: Workspace = { contexts: [], selected: null, seq: 0 };
+
+const contextKey = (namespace: string) => normNamespace(namespace);
+const contextAt = (ws: Workspace, key: string) => ws.contexts.find((c) => c.key === key) ?? null;
+const replaceContext = (ws: Workspace, next: NamespaceContext): Workspace => ({
+  ...ws,
+  contexts: ws.contexts.map((c) => (c.key === next.key ? next : c)),
+});
+
+export function contextOf(ws: Workspace, namespace: string): NamespaceContext | null {
+  return contextAt(ws, contextKey(namespace));
+}
+
+/** Opens a context for a namespace (nothing happens if it is already there). It does not select it. */
+export function openContext(ws: Workspace, namespace: string, options: { linkId?: string | null } = {}): Workspace {
+  const key = contextKey(namespace);
+  if (!key || contextAt(ws, key)) return ws;
+  const ctx: NamespaceContext = { key, namespace: String(namespace).trim(), location: null, openings: [], selectedOpening: null, linkId: options.linkId ?? null };
+  return { ...ws, contexts: [...ws.contexts, ctx] };
+}
+
+/** Closes a context and the pages it opened. Selection falls to null if it was the one; no other context changes. */
+export function closeContext(ws: Workspace, namespace: string): Workspace {
+  const key = contextKey(namespace);
+  if (!contextAt(ws, key)) return ws;
+  return { ...ws, contexts: ws.contexts.filter((c) => c.key !== key), selected: ws.selected === key ? null : ws.selected };
+}
+
+export function selectContext(ws: Workspace, namespace: string | null): Workspace {
+  if (namespace === null) return ws.selected === null ? ws : { ...ws, selected: null };
+  const key = contextKey(namespace);
+  if (!contextAt(ws, key)) return ws;
+  return ws.selected === key ? ws : { ...ws, selected: key };
+}
+
+/** Moves in the tree. No page opens, closes or navigates. `null` clears the location. */
+export function setLocation(ws: Workspace, namespace: string, path: string | null): Workspace {
+  const ctx = contextOf(ws, namespace);
+  if (!ctx) return ws;
+  const next = path === null ? null : semanticPath(path);
+  return ctx.location === next ? ws : replaceContext(ws, { ...ctx, location: next });
+}
+
+/** Points the context at the link that reaches it, or at none (disconnected). The context and its pages stay. */
+export function attachLink(ws: Workspace, namespace: string, linkId: string | null): Workspace {
+  const ctx = contextOf(ws, namespace);
+  if (!ctx || ctx.linkId === linkId) return ws;
+  return replaceContext(ws, { ...ctx, linkId });
+}
+
+/** Opens a page under a context: always a NEW opening, even for a URL already open here or under another context. */
+export function openPage(ws: Workspace, namespace: string, url: string): Workspace {
+  const ctx = contextOf(ws, namespace);
+  const surface = parseSurface(url);
+  if (!ctx || !surface) return ws;
+  const opening: Opening = { id: `${ctx.key}#${ws.seq + 1}`, surface };
+  return { ...replaceContext(ws, { ...ctx, openings: [...ctx.openings, opening] }), seq: ws.seq + 1 };
+}
+
+/** Closes one opening. The context, its link and its other openings are untouched. */
+export function closePage(ws: Workspace, namespace: string, openingId: string): Workspace {
+  const ctx = contextOf(ws, namespace);
+  if (!ctx || !ctx.openings.some((o) => o.id === openingId)) return ws;
+  return replaceContext(ws, {
+    ...ctx,
+    openings: ctx.openings.filter((o) => o.id !== openingId),
+    selectedOpening: ctx.selectedOpening === openingId ? null : ctx.selectedOpening,
+  });
+}
+
+export function selectPage(ws: Workspace, namespace: string, openingId: string | null): Workspace {
+  const ctx = contextOf(ws, namespace);
+  if (!ctx) return ws;
+  if (openingId !== null && !ctx.openings.some((o) => o.id === openingId)) return ws;
+  return ctx.selectedOpening === openingId ? ws : replaceContext(ws, { ...ctx, selectedOpening: openingId });
+}
+
+/** The page's own navigation. The tree location and every other opening stay as they were. */
+export function navigatePage(ws: Workspace, namespace: string, openingId: string, url: string): Workspace {
+  const ctx = contextOf(ws, namespace);
+  const surface = parseSurface(url);
+  if (!ctx || !surface || !ctx.openings.some((o) => o.id === openingId)) return ws;
+  return replaceContext(ws, { ...ctx, openings: ctx.openings.map((o) => (o.id === openingId ? { ...o, surface } : o)) });
+}
