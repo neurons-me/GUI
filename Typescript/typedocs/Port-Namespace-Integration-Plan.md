@@ -9,11 +9,32 @@ A port belongs to the transport, never to the namespace. `name.space` and `name.
 two transports; nothing (verification, session, credentials) passes between them; an explicit door is the only door; the
 same person coming back in is the same identity, and the identity a sign-in attempts is said before anything is signed.
 
+## Names, addresses and identity are three different things
+
+- A **canonical name** (`name.space`, what the monad canonicalizes a loopback to) is a spelling the system agrees on.
+- A **network address** (a host, a port, an origin) is where a request goes.
+- A **verifiable identity** is evidence that the actor behind a name is the same one as before (a signature, a claim, an
+  authority record).
+
+Canonicalizing a name proves none of the other two. `suis-macbook-air.local` is not globally unique (another network can
+have the same `.local` name); `localhost` and `127.0.0.1` mean "this machine" wherever they are read; `cleaker.me` is a DNS
+name whose control can change. "The same namespace" in this plan means "the same name", not "the same actor or tree": that
+continuity needs the evidence the claim flow already asks for (signed proofs against a claim), and nothing in this change
+weakens or replaces it.
+
+## A signed proof goes only to a destination that was selected
+
+`signIn`/`claim` present a signature. Discovery may list candidates; a signature is presented only to: the origins the node was
+built for (preferred/space/bootstrap), the explicit `fallbackOrigins` (empty by default), what the page location or the
+operator's environment names, and the origin the signed namespace itself names. The machine hostname and the built-in defaults
+(public `cleaker.me`, `localhost`) are guesses: they no longer receive a proof when the primary fails (cleaker K13–K16). An
+explicit door (`name.space:9901`) is the ONLY door.
+
 ## Exact inputs
 
 | Piece | Where | Version | Commit |
 |---|---|---|---|
-| cleaker | `all.this/cleaker-port-namespace` (`fix/port-not-in-namespace`, cut from `fix/normalize-surface-origin-port` @ `ee519ef`) | `cleaker@4.0.0` (field unchanged — see Versions) | `9587508` |
+| cleaker | `all.this/cleaker-port-namespace` (`fix/port-not-in-namespace`, cut from `fix/normalize-surface-origin-port` @ `ee519ef`) | `cleaker@4.0.0` (field unchanged; bump on integration) | `4f66f4b` |
 | GUI | `all.this/gui-port-namespace` (`fix/port-not-in-namespace`, cut from `feat/rail-beetle-icon` @ `4765d81b`) | `this.gui@4.1.0` | `d8519bf0` |
 | monad | `all.this/monad-candidate` (`candidate/r20261014-1`) — **no source change** | `monad.ai@3.0.0` | `ef4320e7` |
 | this.me used to run monad's tests | release `r20261014-1` | `this.me@4.2.0` | (release tree) |
@@ -58,6 +79,28 @@ fingerprint, an array match). Caveat: with the repo-linked `this.me` (stale `dis
 2. **`localhost` is one namespace across ports** (NS1 compat change). Several local monads that were distinguished only by
    port now need distinct names.
 3. **Legacy `monad` session backend** (`createSeedSession.buildProof`): not characterized, not claimed compatible.
+
+## The GUI topic branch (separated from the large branch)
+
+`feat/rail-beetle-icon` is 127 commits over `7213a2c1` and mixes themes. The port work needs the **shell restructure**
+(`<Me>`/`<Cleaker>`/`QRConnect`/per-link sessions, commits 6–82 and the `origin/main` merge `cb79c8e0`) and not the rail,
+orb or corner work. Built by cherry-pick, `topic/port-namespace` (worktree `all.this/gui-port-isolated`):
+
+    cb79c8e0  (shell restructure + origin/main merge)
+      + identity card / position label chain (84–98, `fad683fd` … `c89f29c4`)
+      + top bar address, /.me page, welcome (110–113), `f85468a0` card namespace
+      + link model (`d7804e94`), integration harness (`862e90d8`), per-link sessions (`c1a158c8`), workspace (`4765d81b`)
+      + port: tests, vault, parser/door conflict, mechanism note, this plan
+
+Left out on purpose: orb icon work (99–109), left-bar corner/QR control (118–121), `13152626` (QR carries the namespace +
+spacing; the IPv4 parser fix inside it was folded into the parser commit). Conflicts resolved by hand: `package.json`
+(kept as it was; test entries re-added), `namespaceExpression.ts` (the IPv4 branch), `QRConnect.tsx` (one import),
+`links.browser.test.mjs` (sections 6–7 belong to the skipped commits).
+
+Verified on the topic: link 3 groups, port-namespace vault 11 / parser 7 / mechanism 4 / contract 4, browser integration
+32/32 (sections 1–5, 8–10). NOT verified: that this topic also builds against today's `main` (4.2.0, deps from npm, no
+`QRConnect`): `main` does not contain the shell restructure either, so the topic is based on the restructure's own merge
+point; landing on `main` needs the restructure to land first.
 
 ## Order
 
