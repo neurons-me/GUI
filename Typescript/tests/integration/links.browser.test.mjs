@@ -309,6 +309,36 @@ async function main() {
       await context.close();
     }
 
+    // ── 8. Two old vaults of one name hold different identities: the card shows the conflict and asks ─────────────────
+    {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      const { context, page } = await open(browser, harness, [a]);
+      const pw = 'a-long-secret-1';
+      const vaultModule = `/@fs${path.join(root, 'src/core/identity/localIdentityVault.ts')}`;
+      await page.evaluate(async ({ password, vaultModule }) => {
+        const m = await import(/* @vite-ignore */ vaultModule);
+        await m.saveLocalIdentityVault('vik.a.test', new Uint8Array(32).fill(0x31), password);
+        await m.saveLocalIdentityVault('vik.a.test:8080', new Uint8Array(32).fill(0x42), password);   // legacy key, another identity
+      }, { password: pw, vaultModule });
+      const before = await page.evaluate(() => JSON.stringify(Object.keys(localStorage).filter((k) => k.startsWith('this.me.identity-vault:')).sort().map((k) => [k, localStorage.getItem(k)])));
+      a.reset();
+      await fillCredentials(page, 'vik', pw);
+      await page.click('button:has-text(".me"):not([disabled])', { timeout: 3000 });
+      const shown = await until(page, () => !!document.querySelector('[data-gui-node-id$=".vault-conflict"] button'), null, 4000);
+      const buttons = shown ? await page.locator('[data-gui-node-id$=".vault-conflict"] button').count() : 0;
+      check('8.1 two vaults with different identities: the card lists both and asks', shown && buttons === 2, `choices shown: ${buttons}`);
+      check('8.2 nothing was sent while it was undecided', a.count(/POST \/claims\/signIn/) === 0, `sign-ins: ${a.count(/POST \/claims\/signIn/)}`);
+      check('8.3 not signed in, and the stored vaults were not touched',
+        !/Sign out/i.test(await bodyText(page)) &&
+        (await page.evaluate(() => JSON.stringify(Object.keys(localStorage).filter((k) => k.startsWith('this.me.identity-vault:')).sort().map((k) => [k, localStorage.getItem(k)])))) === before);
+      if (shown) {
+        await page.locator('[data-gui-node-id$=".vault-conflict"] button').first().click();
+        const inNow = await signedInAs(page);
+        check('8.4 choosing one signs in with that identity', inNow && a.count(/POST \/claims\/signIn/) > 0);
+      }
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

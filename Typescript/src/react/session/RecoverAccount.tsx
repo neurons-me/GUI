@@ -12,7 +12,7 @@ import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
 import Passphrase from '@/gui/All.This/Cleaker/Passphrase/Passphrase';
 import { deriveIdentityRootBytesFromPhrase } from '@/core/identity/recoveryPhrase';
-import { saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { saveIdentityVault } from '@/core/identity/localIdentityVault';
 import { buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
 
@@ -80,7 +80,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
       // loginWithCleaker looks up later, not semanticNamespace's
       // server-confirmed (possibly differently-canonicalized) value. See
       // buildGuessedFullNamespace's own doc comment for the full story.
-      await saveLocalIdentityVault(buildGuessedFullNamespace(username, namespace || ''), rootBytes, newPassword);
+      await saveIdentityVault(buildGuessedFullNamespace(username, namespace || ''), rootBytes, newPassword);
       setStep('done');
       setWords(Array.from({ length: WORD_COUNT }, () => ''));
       setUsername('');

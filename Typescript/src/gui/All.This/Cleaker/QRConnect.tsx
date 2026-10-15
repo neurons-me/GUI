@@ -845,10 +845,26 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               {/* A server that ANSWERED and refused the credentials says so itself; anything else, against another host,
                   is that host not taking the request from here (a cross-origin sign-in it does not allow), and the raw
                   transport code ("REQUEST_FAILED_405") says nothing to the person. */}
-              {remoteRoot && !['INVALID_CLAIM', 'INVALID_CREDENTIAL_RESULT'].includes(String((error as { code?: unknown }).code ?? ''))
+              {remoteRoot && !['INVALID_CLAIM', 'INVALID_CREDENTIAL_RESULT', 'VAULT_CONFLICT'].includes(String((error as { code?: unknown }).code ?? ''))
                 ? `${remoteRoot} did not accept this sign-in from here.`
                 : error.message}
             </Typography>
+          )}
+          {error && (error as { code?: unknown }).code === 'VAULT_CONFLICT' && (
+            // Two stored vaults of this name hold different identities. Nothing was chosen or changed; the person picks.
+            <Box data-gui-node-id={`${nodeId}.vault-conflict`} sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {(((error as { details?: unknown }).details as Array<{ key: string; identityHash: string }> | undefined) ?? []).map((c) => (
+                <Button
+                  key={c.key}
+                  variant="outlined"
+                  size="small"
+                  onClick={() => onEnter({ ...(remoteRoot ? { transportOrigin: `https://${remoteRoot}` } : {}), namespace: namespaceRootLabel, vaultChoice: c.key })}
+                  sx={{ textTransform: 'none', justifyContent: 'flex-start', fontFamily: 'monospace' }}
+                >
+                  {`${c.identityHash ? c.identityHash.slice(0, 12) : 'identity'} — saved as ${c.key}`}
+                </Button>
+              ))}
+            </Box>
           )}
           {error && remoteRoot && (
             // Another host decides who may sign in to it from where: cleaker.me, for one, answers only requests that

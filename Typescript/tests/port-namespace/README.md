@@ -7,8 +7,9 @@ automatically; the same person coming back in must be the same identity.
 | File | Group | On the base |
 |---|---|---|
 | `characterization.test.ts` | documents today's behavior | passes |
-| `contract.test.ts` | the wanted contract (vault key, full namespace) | fails: 0/4 |
-| `live.test.ts` | the path against a DISPOSABLE monad with throwaway identities | 4/5 (one failure: see below) |
+| `contract.test.ts` | the wanted contract | base: 0/4; now H3/H4 (vault) pass, H1/H2 pending the next change (parser/naming) |
+| `vault.test.ts` | the vault lookup: both migration directions, conflict, originals kept | new, 11/11 |
+| `live.test.ts` | the path against a DISPOSABLE monad with throwaway identities | base 4/5; now 11/11 |
 
 (The parser/binder side lives in `cleaker`, branch `fix/port-not-in-namespace`: `tests/port-namespace.*.test.ts`,
 characterization 7/7 pass, contract 2/7 pass.)
@@ -42,3 +43,13 @@ npx tsx tests/port-namespace/contract.test.ts
 # live: a disposable monad on a free port, killed by its PID afterwards
 PT_ORIGIN=http://127.0.0.1:<port> PT_ROOT=port-test.local npx tsx tests/port-namespace/live.test.ts
 ```
+
+## Change 1 (this branch): finding the vault
+
+`findLocalIdentityVault` (core/identity/localIdentityVault.ts) finds an identity's vault by the namespace without its port,
+under any stored spelling; writes go to the canonical key; originals are never removed or rewritten. If spellings unlock
+to different identities it is a conflict: `loginWithCredentials` fails with `VAULT_CONFLICT` (candidates with an offline
+fingerprint, no network) and the card asks; `vaultChoice` is the pick. A missing vault is not turned into another
+identity: the compound seed is tried only as an OPEN (never a claim), and a refusal offers Recover Account.
+
+NOT in this change (next, separate): the parser's `constant`/`fqdn`, the transport dropping a written port, NS1.

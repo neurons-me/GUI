@@ -59,7 +59,7 @@ export interface MeLauncherView {
    * root some other mounted link last wrote into the page-wide active root (getActiveNamespaceRoot), which is only
    * the fallback for a caller that does not say.
    */
-  onEnter: (options?: { transportOrigin?: string; namespace?: string }) => Promise<void>;
+  onEnter: (options?: { transportOrigin?: string; namespace?: string; vaultChoice?: string }) => Promise<void>;
   onLogout: () => void;
   // Credentials-branch only — null for SessionSurface's one-click shape.
   credentialsForm: { username: string; setUsername: (v: string) => void; password: string; setPassword: (v: string) => void } | null;
@@ -112,6 +112,7 @@ export function useMeLauncherView(): MeLauncherView | null {
           password,
           ...(options?.transportOrigin ? { transportOrigin: options.transportOrigin } : {}),
           ...(options?.namespace ? { namespace: options.namespace } : {}),
+          ...(options?.vaultChoice ? { vaultChoice: options.vaultChoice } : {}),
         });
         setUsername('');
         setPassword('');

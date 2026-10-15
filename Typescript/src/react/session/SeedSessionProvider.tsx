@@ -10,6 +10,7 @@ import {
   type SeedSessionOptions,
   type SeedSessionWriteOptions,
   type CreateSessionRuntime,
+  identityHashOfRoot,
 } from '@/core/session/createSeedSession';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
 import { readAddress as readAddressThrough, subscribeAddress as subscribeAddressThrough, type AddressRead, type AddressReadOptions, type AddressSubscription } from '@/core/session/addressRead';
@@ -26,7 +27,7 @@ import {
 } from '@/core/session/monadClient';
 import { getActiveNamespaceRoot, fetchGatewayHostname, splitTypedNamespace, foreignNamespaceMessage, buildGuessedFullNamespace } from '@/gui/All.This/Cleaker/signedRequest';
 import { bytesToHex, deriveIdentityRootBytesFromPhrase, hexToBytes } from '@/core/identity/recoveryPhrase';
-import { hasLocalIdentityVault, loadLocalIdentityVault, saveLocalIdentityVault } from '@/core/identity/localIdentityVault';
+import { findLocalIdentityVault, hasIdentityVault, saveIdentityVault } from '@/core/identity/localIdentityVault';
 import { targetKey, type LinkTarget } from '@/react/link';
 
 export type SeedSessionStatus = 'idle' | 'pending' | 'ready' | 'error';
@@ -51,6 +52,11 @@ export type SeedCredentialsLoginInput = {
    * here). Ignored by loginWithCredentials()/loginWithSeed().
    */
   identityRootHex?: string | null;
+  /**
+   * loginWithCredentials(), 'cleaker' backend: which stored vault to use when two spellings of the namespace hold
+   * different identities (a `VAULT_CONFLICT` lists them; the person picks one and signs in again with its `key`).
+   */
+  vaultChoice?: string | null;
 };
 
 export type SeedCredentialResolution =
@@ -139,7 +145,9 @@ export type SeedSessionContextErrorCode =
   | 'INVALID_CREDENTIAL_RESULT'
   | 'INVALID_CLAIM'
   | 'INVALID_RECOVERY_PHRASE'
-  | 'IDENTITY_NOT_HELD';
+  | 'IDENTITY_NOT_HELD'
+  /** Two stored vaults of the same namespace hold DIFFERENT identities: the person chooses, nothing is picked silently. */
+  | 'VAULT_CONFLICT';
 
 export type SeedRecoveryInput = {
   username: string;
@@ -167,13 +175,24 @@ export class SeedSessionContextError<
   Code extends SeedSessionContextErrorCode = SeedSessionContextErrorCode,
 > extends Error {
   readonly code: Code;
+  /** Structured data an error may carry for the interface (e.g. the identities of a VAULT_CONFLICT). */
+  readonly details?: unknown;
 
-  constructor(code: Code, message?: string) {
+  constructor(code: Code, message?: string, details?: unknown) {
     super(message || code);
     this.name = 'SeedSessionContextError';
     this.code = code;
+    this.details = details;
   }
 }
+
+/** One identity found in a local vault when two or more disagree (what the person is asked to choose between). */
+export type VaultConflictCandidate = {
+  /** The vault key (the namespace spelling it was stored under). */
+  key: string;
+  /** The identity's public fingerprint. */
+  identityHash: string;
+};
 
 export type SeedSessionContextValue = {
   readonly session: SeedSession | null;
@@ -702,19 +721,44 @@ export function SeedSessionProvider({
       // password is a definitive, specific failure — surfaced directly
       // instead of falling through to a compound-seed attempt that would
       // only ever produce a confusing generic "Invalid Claim" further down.
+      // The vault is found by the NAMESPACE (a port written in the root is not part of it), under any spelling it was
+      // stored with. Two spellings that unlock to different identities are a conflict the person resolves: nothing is
+      // picked, overwritten or merged here.
       let identityRootHex: string | undefined;
-      if (hasLocalIdentityVault(fullNamespace)) {
-        try {
-          const rootBytes = await loadLocalIdentityVault(fullNamespace, password);
-          identityRootHex = rootBytes ? bytesToHex(rootBytes) : undefined;
-        } catch (cause) {
-          // "Incorrect secret," not "password" -- this app's own vocabulary
-          // everywhere else (the field label, RegisterMe/RecoverAccount)
-          // never uses "password," and a lone message that did read as an
-          // inconsistency, flagged live.
-          return op.fail(new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect secret.'));
+      let vaultFound = false;
+      let vaultFailure: SeedSessionContextError | null = null;
+      try {
+        const found = await findLocalIdentityVault(fullNamespace, password);
+        if (found.status === 'found') {
+          identityRootHex = bytesToHex(found.root);
+          vaultFound = true;
+        } else if (found.status === 'conflict') {
+          const chosen = String(input.vaultChoice || '').trim().toLowerCase();
+          const pick = found.candidates.find((c) => c.key === chosen);
+          if (!pick) {
+            // Fingerprints are computed locally: nothing is signed in, bound or sent for identities not yet chosen.
+            const candidates: VaultConflictCandidate[] = found.candidates.map((c) => {
+              let identityHash = '';
+              try { identityHash = identityHashOfRoot(bytesToHex(c.root)); } catch { identityHash = ''; }
+              return { key: c.key, identityHash };
+            });
+            vaultFailure = new SeedSessionContextError(
+              'VAULT_CONFLICT',
+              'This browser holds more than one saved identity for this name. Choose which one to use; nothing was changed.',
+              candidates,
+            );
+          } else {
+            identityRootHex = bytesToHex(pick.root);
+            vaultFound = true;
+          }
         }
+      } catch (cause) {
+        // "Incorrect secret," not "password" -- this app's own vocabulary everywhere else (the field label,
+        // RegisterMe/RecoverAccount) never uses "password," and a lone message that did read as an inconsistency, flagged live.
+        vaultFailure = new SeedSessionContextError('INVALID_CREDENTIAL_RESULT', 'Incorrect secret.');
       }
+      // Reported outside the try above: op.fail throws, and that must not be read as a wrong secret.
+      if (vaultFailure) return op.fail(vaultFailure);
 
       const cleakerTransportOrigin = normalizeMonadTransportOrigin(
         input.transportOrigin || defaultTransportOrigin,
@@ -745,7 +789,7 @@ export function SeedSessionProvider({
 
       try {
         if (shouldAutoOpen) {
-          await openExistingNamespace(nextSession, fullNamespace, { hasLocalVault: hasLocalIdentityVault(fullNamespace) });
+          await openExistingNamespace(nextSession, fullNamespace, { hasLocalVault: vaultFound || hasIdentityVault(fullNamespace) });
         }
         op.commit(nextSession);
         return nextSession;
@@ -938,7 +982,7 @@ export function SeedSessionProvider({
         try {
           const rootHex = rootOf(context, nextSession);
           if (!rootHex) throw new Error('The identity is no longer held by this link.');
-          await saveLocalIdentityVault(buildGuessedFullNamespace(username, rootNamespace), hexToBytes(rootHex), password);
+          await saveIdentityVault(buildGuessedFullNamespace(username, rootNamespace), hexToBytes(rootHex), password);
         } catch (cause) {
           return op.fail(cause);
         }
