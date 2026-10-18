@@ -1675,7 +1675,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // the way back to it as well as the connection state. Only the search field stays in the top bar.
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
-  const RAIL_BADGE_SIZE = 38;
+  const RAIL_BADGE_SIZE = 34;
   // The QR IS the bar's control: it expands and contracts the left bar (and, with the bar off on a narrow screen, it is the
   // small corner QR that brings it back). The identity page is reached from the address beside it.
   const positionBadgeFor = (onToggle: () => void, label: string) => (
