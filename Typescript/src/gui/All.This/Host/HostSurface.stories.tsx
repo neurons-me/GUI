@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import HostSurface from './HostSurface';
 
 const meta: Meta<typeof HostSurface> = {
-  title: 'All.This/Host/HostSurface',
+  title: 'Pieces/Host/HostSurface',
   component: HostSurface,
   parameters: { layout: 'fullscreen' },
 };

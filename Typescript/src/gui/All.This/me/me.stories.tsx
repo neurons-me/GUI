@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Box } from '@mui/material';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import QRme from './QR/QR.me';
-import Me from './me';
+import MeField from './MeField';
 import { deriveIdentityRootHash } from './identity';
 
 export default {
-  title: 'All.This/.me',
-  component: Me,
+  title: 'Pieces/.me',
+  component: MeField,
 };
 
 // ── Hello, I am .me ────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ const MOCK_SURFACES: Surface[] = [
 ];
 
 const meta: Meta<typeof Beatle> = {
-  title: 'All.This/NRP/Beatle',
+  title: 'Pieces/NRP/Beatle',
   component: Beatle,
   parameters: { layout: 'padded' },
 };
@@ -51,7 +51,12 @@ export const InLayout: Story = {
       TopBar={{
         title: 'NRP',
         elementsRight: [
-          { type: 'action', props: { element: <Beatle sx={{ width: 320 }} /> } },
+          // variant="bubble", not "bar" -- this slot has to survive mobile,
+          // where TopBar collapses to a ~375px width. A full 320px bar
+          // wouldn't fit next to the hamburger; the bubble collapses to a
+          // single glyph and expands its full bar in a Popper on click
+          // (see Beatle.tsx) regardless of screen width.
+          { type: 'action', props: { element: <Beatle variant="bubble" defaultExpression="jabellae" /> } },
         ],
       }}
       LeftBar={{

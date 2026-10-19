@@ -340,6 +340,16 @@ export function BlocksTable({
 }: BlocksTableProps) {
   const theme = useGuiTheme();
   const [data, setData] = React.useState<BlocksTableEntry[]>([]);
+  // Was missing entirely before -- every real fetch failure here silently
+  // became an empty list, rendered as "No blockchain entries yet." as if
+  // the request had genuinely succeeded with zero results (flagged live
+  // 2026-10-02, confirmed by reading the catch block below: it only ever
+  // called `console.error` + `setData([])`, same outcome whether the
+  // namespace truly has no entries or the request 404'd outright).
+  // UsersTable.tsx's own sibling fetch already surfaces its real error
+  // this same way -- mirrored here instead of inventing a different
+  // pattern.
+  const [error, setError] = React.useState<string | null>(null);
   const [copiedHash, setCopiedHash] = React.useState<string | null>(null);
   const [focusedHash, setFocusedHash] = React.useState<string | null>(null);
   const [expandedHashes, setExpandedHashes] = React.useState<Record<string, boolean>>({});
@@ -372,6 +382,7 @@ export function BlocksTable({
 
   React.useEffect(() => {
     async function loadBlocks() {
+      setError(null);
       const base = String(endpoint || '').replace(/\/+$/, '');
       if (!base) {
         setData([]);
@@ -384,7 +395,7 @@ export function BlocksTable({
         // used to also send were redundant with that, and being
         // non-"simple" headers, they force a CORS preflight (OPTIONS) on
         // every request. Confirmed live: netget's own mesh proxy
-        // (/apps/netget/*, what this hits when embedded in CleakerLanding
+        // (/apps/netget/*, what this hits when embedded in Namespace
         // rather than given a direct origin) doesn't allow them in
         // Access-Control-Allow-Headers, so the preflight itself failed —
         // UsersTable.tsx's sibling fetch never hit this because it sends
@@ -430,9 +441,10 @@ export function BlocksTable({
         else if (Array.isArray(json?.blocks)) setData(json.blocks);
         else if (Array.isArray(json?.data)) setData(json.data);
         else setData([]);
-      } catch (e) {
+      } catch (e: any) {
         console.error('[BlocksTable] Failed to load blockchain entries:', e);
         setData([]);
+        setError(e?.message || 'Failed to load blockchain entries');
       }
     }
     loadBlocks();
@@ -768,6 +780,16 @@ export function BlocksTable({
           </Typography>
         </Box>
       ) : null}
+      {error && (
+        <Box
+          {...nodeAttrs('error', `${parentNodeType}.ErrorState`)}
+          sx={{ m: 1.5, borderRadius: 2, p: 2, bgcolor: 'background.paper', border: '1px solid', borderColor: 'error.main' }}
+        >
+          <Typography variant="body2" sx={{ color: 'error.main' }}>
+            {error}
+          </Typography>
+        </Box>
+      )}
       <Table
         {...nodeAttrs('rows', `${parentNodeType}.Table`)}
         size="small"
@@ -782,7 +804,7 @@ export function BlocksTable({
         </TableHead>
 
         <TableBody>
-          {displayRows.length === 0 && (
+          {displayRows.length === 0 && !error && (
             <TableRow {...nodeAttrs('rows.empty', `${parentNodeType}.EmptyState`)}>
               <TableCell colSpan={3}>
                 <Typography sx={{ opacity: 0.6, py: 3, textAlign: 'center' }}>No blockchain entries yet.</Typography>

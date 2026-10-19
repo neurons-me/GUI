@@ -5,14 +5,14 @@
  * notifications come only from RuntimeAdapter.subscribe (the same channel
  * useMeValue uses). That means a bound prop re-reads after
  *   - a write through the adapter (runtime.action(...)), or runtime.notify(), or
- *   - an explicit `subscribe` bridge passed to MeRuntimeProvider / createMeRuntime.
+ *   - an explicit `subscribe` bridge passed to <Me> / createMeRuntime.
  * A write made directly on the kernel (me.x(...)) does NOT notify by itself:
  * this.me@4.1.0 exposes no per-instance change listener.
  */
 import * as React from 'react';
 import type { RuntimeAdapter, UnsubscribeFn } from '@/runtime/adapter';
 import { readMeValue } from '@/runtime/run-me';
-import { useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+import { useOptionalMeRuntimeContext } from '@/react/Me';
 import { useRuntimeEnvironment } from '@/runtime/runtimeContext';
 import type { MeLike } from '@/react/types';
 

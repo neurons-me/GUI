@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import QRme from './QR.me';
 
 const meta: Meta<typeof QRme> = {
-  title: 'All.This/.me/QR.me',
+  title: 'Pieces/QR.me',
   component: QRme,
   args: {
     value: 'https://jabellae.cleaker.me',

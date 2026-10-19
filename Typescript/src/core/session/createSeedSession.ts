@@ -173,7 +173,8 @@ export type SeedSessionErrorCode =
   | 'SEED_REQUIRED'
   | 'IDENTITY_HASH_UNAVAILABLE'
   | 'REPLAY_UNAVAILABLE'
-  | 'NAMESPACE_REQUIRED';
+  | 'NAMESPACE_REQUIRED'
+  | 'IDENTITY_NOT_HELD';
 
 export class SeedSessionError<Code extends SeedSessionErrorCode = SeedSessionErrorCode> extends Error {
   readonly code: Code;
@@ -317,6 +318,16 @@ function resolveIdentityHash(me: MeLike): string {
   }
 
   return hash;
+}
+
+/**
+ * The public fingerprint of the identity a root holds, computed locally and without any session: nothing is bound,
+ * nothing is sent. For showing a person WHICH identity is which (e.g. two stored vaults that disagree) without
+ * contacting a monad on behalf of identities they have not chosen yet.
+ */
+export function identityHashOfRoot(rootHex: string): string {
+  const me = new (ME as any)(String(rootHex || '').trim()) as MeLike;
+  return resolveIdentityHash(me);
 }
 
 function replayKernelMemories(me: MeLike, memories: MonadReplayMemory[]) {

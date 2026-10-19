@@ -101,7 +101,7 @@ export function SessionSurface({
   const entering = React.useRef(false);
 
   // Derived, not stored: SeedSessionProvider wraps its children in an extra
-  // MeRuntimeProvider layer the moment snapshot.me/runtime first appear
+  // Me layer the moment snapshot.me/runtime first appear
   // (see SeedSessionProvider.tsx's `content`) — that changes the element
   // type at this component's position in the tree, so React unmounts and
   // remounts everything below it, including this component, at exactly the

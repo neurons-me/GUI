@@ -21,8 +21,8 @@ export type MonadNamespaceSleepingEntry = MonadMeshSleepingEntry;
 export type MonadNamespaceRestartStatus = MonadMeshRestartStatus;
 
 export interface MonadNamespaceCardProps {
-  /** The hostname/namespace this card represents, e.g. "suis-macbook-air.local" */
-  namespace: string;
+  /** The hostname/namespace this card represents, e.g. "suis-macbook-air.local". Omit it where the page already says so. */
+  namespace?: string;
   /** Drives the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
   /** Currently live/registered monads. */
@@ -37,6 +37,10 @@ export interface MonadNamespaceCardProps {
   restartStatus?: MonadNamespaceRestartStatus;
   restartError?: string | null;
   onRestartAll?: () => void;
+  /** Size of the orb relative to its badge size (1 = the 60px orb). A page that IS the monad's view draws it large. */
+  orbScale?: number;
+  /** Show the mesh list expanded (default: collapsed, as in a compact card). */
+  meshDefaultOpen?: boolean;
 }
 
 const cardSx = {
@@ -59,17 +63,23 @@ export default function MonadNamespaceCard({
   restartStatus = 'idle',
   restartError = null,
   onRestartAll,
+  orbScale = 1,
+  meshDefaultOpen = false,
 }: MonadNamespaceCardProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Typography variant="overline" sx={{ opacity: 0.4, letterSpacing: '0.1em' }}>
-        {namespace}
-      </Typography>
+      {namespace ? (
+        <Typography variant="overline" sx={{ opacity: 0.4, letterSpacing: '0.1em' }}>
+          {namespace}
+        </Typography>
+      ) : null}
 
       <Box sx={cardSx}>
         {/* monad.ai orb */}
-        <Box sx={{ height: 130 }}>
-          <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} />
+        <Box sx={{ height: 130 * orbScale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: 120, height: 130, flexShrink: 0, transform: orbScale === 1 ? undefined : `scale(${orbScale})`, transformOrigin: 'center' }}>
+            <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} core="flat" ring={1.25} scale={orbScale} />
+          </Box>
         </Box>
 
         <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1.5 }}>
@@ -81,6 +91,7 @@ export default function MonadNamespaceCard({
             restartStatus={restartStatus}
             restartError={restartError}
             onRestartAll={onRestartAll}
+            defaultOpen={meshDefaultOpen}
           />
         </Box>
       </Box>

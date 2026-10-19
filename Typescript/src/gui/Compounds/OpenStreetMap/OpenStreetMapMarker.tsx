@@ -63,7 +63,7 @@ export type OsmMarkerProps = {
   visible?: boolean;
   /**
    * Kernel paths for any bindable prop, read through the existing runtime
-   * (MeRuntimeProvider / RuntimeAdapter). A bound value wins over the plain
+   * (Me / RuntimeAdapter). A bound value wins over the plain
    * prop. Updates follow the runtime's notifications only: adapter writes,
    * runtime.notify(), or an explicit subscribe bridge.
    */

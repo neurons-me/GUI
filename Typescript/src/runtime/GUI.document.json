@@ -60,7 +60,7 @@
               "netget": {
                 "label": "Netget",
                 "to": "/netget",
-                "icon": "router",
+                "icon": "glyph:𓆣",
                 "placement": "end"
               }
             }
@@ -81,7 +81,7 @@
         "children": {
           "landing": {
             "component": "Landing",
-            "route": "/",
+            "route": "/.me",
             "note": "The .me QR and sign-in / register / recover. Behavior stays in the component.",
             "label": "Landing",
             "children": {
@@ -130,9 +130,15 @@
               }
             }
           },
+          "home": {
+            "label": "Home",
+            "component": "Welcome",
+            "route": "/"
+          },
           "users": {
             "component": "Users",
             "route": "/users",
+            "needs": "monad",
             "note": "Public claims directory: who has claimed this namespace.",
             "label": "Users",
             "children": {
@@ -178,6 +184,7 @@
           "blockchain": {
             "component": "Blockchain",
             "route": "/blockchain",
+            "needs": "monad",
             "note": "Everything written to this namespace, as one stream.",
             "label": "Blockchain",
             "children": {
@@ -207,6 +214,7 @@
             "label": "URL",
             "component": "Url",
             "route": "/url",
+            "needs": "monad",
             "note": "Opens a real NRP channel to a URL under this namespace root.",
             "children": {
               "heading": {
@@ -224,12 +232,14 @@
             "label": "Keychain",
             "component": "Keychain",
             "route": "/keychain",
+            "needs": "monad",
             "note": "The signing keys of the signed-in identity."
           },
           "netget": {
             "label": "Netget",
             "component": "Netget",
             "route": "/netget",
+            "needs": "backend",
             "note": "The gateway that serves this namespace: its status, and setting it up.",
             "children": {
               "heading": {

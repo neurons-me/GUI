@@ -4,7 +4,7 @@ import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from './DevToolsLauncher';
 import MeLauncher from '@/react/session/MeLauncher';
-import { MeRuntimeProvider, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
 import type { MeLike } from '@/react/types';
@@ -58,7 +58,7 @@ export interface AppShellProps {
  * not context-aware — passing nothing here silently falls back to the
  * renderer's identity-passthrough defaultAdapter, so a spec view's
  * {read: ...} tokens would just echo the raw path string back instead of
- * resolving. Pull the real adapter out of MeRuntimeProvider's own context
+ * resolving. Pull the real adapter out of Me's own context
  * and hand it down explicitly.
  *
  * Suspense wraps the ComponentType branch for apps whose views are
@@ -119,7 +119,7 @@ function AppShellNav({ app, navItems, footerElements }: Pick<AppShellProps, 'app
 /**
  * The generic app shell: declares the app in `.me`, seeds the initial route
  * from the URL once, then renders Theme -> (devtools providers) ->
- * MeRuntimeProvider -> nav + Layout -> the active view. This is the reactive,
+ * Me -> nav + Layout -> the active view. This is the reactive,
  * mixed-view (spec-tree AND plain React), devtools-enabled counterpart to
  * mountApp() — mountApp() targets the UMD/global-`window.GUI` distribution
  * (one view resolved once at boot, no live route, devtools only on its
@@ -140,9 +140,9 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
   }, []);
 
   const body = (
-    <MeRuntimeProvider me={me} runtime={runtime}>
+    <Me me={me} runtime={runtime}>
       <AppShellNav app={app} navItems={navItems} footerElements={footerElements} />
-    </MeRuntimeProvider>
+    </Me>
   );
 
   return (

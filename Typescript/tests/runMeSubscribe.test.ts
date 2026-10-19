@@ -3,7 +3,7 @@ import * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import ME from 'this.me';
 import { createMeRuntime } from '../src/runtime/run-me';
-import { MeRuntimeProvider } from '../src/react/MeRuntimeProvider';
+import { Me as MeRuntimeProvider } from '../src/react/Me'; // renamed on this branch: the same provider, same props
 import { useMe } from '../src/react/useMe';
 import { useMeValue } from '../src/react/useMeValue';
 import type { RuntimeAdapter } from '../src/runtime/adapter';

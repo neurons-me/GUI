@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmAttributionPosition } from './OpenStreetMap';
 import type { OsmOverlayPosition } from './context';
@@ -21,7 +21,7 @@ function VeracruzOverlays({ live, attribution, mono }: OverlayArgs) {
   const [open, setOpen] = React.useState<string | null>(null);
   const toggle = (key: string) => () => setOpen((k) => (k === key ? null : key));
   return (
-    <MeRuntimeProvider me={me} runtime={runtime}>
+    <Me me={me} runtime={runtime}>
       <OpenStreetMap {...VERACRUZ_FRAME} basemap={VERACRUZ_BASEMAP} source={VERACRUZ_SOURCE} attribution={{ position: attribution }} ariaLabel="Port of Veracruz (OpenStreetMap basemap)" markerScale="screen">
         <VeracruzMarkers />
         <OpenStreetMap.Legend mono={mono} width={214} items={LEGEND_ITEMS} footer="kernel counts · 3 off-map (adapter)" />
@@ -44,7 +44,7 @@ function VeracruzOverlays({ live, attribution, mono }: OverlayArgs) {
         <OpenStreetMap.Chip mono={mono} label="avg km/h" bind="trucks.speed.avg" format={(v) => (typeof v === 'number' ? v.toFixed(1) : '—')} minValueCh={4} hideBelow={520} />
         <OpenStreetMap.Chip mono={mono} label="simulation" value="06:42 · ×4" variant="adapter" title="simulator clock: adapter, not a kernel path" />
       </OpenStreetMap>
-    </MeRuntimeProvider>
+    </Me>
   );
 }
 

@@ -8,7 +8,7 @@ import MainServerView from './MainServerView';
 // from frontend_local's WelcomeNetget.jsx, see that file's header comment
 // for what was intentionally left out of this first pass.
 const meta: Meta<typeof MainServerView> = {
-  title: 'All.This/netget/Main Server',
+  title: 'Pieces/netget/Main Server',
   component: MainServerView,
   parameters: {
     layout: 'fullscreen',

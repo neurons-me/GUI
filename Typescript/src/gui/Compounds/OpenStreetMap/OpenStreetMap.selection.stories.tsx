@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmUserView } from './projection';
 import { createOsmProjection } from './projection';
@@ -47,7 +47,7 @@ function VeracruzSelection({
 }) {
   const { me, runtime } = useKernel(live);
   return (
-    <MeRuntimeProvider me={me} runtime={runtime}>
+    <Me me={me} runtime={runtime}>
       <OpenStreetMap
         {...VERACRUZ_FRAME}
         basemap={VERACRUZ_BASEMAP}
@@ -72,7 +72,7 @@ function VeracruzSelection({
           </>
         ) : null}
       </OpenStreetMap>
-    </MeRuntimeProvider>
+    </Me>
   );
 }
 
@@ -187,13 +187,13 @@ export const NoSelection: Story = {
   render: ({ live }) => {
     const { me, runtime } = useKernel(live);
     return (
-      <MeRuntimeProvider me={me} runtime={runtime}>
+      <Me me={me} runtime={runtime}>
         <OpenStreetMap {...VERACRUZ_FRAME} basemap={VERACRUZ_BASEMAP} source={VERACRUZ_SOURCE} markerScale="screen" ariaLabel="Port of Veracruz">
           <VeracruzMarkers liveMeta />
           <OpenStreetMap.Legend mono width={214} items={LEGEND_ITEMS} footer="kernel counts · 3 off-map (adapter)" />
           <OpenStreetMap.Controls />
         </OpenStreetMap>
-      </MeRuntimeProvider>
+      </Me>
     );
   },
 };

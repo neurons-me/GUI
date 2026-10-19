@@ -2,6 +2,22 @@ import React from 'react';
 import Layout from './Layout';
 import type { RegistryEntry } from '@/Registry/types';
 import type { LayoutSpec } from './Layout.types';
+
+const LAYOUT_META: RegistryEntry['meta'] = {
+  id: 'layout.layout',
+  label: 'Layout',
+  kind: 'layout',
+  group: 'Layout',
+  path: ['Layout', 'Shell'],
+  tags: ['layout', 'shell', 'topbar', 'leftbar', 'rightbar', 'footer'],
+  demoSpec: {
+    type: 'Layout',
+    props: {
+      children: 'Content',
+    },
+  },
+};
+
 /**
  * The LayoutResolver dynamically constructs a responsive layout
  * using declarative JSON configuration.
@@ -11,6 +27,7 @@ import type { LayoutSpec } from './Layout.types';
  */
 const LayoutResolver: RegistryEntry = {
   type: 'Layout',
+  meta: LAYOUT_META,
   resolve(spec: LayoutSpec) {
     const props = spec.props ?? {};
 

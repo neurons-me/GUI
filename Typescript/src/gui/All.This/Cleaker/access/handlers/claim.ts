@@ -2,6 +2,16 @@ import type { ClaimHandlerInput, ClaimHandlerResult } from '../types';
 import { readKernelString, writeKernelEntries } from '../internal';
 import { resolveSession } from './resolveSession';
 
+/**
+ * @deprecated (2026-10-01) Independently-implemented claim primitive, never
+ * actually called by the real `Cleaker` identity flow (that goes through
+ * `SeedSessionProvider`'s own `registerWithCredentials`/`claimAndOpen` —
+ * `createCleakerSession.ts`), and has zero internal consumers in this
+ * monorepo today. Kept exported, not removed, because it's part of this
+ * package's published root (`index.ts`) and "no internal consumer" doesn't
+ * rule out an external one importing it by name. Not a drop-in replacement
+ * for the real flow — do not wire this into new code.
+ */
 export function claimCleakerNamespace(input: ClaimHandlerInput): ClaimHandlerResult {
   const username = String(input.username || '').trim();
   const namespace = String(input.namespace || '').trim();

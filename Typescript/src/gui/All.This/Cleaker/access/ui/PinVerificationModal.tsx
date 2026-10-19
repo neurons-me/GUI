@@ -14,6 +14,14 @@ export type PinVerificationModalProps = {
   onConfirm: (pin: string) => void | Promise<void>;
 };
 
+/**
+ * @deprecated (2026-10-01) Never wired to anything — `requestAccess.ts`'s
+ * PIN step calls `./bridge.ts`'s UI bridge directly, and nothing in this
+ * monorepo ever registered this component as that bridge's PIN handler. Its
+ * own body text already called itself a placeholder pending a dedicated PIN
+ * mechanism. Kept exported, not removed, because it's part of this
+ * package's published root (`index.ts`). Do not wire this into new code.
+ */
 export default function PinVerificationModal(props: PinVerificationModalProps) {
   const { open, appName, error, onCancel, onConfirm } = props;
   const [pin, setPin] = React.useState('');

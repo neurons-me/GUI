@@ -3,7 +3,7 @@ import * as React from 'react';
 import { renderToString } from 'react-dom/server';
 import ME from 'this.me';
 import { createMeRuntime } from '../src/runtime/run-me';
-import { MeRuntimeProvider } from '../src/react/MeRuntimeProvider';
+import { Me } from '../src/react/Me';
 import OpenStreetMap from '../src/gui/Compounds/OpenStreetMap/OpenStreetMap';
 import {
   OSM_ATTRIBUTION,
@@ -171,7 +171,7 @@ function boundMarkerFollowsTheRuntime() {
   const bridge = makeBridge();
   const runtime = createMeRuntime(me, { subscribe: bridge.subscribe });
   const render = () => renderToString(
-    h(MeRuntimeProvider, { me, runtime },
+    h(Me, { me, runtime },
       h(OpenStreetMap, FRAME,
         h(OpenStreetMap.Marker, { id: 'veh', bind: { lat: 'vehicle.lat', lon: 'vehicle.lon' }, label: 'fixed label' }))),
   );
@@ -303,7 +303,7 @@ function specNodeIdsAndProvenance() {
     ],
   };
   const html = renderToString(
-    h(MeRuntimeProvider, { me, runtime },
+    h(Me, { me, runtime },
       h(() => renderNode(spec as any, { React, registry: SPEC_REGISTRY, onNodeResolved: (r: any) => records.push(r) } as any))),
   );
   assert.match(html, /<div[^>]*class="gui-osm"[^>]*data-gui-node-id="port-map"/, 'map root carries its node id');

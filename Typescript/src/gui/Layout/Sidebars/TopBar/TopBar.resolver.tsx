@@ -44,6 +44,21 @@ type TopBarSpec = {
   };
 };
 
+const TOP_BAR_META: RegistryEntry['meta'] = {
+  id: 'layout.topbar',
+  label: 'TopBar',
+  kind: 'layout',
+  group: 'Layout',
+  path: ['Layout', 'Sidebars'],
+  tags: ['topbar', 'navigation', 'header', 'appbar'],
+  demoSpec: {
+    type: 'TopBar',
+    props: {
+      title: 'neurons.me',
+    },
+  },
+};
+
 /**
  * TopBarResolver
  * - Maps a JSON-friendly spec → real <TopBar />.
@@ -51,6 +66,7 @@ type TopBarSpec = {
  */
 const TopBarResolver: RegistryEntry = {
   type: 'TopBar',
+  meta: TOP_BAR_META,
   resolve(spec: TopBarSpec, ctx?: ResolveCtx) {
     const p = spec.props ?? {};
 

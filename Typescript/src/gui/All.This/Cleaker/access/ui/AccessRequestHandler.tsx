@@ -10,6 +10,14 @@ type PendingConfirmation = {
   resolve: (approved: boolean) => void;
 };
 
+/**
+ * @deprecated (2026-10-01) No longer mounted anywhere — its only mount
+ * point was the now-retired old `Cleaker.tsx`. Its own caller-trigger,
+ * `requestAccess()`, has zero callers anywhere in this monorepo, so even
+ * mounted, this component's confirmation UI was never actually reachable
+ * in practice. Kept exported, not removed, because it's part of this
+ * package's published root (`index.ts`). Do not wire this into new code.
+ */
 export default function AccessRequestHandler() {
   useMe();
   const stagedAppName = useMeValue<string>('ui.cleaker.access.appName') || '';

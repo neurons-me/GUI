@@ -18,11 +18,23 @@ const IDLE_CHANNEL: NamespaceChannel = {
   state: 'idle',
 };
 
+export type UseBeatleOptions = {
+  /**
+   * Spaces the runtime this channel talks to has declared for itself (e.g. the root a monad confirmed for this
+   * page). A one-label space (`localhost`) is a valid namespace here only because of that context; without it
+   * the two-label shape rule still applies. Read when open() is called, so it can arrive after mount.
+   */
+  declaredSpaces?: readonly string[];
+};
+
 export function useBeatle(
   nrpEndpoint = DEFAULT_ENDPOINT,
   onMessage?: (msg: BeatleMessage) => void,
+  options: UseBeatleOptions = {},
 ) {
   const [channel, setChannel] = useState<NamespaceChannel>(IDLE_CHANNEL);
+  const declaredSpacesRef = useRef<readonly string[]>(options.declaredSpaces ?? []);
+  declaredSpacesRef.current = options.declaredSpaces ?? [];
   const ws = useRef<WebSocket | null>(null);
 
   const patch = (state: ResolutionState, extra?: Partial<NamespaceChannel>) =>
@@ -66,7 +78,7 @@ export function useBeatle(
     }
 
     patch('parsing', { expression: null, resolved: [], error: undefined });
-    const expr = parseNRPExpression(raw);
+    const expr = parseNRPExpression(raw, { declaredSpaces: declaredSpacesRef.current });
 
     if (!expr.valid) {
       patch('error', { expression: expr, error: expr.error ?? 'Invalid expression' });

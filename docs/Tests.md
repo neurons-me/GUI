@@ -1,7 +1,3 @@
-[← Back to GUI Docs](https://neurons-me.github.io/GUI/docs/)
-
----
-
 # Tests
 
 `this.gui` has three test suites. Two run automatically on every build; one requires a compiled dist.
@@ -97,7 +93,3 @@ node tests/consume-test.mjs
 | `markdown-document-core` | Markdown parser, node tree output, URL resolution |
 | `monad-discovery-core` | Endpoint normalization, topology scan, merge logic, reactive store |
 | `consume-test` | Bundle integrity, package consumption, subpath exports |
-
----
-
-[← Back to GUI Docs](https://neurons-me.github.io/GUI/docs/)

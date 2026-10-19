@@ -9,23 +9,22 @@
 // a demo with a fake local hash; this wires the same shape to the real
 // session (useMeLauncherView(), the same claim/open flow MeLauncher uses).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Routes, Route, Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, Navigate, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { RouterProvider } from '@/Router/Router';
 import { normalizeProofMessage } from 'this.me';
 import Box from '@/gui/Atoms/Box/Box';
-import Icon from '@/gui/Atoms/Icon/Icon';
 import IconButton from '@/gui/Atoms/IconButton/IconButton';
+import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
-import QRme from '@/gui/All.This/me/QR/QR.me';
+import Dialog from '@mui/material/Dialog';
+import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
 import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
 import BlocksTable from '@/gui/All.This/Cleaker/Namespace/Blocks/BlocksTable';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
-import { setActiveNamespaceRoot } from '@/gui/All.This/Cleaker/signedRequest';
-import { useOptionalSeedSession } from '@/react/session/useSeedSession';
 import {
   writeKernelThemeFacts,
   writeSyncedThemePreference,
@@ -34,7 +33,12 @@ import {
 } from '@/core/session/createSeedSession';
 import { readMeValue } from '@/runtime/run-me';
 import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
+import { Me } from '@/react/Me';
+import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
+import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { endpointForRoot } from '@/react/session/remoteRoot';
+import { linkQrValue } from '@/react/linkQr';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
@@ -43,20 +47,22 @@ import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
-import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, type CleakerRootStatus, probeNetgetGateway } from './verifiedCleakerRoot';
-import { useMeLauncherView } from './MeLauncher';
+import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
+import { useDoorLayers, probeDoorLayers, type DoorLayers } from './doorLayers';
+import { ConnectionSeamsContext } from '@/gui/All.This/Cleaker/useQRConnect';
+import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
 import { makeDefaultResolvers } from '@/gui/All.This/NRP/Beatle/Beatle.types';
-import type { NamespaceChannel, ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
 import { useOptionalSeedSessionContext } from './SeedSessionProvider';
-import RegisterMe from './RegisterMe';
-import RecoverAccount from './RecoverAccount';
 import MainServerView from '@/gui/All.This/netget/MainServer/MainServerView';
 import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
 import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
 import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
+import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
+import { positionExpression as composePosition, shownNamespace, cardNamespace } from '@/react/positionExpression';
+import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
   username: string;
@@ -89,6 +95,11 @@ export interface NamespaceProps {
    */
   netgetMonadOrigin?: string;
   /**
+   * A handle the `.me` above this shell declared (`<Me username>`). It pre-fills the sign-in form, once, and that is
+   * all: it is context, not proof of who is here.
+   */
+  username?: string;
+  /**
    * Parts an app adds on top of the root GUI's document (pages and left-bar elements). The shell is the one
    * GUI: an app such as netget declares its own pages here instead of being a second application.
    */
@@ -97,36 +108,21 @@ export interface NamespaceProps {
   pages?: Record<string, React.ComponentType<any>>;
   /** Extra LeftBar footer actions this app adds after Theme/Dev Tools (netget's Frontend Mode toggle). */
   footerExtras?: LeftBarElement[];
-}
-
-// No hardcoded root here on purpose — cleaker.me/local.cleaker were never
-// structurally special, just two values `cleakerEndpoint` happened to hold
-// in this session's dev environment (see SetChemistry.findings.md's
-// "generalizes past 2" note). Every REAL caller today already passes
-// `cleakerEndpoint` explicitly (netget's App.jsx, every Storybook story,
-// every demo pilot) — window.location was never actually load-bearing, it
-// was a silent guess sitting behind an `||` that happened to agree with
-// reality only because this component has so far only ever been mounted
-// as the whole page, self-hosted by the exact origin it names. That
-// coincidence breaks the moment this same component is mounted somewhere
-// that ISN'T the namespace it should bind to — an embedded script on an
-// unrelated third-party page (e.g. inserted into a Wikipedia article) is
-// the clearest case: window.location would name that OTHER site, and this
-// used to silently bind there instead, with no error, no warning, just a
-// wrong namespace resolved with total confidence. Same principle as
-// cleaker's own `confirmedNamespace` fix (binder.ts): never let a guess
-// this consequential stand in for a value the caller can simply be
-// required to supply. `cleakerEndpoint` stays optional in the TS type
-// (existing callers, external consumers) — this is the runtime guard.
-function requireCleakerEndpoint(cleakerEndpoint: string | undefined): string {
-  const explicit = String(cleakerEndpoint || '').trim();
-  if (explicit) return explicit;
-  throw new Error(
-    'CLEAKER_ENDPOINT_REQUIRED: this component needs an explicit `cleakerEndpoint` prop -- ' +
-    'it never guesses one from window.location. Pass the real namespace root it should bind ' +
-    'to (e.g. "http://local.cleaker"), even when this page happens to be self-hosted from ' +
-    'that same origin.'
-  );
+  /**
+   * Ids of left-bar items to leave out of the rail (the element's `props.id`: `users`, `blockchain`, `url`, ...).
+   * Only the ICON is left out: the page and its route still exist, so a direct link keeps working. For a door that is
+   * an app rather than a namespace -- the main server's own door -- the namespace's directory views (Users,
+   * Blockchain, URL) are not that app's navigation.
+   */
+  hideBarItems?: string[];
+  /**
+   * The semantic path the position label shows after the namespace; '/' (default) is the namespace's root. A GUI route
+   * is not a semantic path and is never taken for one: an app whose door points at another node of the namespace says
+   * so here (netget's main-server door points at `/netget`).
+   */
+  semanticPath?: string;
+  /** See CleakerProps.namespaceSource. */
+  namespaceSource?: 'declared' | 'address';
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -147,21 +143,6 @@ function getNetgetMonadOrigin(override?: string): string {
 // + `to` even though MUI's underlying IconButton renders them correctly.
 // Cast once here rather than sprinkling `as any` at each call site.
 const LinkIconButton = IconButton as React.ComponentType<any>;
-
-// Same idea as netget resolving which app you're addressing — this landing
-// page is the entry point for a namespace *root*, and until now gave no
-// sign of which one. Derived straight from cleakerEndpoint (the same value
-// that already drives the QR), so it's never a second source of truth: the
-// prop netget's App.jsx passes ("http://local.cleaker") or the component's
-// own absolute default ("https://cleaker.me") both reduce to just the host
-// — "local.cleaker" or "cleaker.me" — matching <handle>.<root> exactly.
-function deriveNamespaceRootLabel(endpoint: string): string {
-  try {
-    return new URL(endpoint).hostname;
-  } catch {
-    return endpoint.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  }
-}
 
 // Same mixed-content fix as rootSeed's own derivation below (see
 // GUI): when the namespace being resolved IS the host this
@@ -213,54 +194,6 @@ function cleakerEndpointForNamespace(namespace: string, knownRoot?: CleakerRootS
   return `https://${namespace}`;
 }
 
-// QRme itself now always draws a crisp, legible ".me" (PixelWordmark,
-// rendered independent of QR module resolution — see QR.me.tsx / meMark.ts),
-// so expanding on click is purely about physical scan size, not legibility.
-// Small by default (a badge, not something meant to be scanned from across
-// a room); click grows it to a size worth holding a camera up to — its own
-// "view mode," the dominant thing on the page instead of one element among
-// several. Kept modest rather than huge — a QR this clean scans fine well
-// below full-viewport size.
-const QR_DIAMETER_DEFAULT = 125;
-const QR_DIAMETER_EXPANDED = 214;
-
-// Spanish-language mirror of Beatle.tsx's own (English, internal) STATE_LABEL
-// -- not exported from there, and this page's other status copy ("No se
-// pudo conectar a…") is already Spanish, so this stays consistent with it
-// rather than pulling in Beatle's English wording.
-const BEATLE_STATE_LABEL: Record<ResolutionState, string> = {
-  idle: '',
-  parsing: 'Parsing…',
-  connecting: 'Connecting…',
-  resolving: 'Resolving…',
-  connected: 'Connected',
-  streaming: 'Streaming',
-  error: 'Could not connect',
-  invalid: 'Invalid domain',
-  disconnected: '',
-};
-
-// Local extensions of NamespaceProps (like the removed `destination`
-// prop before them), not a change to that shared, exported type -- only
-// GUI supplies these, wiring Beatle's own resolution into
-// the SAME shared context the sidebar and /netget read from, instead of
-// independently-drifting "current root" facts. onBeatleNamespaceResolved:
-// see handleBeatleConnect below and verifiedCleakerRoot.ts's `promote`.
-// sharedRootStatus: the shared context's OWN in-flight/settled status, so
-// the QR can wait for that re-verification instead of reporting success
-// the instant Beatle's own (weaker) mesh resolution does.
-// Handed in by the renderer (renderGuiDocumentPage): the document path a page
-// was declared at. Defaults keep each page usable on its own.
-type DocumentPageProps = NamespaceProps & {
-  'data-gui-node-id'?: string;
-  'data-gui-component'?: string;
-};
-
-type CleakerLandingHomeProps = DocumentPageProps & {
-  onBeatleNamespaceResolved?: (namespace: string) => void;
-  sharedRootStatus?: CleakerRootStatus;
-};
-
 // The ONE root of this page's Inspector tree. `GUI` is the same branch name
 // writeKernelWindowLocation/writeKernelThemeFacts already write into `.me`
 // (GUI.window.location, GUI.theme.*) -- the tree the Inspector shows and
@@ -277,71 +210,6 @@ function shortMonadId(id: string): string {
   const m = /^(monad:)?([0-9a-f]{20,})$/i.exec(String(id || ''));
   return m ? `${m[1] ?? ''}${m[2].slice(0, 8)}…${m[2].slice(-6)}` : String(id || '');
 }
-// Where the GUI document (runtime/GUI.document.json) declares the landing page.
-const LANDING_ID = 'GUI.content.landing';
-
-const LIVE_PROFILE_FIELDS = ['name', 'email', 'phone'] as const;
-type LiveProfileField = (typeof LIVE_PROFILE_FIELDS)[number];
-
-// The first real GUI consumer of cleaker's own live channel (this
-// session's own work: modules/cleaker's binder.ts ensureLiveChannel/
-// RemoteSlot, wired through session.readOwnerPath/onOwnerPathChange).
-// Deliberately reads THIS identity's own profile through the SAME
-// <owner>.cleaker.<path> convention meant for viewing someone ELSE's
-// namespace, just pointed at your own username -- there is no separate
-// "read my own stuff live" primitive, and building one wasn't the point
-// of this first pass. Two tabs/devices signed into the SAME identity:
-// change profile.name from one (a disposable-infra signed write, today --
-// there is no edit UI yet, a deliberately separate piece of work), and
-// this component updates on its own, no refresh, the moment
-// 'value:changed' fires. Read-only, and silently renders nothing if the
-// backend can't offer readOwnerPath (createSeedSession()'s plain 'monad'
-// backend has no cleaker node to walk).
-const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ session, username }) => {
-  const [fields, setFields] = useState<Partial<Record<LiveProfileField, string>>>({});
-
-  useEffect(() => {
-    setFields({});
-    if (!username || typeof session.readOwnerPath !== 'function') return undefined;
-    let cancelled = false;
-
-    LIVE_PROFILE_FIELDS.forEach((field) => {
-      session.readOwnerPath!<string>(username, `profile.${field}`)
-        .then((value) => {
-          if (cancelled || value === undefined) return;
-          const trimmed = String(value).trim();
-          if (trimmed) setFields((prev) => ({ ...prev, [field]: trimmed }));
-        })
-        .catch(() => { /* Best-effort — this is a live convenience, not a required read. */ });
-    });
-
-    const keyPrefix = `${username}.cleaker.profile.`;
-    const unsubscribe = session.onOwnerPathChange?.((key, value) => {
-      if (!key.startsWith(keyPrefix)) return;
-      const field = key.slice(keyPrefix.length) as LiveProfileField;
-      if (!LIVE_PROFILE_FIELDS.includes(field)) return;
-      setFields((prev) => ({ ...prev, [field]: String(value ?? '').trim() }));
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [session, username]);
-
-  if (!fields.name && !fields.email && !fields.phone) return null;
-
-  return (
-    <Box
-      data-gui-node-id={`${LANDING_ID}.profile`}
-      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}
-    >
-      {fields.name && <Typography variant="body2" sx={{ fontWeight: 600 }}>{fields.name}</Typography>}
-      {fields.email && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fields.email}</Typography>}
-      {fields.phone && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{fields.phone}</Typography>}
-    </Box>
-  );
-};
 
 // Two jobs, now genuinely different in kind:
 // 1. Local mirror -- same "GUI.*" branch, same reasoning as
@@ -414,7 +282,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 // through here, whichever root it was made under) and where a pick goes.
 // Filtered client-side -- the list is small enough that a real search
 // endpoint would be overbuilding it.
-const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string }> = ({ cleakerEndpoint, netgetMonadOrigin }) => {
+const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string; onExpandedChange?: (expanded: boolean) => void; collapsedSize?: number }> = ({ cleakerEndpoint, netgetMonadOrigin, onExpandedChange, collapsedSize }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
@@ -451,683 +319,26 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
     }
   };
 
+  // No longer its own `position: fixed` box -- lives inside the shared
+  // flex row `GUI` renders (alongside the position QRme badge) so the two
+  // align by flex centering, not by independently matching `top` offsets
+  // on two differently-sized, independently-positioned elements (exactly
+  // the alignment bug this replaced: the badge's height changes with
+  // whatever size its own QR content needs -- see QR.me.tsx's own
+  // "sizes itself to the real achievable size" fix -- so a hardcoded
+  // shared `top` only aligned them when their heights happened to match).
   return (
-    <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 12, sm: 20 }, zIndex: 20 }}>
-      <SearchField
-        query={searchQuery}
-        onQueryChange={setSearchQuery}
-        results={searchMatches}
-        onSelectResult={visitUser}
-        placeholder="Search .me"
-        ariaLabel="Search .me"
-        data-gui-node-id="GUI.bars.top.search"
-      />
-    </Box>
-  );
-};
-
-const CleakerLandingHome: React.FC<CleakerLandingHomeProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, onBeatleNamespaceResolved, sharedRootStatus = 'checking', 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
-  // No useRegisterGuiNode here: the page is declared by the GUI document
-  // (GUI.content.landing) -- declared is not the same as mounted.
-  const view = useMeLauncherView();
-  const username = view?.credentialsForm?.username.trim() || '';
-  // Separate from `username` above (that one's the sign-in FORM's own
-  // field, empty once authenticated) -- this identity's real username,
-  // for LiveOwnProfile below. Derived from the session's own confirmed
-  // semanticNamespace (e.g. "jabellae.local.cleaker") rather than trusting
-  // anything client-guessed, same reasoning as buildGuessedFullNamespace's
-  // own doc comment: the session's own answer is authoritative once it
-  // exists, a guess never is.
-  const seedSessionCtx = useOptionalSeedSession();
-  const activeSession = seedSessionCtx?.session ?? null;
-  const ownUsername = String(activeSession?.semanticNamespace || '').split('.')[0] || '';
-  const [expanded, setExpanded] = useState(false);
-  // Sign in / Register are two distinct, explicit forms now (see
-  // SeedSessionProvider.tsx's openExistingNamespace — signing in no longer
-  // silently claims an unrecognized username). This just toggles which one
-  // renders; RegisterMe itself calls the real registerWithCredentials().
-  const [mode, setMode] = useState<'signin' | 'register' | 'recover'>('signin');
-  // Claiming a namespace flips `authenticated` true the instant the claim
-  // succeeds (SeedSessionProvider's registerWithCredentials commits the
-  // session before RegisterMe gets to run its own post-claim backup step)
-  // — without this flag, the `authenticated` branch below would take over
-  // immediately and unmount RegisterMe mid-flow, skipping the recovery
-  // phrase backup and its local encrypted vault write entirely. Reset
-  // whenever register mode is (re-)entered, so a second registration later
-  // in the same session isn't short-circuited by a stale true from the
-  // first one.
-  const [registrationComplete, setRegistrationComplete] = useState(false);
-  // Same reasoning as registrationComplete above — recoverWithPhrase()
-  // also flips `authenticated` true (a successful open()) before
-  // RecoverAccount gets to run its own post-recovery "set a new local
-  // password" step.
-  const [recoveryComplete, setRecoveryComplete] = useState(false);
-  const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
-  // A person's own explicit override, entered via the QR's edit affordance
-  // below -- takes over from deriveNamespaceRootLabel(resolvedEndpoint)'s
-  // window.location-guessed default the moment it's set. Exists because
-  // that guess can genuinely diverge from what a server actually resolves
-  // a given root string to (confirmed live: claiming under a guessed
-  // "localhost" landed under a monad's real configured root instead, e.g.
-  // "local.cleaker", and a later sign-in re-guessing "localhost" from the
-  // URL bar had no way to know that and failed) -- stating the root
-  // directly sidesteps that guess entirely, rather than trying to make the
-  // guess itself smarter. Session-only (not persisted): a stale override
-  // surviving a reload/different device would be its own, worse kind of
-  // silent mismatch.
-  const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
-  const namespaceRootLabel = useMemo(
-    () => namespaceOverride || deriveNamespaceRootLabel(resolvedEndpoint),
-    [namespaceOverride, resolvedEndpoint],
-  );
-
-  // Real crypto capability of the page THIS component is actually running
-  // on right now — not a string check on "https" (that misses the
-  // legitimate localhost/127.0.0.1 exception, and says nothing about
-  // whether crypto.subtle itself actually exists). This is a property of
-  // the physical page, independent of whichever root resolvedEndpoint
-  // names — a namespace string being "cleaker.me" says nothing about
-  // whether THIS page is physically loaded over https. The server-side
-  // redirect (see setNginxConfigRoutes.ts) is the fix that stops this from
-  // ever being false in practice; this is the client-side backstop for
-  // whenever it still is — a stale bookmark, a proxy that stripped the
-  // redirect, a different deployment that hasn't wired it up yet.
-  const secureContextOk = typeof window !== 'undefined'
-    && window.isSecureContext === true
-    && typeof window.crypto?.subtle === 'object'
-    && window.crypto.subtle !== null;
-
-  // The connection this page is actually loaded over — scheme + host
-  // (+ port, when non-default, via URL's own .host) — never folded into
-  // namespaceRootLabel itself, which stays the bare semantic root
-  // (".<root>" in a claimed identity) regardless of transport. Falls back
-  // to the resolved endpoint's own scheme when off-window (SSR) or when
-  // showing the OTHER root than the one physically loaded.
-  const connectionLabel = useMemo(() => {
-    if (typeof window !== 'undefined' && window.location.hostname === namespaceRootLabel) {
-      return `${window.location.protocol}//${window.location.host}`;
-    }
-    try {
-      const u = new URL(resolvedEndpoint);
-      return `${u.protocol}//${u.host}`;
-    } catch {
-      return resolvedEndpoint;
-    }
-  }, [resolvedEndpoint, namespaceRootLabel]);
-
-  // The switch isn't just cosmetic — whatever root the badge shows is the
-  // root that actually gets claimed. resolveNetgetSeedFromCredentials
-  // (netget's App.jsx) reads this at submit time via getActiveNamespaceRoot()
-  // instead of always resolving the physical gateway hostname, so a person
-  // who picks "cleaker.me" here claims <username>.cleaker.me, not
-  // <username>.local.cleaker. Synced on every change (not just on click) so
-  // the very first submit — before anyone has touched the badge — already
-  // matches whatever's on screen.
-  useEffect(() => {
-    setActiveNamespaceRoot(namespaceRootLabel);
-    return () => setActiveNamespaceRoot(null);
-  }, [namespaceRootLabel]);
-
-  // The bubble IS the QR (QRme — flips to an avatar on hover/click) rather
-  // than a separate icon with a QR shown below it. Same address CleakerQR
-  // would compute (buildCleakerNamespaceUrl is the shared utility both
-  // wrap), just resolved directly here since QRme takes a raw value, not a
-  // username+endpoint pair to derive one from itself.
-  const defaultQrValue = useMemo(() => {
-    try {
-      return buildCleakerNamespaceUrl(resolvedEndpoint, username || undefined);
-    } catch {
-      return resolvedEndpoint;
-    }
-  }, [resolvedEndpoint, username]);
-
-  // Beatle's own connection state (idle/parsing/connecting/resolving/
-  // connected/streaming/error/invalid/disconnected) drives the QR's
-  // status -- no second, independent check for the "is Beatle talking to
-  // something" part. Beatle already shows this itself (its scarab dot +
-  // state label, right above); this only means the QR recolors in sync
-  // with it instead of staying visually disconnected from the one real
-  // signal already on screen.
-  //
-  // BUT Beatle's own "connected" only means netget's mesh resolver found
-  // something -- it does NOT mean the shared confirmed context (sidebar,
-  // /netget) has actually moved there yet. A genuine connect triggers a
-  // SEPARATE re-verification (see handleBeatleConnect below,
-  // onBeatleNamespaceResolved, verifiedCleakerRoot.ts's promote()); while
-  // that's still in flight, sharedRootStatus stays 'checking', and the QR
-  // must keep showing "checking" too -- otherwise it would report success
-  // a beat before the sidebar/netget context that's supposed to match it
-  // actually does, exactly the drift this was corrected to close.
-  const [beatleState, setBeatleState] = useState<ResolutionState>('idle');
-  const qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' =
-    beatleState === 'error' || beatleState === 'invalid' ? 'error'
-    : beatleState === 'parsing' || beatleState === 'connecting' || beatleState === 'resolving' ? 'checking'
-    : beatleState === 'connected' || beatleState === 'streaming'
-      ? (sharedRootStatus === 'error' ? 'error' : sharedRootStatus === 'checking' ? 'checking' : 'confirmed')
-      : 'idle';
-  // Built from qrStatus (the COMBINED value above), never from beatleState alone — that was the actual
-  // bug (found live, 2026-09-22): after a real disconnect, sharedRootStatus flipped qrStatus (the ring) to
-  // 'error', but this line kept reading beatleState directly, which Beatle's own WebSocket still called
-  // 'connected' — ring and label describing the same widget differently. One effective state now drives
-  // both; Beatle's own finer-grained labels (Parsing…/Connecting…/Resolving…) still show during the
-  // 'checking' bucket, since qrStatus collapses several beatleStates into it.
-  const qrStatusLabel = qrStatus === 'idle' ? ''
-    : qrStatus === 'error' ? 'Could not connect'
-    : qrStatus === 'confirmed' ? 'Connected'
-    : (BEATLE_STATE_LABEL[beatleState] || 'Checking…');
-
-  // USED TO also override the QR's own encoded value with whatever
-  // Beatle resolved (a `beatleResolvedUrl` state, permanently replacing
-  // defaultQrValue once set) -- that made sense back when Beatle was a
-  // visible, manually-typed switcher: you'd type a genuinely different
-  // destination and the QR would deliberately follow it there. Now that
-  // Beatle is headless and auto-connects to `beatleExpression` on its
-  // own (see that hook above), it resolves the bare ROOT, not whatever
-  // username is currently being typed into the sign-in form -- so that
-  // override was firing on every page load and permanently freezing the
-  // QR at the root's address, silently killing the "QR previews the
-  // username you're typing" behavior (flagged live: "el QR ya no cambia
-  // según el username que pongas"). There's no longer a user action that
-  // means "follow this other destination instead," so the QR now just
-  // always reflects defaultQrValue, and handleBeatleConnect only handles
-  // the shared-context promotion below.
-  const handleBeatleConnect = useCallback((channel: NamespaceChannel) => {
-    // Beatle resolving is NOT the same fact as the shared context moving --
-    // that only happens if a fresh probeCleakerRoot independently confirms
-    // whatever namespace Beatle just resolved (see onBeatleNamespaceResolved's
-    // own doc comment below). Only handles the common case (a bare
-    // namespace leaf, e.g. typing "cleaker.me") -- a union/overlay/path
-    // expression isn't "which root," so it's left alone here.
-    const ast = channel.expression?.ast;
-    if (ast?.kind === 'namespace' && ast.value) {
-      onBeatleNamespaceResolved?.(ast.value);
-    }
-  }, [onBeatleNamespaceResolved]);
-
-  const qrValue = defaultQrValue;
-
-  if (!view) return null;
-
-  const { authenticated, label, pending, error, onEnter, onLogout, credentialsForm, semanticNamespace } = view;
-
-  // MeRuntimeProvider no longer remounts this tree when a session
-  // completes (see its own doc comment), so `mode`/`registrationComplete`
-  // are no longer cleared "for free" by unmounting on logout — they have
-  // to be reset explicitly, and only on the actual falling edge
-  // (authenticated true -> false), never just "whenever unauthenticated":
-  // that's also true for the entire pre-auth register/recover flow, and
-  // resetting on every unauthenticated render would snap `mode` back to
-  // 'signin' the instant either button was clicked.
-  const wasAuthenticatedRef = useRef(false);
-  useEffect(() => {
-    if (wasAuthenticatedRef.current && !authenticated) {
-      setMode('signin');
-      setRegistrationComplete(false);
-      setRecoveryComplete(false);
-    }
-    wasAuthenticatedRef.current = authenticated;
-  }, [authenticated]);
-
-  // The rising edge of the same transition, for the opposite reason:
-  // whoever linked here (e.g. CleakerNetgetClaimView, when it finds no
-  // live session) can attach `?next=<url>` so signing in bounces the
-  // person back to what they actually came here to do, instead of
-  // stranding them on this generic landing page. Navigated via the
-  // router, not window.location -- SeedSessionProvider holds no
-  // persisted session at all (deliberately: no stored token, the
-  // identity IS the credential, re-derived from username+password each
-  // time), so the freshly-established session lives only in THIS
-  // mounted React tree's memory. A full-page navigation would remount
-  // that tree from scratch and lose it again immediately -- landing
-  // back on the exact same "sign in first" screen this was meant to
-  // get past. Only ever a same-app continuation link someone else on
-  // this origin constructed — never acted on if it's not a well-formed,
-  // same-origin URL.
-  const navigate = useNavigate();
-  useEffect(() => {
-    // Same gate the render logic below already uses (line ~466) to decide
-    // when the authenticated view is safe to show instead of RegisterMe/
-    // RecoverAccount -- `authenticated` alone flips true the instant a
-    // claim/recovery is ACCEPTED, well before RegisterMe's own backup step
-    // writes the local encrypted vault (registrationComplete, set via its
-    // onRegistered prop). Navigating on `authenticated` alone would unmount
-    // RegisterMe mid-flow the same way the render logic already guards
-    // against, silently skipping the vault write -- exactly the gap that
-    // later makes Sign in fail for this identity (it has no vault to open).
-    const registrationSettled = mode !== 'register' || registrationComplete;
-    const recoverySettled = mode !== 'recover' || recoveryComplete;
-    if (!authenticated || !registrationSettled || !recoverySettled) return;
-    const next = new URLSearchParams(window.location.search).get('next');
-    if (!next) return;
-    try {
-      const target = new URL(next, window.location.origin);
-      if (target.origin !== window.location.origin) return;
-      navigate(`${target.pathname}${target.search}${target.hash}`, { replace: true });
-    } catch {
-      // Malformed `next` -- stay put rather than navigating somewhere unintended.
-    }
-  }, [authenticated, mode, registrationComplete, recoveryComplete]);
-
-  // Strip the root suffix off semanticNamespace to get just the handle
-  // (same derivation SessionSurface.tsx already uses for its own `handle`)
-  // -- feeds beatleExpression below when semanticNamespace itself isn't
-  // ready yet (claim accepted, session not fully settled).
-  const authenticatedHandle = useMemo(() => {
-    if (!semanticNamespace) return '';
-    const suffix = `.${namespaceRootLabel}`;
-    return semanticNamespace.endsWith(suffix) ? semanticNamespace.slice(0, -suffix.length) : semanticNamespace;
-  }, [semanticNamespace, namespaceRootLabel]);
-
-  // What Beatle, right under the QR, shows and connects to -- the SAME
-  // expression this QR is currently positioned at, never a second,
-  // independently-stale one. Pre-auth: the bare root (the switch between
-  // e.g. "local.cleaker"/"cleaker.me"). Once claimed: the full identity,
-  // exactly matching the (now-removed) big identity link's own text, so
-  // there's one place this shows, not two.
-  const beatleExpression = authenticated
-    ? (semanticNamespace || `${authenticatedHandle || '…'}.${namespaceRootLabel}`)
-    : namespaceRootLabel;
-  // Used to be prepended with Beatle's own scarab glyph, back when a
-  // visible Beatle instance sat right under the QR and this glyph
-  // pointed at it. Now that Beatle is gone entirely (headless connect,
-  // below), QR.me.tsx draws a real online/offline status dot at the same
-  // spot instead of a fixed icon that never actually reflected
-  // connection state -- see its own perimeterLabel/perimeterRootLabel
-  // doc comments.
-  const perimeterLabel = beatleExpression;
-  // Same "visit this .me" pattern the directory search already uses
-  // (visitUser, above) -- makes the handle drawn around your OWN QR a
-  // real pointer to that identity's own surface, not just decoration.
-  // Only meaningful once there's an actual handle (pre-auth, the
-  // perimeter is just the bare root with no handle segment to link).
-  const perimeterHandleHref = authenticated && authenticatedHandle
-    ? buildCleakerNamespaceUrl(resolvedEndpoint, authenticatedHandle)
-    : undefined;
-
-  // Headless Beatle -- the exact same useBeatle()/channel machinery the
-  // visible <Beatle> component wraps (see CleakerUrlView's own use of it
-  // above), called directly instead of through that component. Flagged
-  // live, twice, as still showing SOMETHING under the QR no matter how
-  // small ("porque sigues poniendo al escarabajo") after a bar-with-text,
-  // then an icon-only bubble, both still duplicated what the QR's own
-  // perimeter already displays. "Solo queremos el QR" is literal: no
-  // separate control, icon, or box of any kind -- so the channel now
-  // opens on its own, the moment there's an expression to open (mount,
-  // and again whenever beatleExpression itself changes), rather than
-  // waiting on a tap that had nowhere left to live.
-  const beatleResolverWs = useMemo(() => makeDefaultResolvers()[0].ws, []);
-  const { channel: beatleChannel, open: openBeatleChannel } = useBeatle(beatleResolverWs);
-  // Same mode gate the QR bubble itself uses (it isn't even rendered in
-  // register/recover mode -- see that Box's own doc comment) -- nothing
-  // on screen would reflect this channel's status there, so there's no
-  // reason to open one.
-  const beatleAutoConnectReady = mode !== 'register' && mode !== 'recover' && secureContextOk;
-  useEffect(() => {
-    if (beatleAutoConnectReady && beatleExpression) openBeatleChannel(beatleExpression);
-    // openBeatleChannel is stable (useBeatle's own useCallback) except
-    // when beatleResolverWs changes, which never happens post-mount here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beatleAutoConnectReady, beatleExpression]);
-  useEffect(() => {
-    setBeatleState(beatleChannel.state);
-    if (beatleChannel.state === 'connected') handleBeatleConnect(beatleChannel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beatleChannel.state]);
-
-  const handleEnter = async () => {
-    if (credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password)) return;
-    await onEnter();
-  };
-
-  return (
-    <Box
-      data-gui-node-id={nodeId}
-      data-gui-component={nodeComponent}
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        // Was 4, then cut to 1.5 after that read as far too much air
-        // between the QR/Beatle group and whatever renders below it --
-        // flagged live again afterward as having overcorrected, both here
-        // (QR to "Hello, I am…") and one level down (that heading to the
-        // credentials inputs, which share this same gap -- see the
-        // credentials Box below, a direct sibling of the heading Box
-        // within this same flex container). Settled between the two:
-        // real breathing room without returning to the original excess.
-        gap: 2.5,
-        px: 3,
-        py: 6,
-        boxSizing: 'border-box',
-        ...sx,
-      }}
-    >
-      {/* Users/Blockchain/URL (and Keychain, once authenticated) now live
-          in the shared sidebar -- see GUI below, which
-          mounts the real Layout/LeftBar around this whole route tree.
-          Removed from here entirely rather than duplicated. */}
-
-      {/* Bubble — QRme: the QR itself is the bubble, not a plain icon with
-          a separate QR shown below. Click toggles size, not the
-          avatar-flip QRme normally offers (hoverFlip/clickFlip off here —
-          this bubble has no avatar image to flip to on a page nobody's
-          signed into yet, and the click gesture is worth more spent on
-          "make it scannable" than a flip animation). Skipped in register
-          mode — RegisterMe renders its own (previewing the username being
-          typed THERE, not this form's, which stays empty while it's not
-          the active one) so a person doesn't see two bubbles stacked.
-          Same reasoning covers recover mode — RecoverAccount has no
-          identity to preview yet (it's what's being recovered, not typed
-          fresh), so there's nothing meaningful for this bubble to show. */}
-      {mode !== 'register' && mode !== 'recover' && (
-        <Box
-          role="button"
-          tabIndex={0}
-          data-gui-node-id={`${nodeId}.qr`}
-          aria-label={expanded ? 'Shrink .me QR' : 'Expand .me QR to scan'}
-          onClick={() => setExpanded((value) => !value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              setExpanded((value) => !value);
-            }
-          }}
-          sx={{ cursor: 'pointer', display: 'inline-flex' }}
-        >
-          <QRme
-            value={qrValue}
-            username={username || undefined}
-            diameter={expanded ? QR_DIAMETER_EXPANDED : QR_DIAMETER_DEFAULT}
-            hoverFlip={false}
-            clickFlip={false}
-            // clickFlip is off (no flip-to-avatar here), but this bubble
-            // IS clickable -- the wrapping Box above toggles expanded/
-            // collapsed. Without this override, QRme's own root element
-            // still carries its clickFlip-tied `cursor: 'default'`, which
-            // wins over the wrapper's `cursor: 'pointer'` and silently
-            // kills the hand cursor on hover ("manita como de push").
-            cursor="pointer"
-            status={qrStatus}
-            statusLabel={qrStatusLabel}
-            // The namespace/expression itself draws AROUND the QR's own
-            // perimeter (see QR.me.tsx's own doc comment on
-            // perimeterLabel) instead of sitting in a separate caption
-            // box well below it -- flagged live as reading like two
-            // disconnected things. Stays visible whether collapsed or
-            // expanded -- this is the one that must always ring the
-            // QR.me itself (corrected live: an earlier pass hid this
-            // one instead of addressing Beatle's own field below, which
-            // was backwards -- this is "the right one to keep").
-            perimeterLabel={perimeterLabel}
-            perimeterRootLabel={namespaceRootLabel}
-            perimeterHandleHref={perimeterHandleHref}
-            // Editable only pre-auth -- once a real session is open, the
-            // namespace is whatever that session actually claimed/opened,
-            // not a guess left to edit further.
-            editableRoot={!authenticated}
-            editableRootValue={namespaceRootLabel}
-            onEditableRootChange={setNamespaceOverride}
-            data-gui-node-id={`${nodeId}.qr.code`}
-            style={{ transition: 'width 320ms cubic-bezier(0.22, 1, 0.36, 1), height 320ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-          />
-        </Box>
-      )}
-
-      {/* No visible Beatle here at all, in any form -- a full text bar,
-          then an icon-only bubble, both still read as a second thing
-          duplicating the QR ("porque sigues poniendo al escarabajo").
-          "Solo queremos el QR" is literal: the channel itself still
-          opens (see the headless useBeatle() call above, right next to
-          handleBeatleConnect), it just no longer needs a visible control
-          to do it -- it connects on its own the moment there's an
-          expression to open. */}
-
-      {authenticated
-      && (mode !== 'register' || registrationComplete)
-      && (mode !== 'recover' || recoveryComplete) ? (
-        /* Authenticated — "Hello, I am…" and the root-switch badge were
-           both about deciding WHO/WHERE to claim into before you had an
-           identity yet; once you have one, they're just noise. The real
-           claimed namespace, whole (e.g. "jabellae.local.cleaker"), is
-           what Beatle now shows right under the QR (see beatleExpression
-           above this branch) -- showing it a second time here, in a
-           separate big link, was the exact "same thing twice" redundancy
-           flagged live. The identityHash-derived label stays -- a human
-           likes seeing that public, checkable fingerprint next to their
-           name, not just the name alone -- it just no longer repeats the
-           name alongside it. */
-        <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-            {label}
-          </Typography>
-          {activeSession && ownUsername && (
-            <LiveOwnProfile session={activeSession} username={ownUsername} />
-          )}
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {/* Keychain moved to the shared sidebar (GUI,
-                shown only once authenticated -- same condition as before,
-                just relocated) instead of living inline here. Sign out stays
-                -- it's an account action tied to this identity display,
-                not a navigation control. */}
-            <Box
-              component="button"
-              type="button"
-              onClick={onLogout}
-              data-gui-node-id={`${nodeId}.logout`}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                p: 1,
-                px: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Icon name="logout" fontSize="1rem" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
-            </Box>
-          </Box>
-        </Box>
-      ) : mode === 'register' ? (
-        // Register has its own heading/copy (RegisterMe.tsx) — showing
-        // "Hello, I am…" above it too would repeat the same question this
-        // form already answers ("who are you HERE"), just with a different
-        // action attached.
-        <RegisterMe
-          namespace={namespaceRootLabel}
-          onSwitchToSignIn={() => setMode('signin')}
-          onRegistered={() => setRegistrationComplete(true)}
-        />
-      ) : mode === 'recover' ? (
-        // Same reasoning as the register branch above — RecoverAccount is
-        // its own complete page (own heading, own back-link), not another
-        // thing stacked under "Hello, I am…".
-        <RecoverAccount
-          namespace={namespaceRootLabel}
-          onSwitchToSignIn={() => setMode('signin')}
-          onRecovered={() => setRecoveryComplete(true)}
-        />
-      ) : (
-        <>
-          {/* Heading — the namespace-root badge sits where a generic "it
-              anchors to this host" sentence used to: which root this is IS
-              the answer to "anchors to WHAT host", so naming it concretely
-              replaces the sentence rather than sitting alongside it. Same
-              thing netget answers for an app ("which app am I
-              addressing"), this answers for an identity root ("which root
-              am I claiming into"). Pre-auth only now — see the
-              authenticated branch above for why. */}
-          <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: -2 }}>
-            {/* No trailing ".me" here — the .me submit button below is now
-                the answer to this sentence, not a repeat of it. The page
-                reads as one continuous line: "Hello, I am…" [namespace]
-                [username] [secret] ".me". */}
-            <Typography variant="h4" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
-              Hello, I am…
-            </Typography>
-            {/* The connection badge that used to live here (a separate
-                "here" pill, click-to-switch local.cleaker/cleaker.me) is
-                gone — Beatle, now positioned right under the QR above (see
-                that Box), IS that control: its own connection dot + state
-                label already show exactly what the badge did, and its
-                input defaults to this same resolved value as real,
-                editable text, not a second display of it. Showing
-                "local.cleaker" in two places at once was the actual bug,
-                not which of the two survived, and not where on the page
-                the surviving one sits. Known, accepted side effect: this
-                removes the one-click switch to another root for the
-                CREDENTIALS form's own target below -- that still resolves
-                whatever cleakerEndpoint says (or window.location's own
-                origin when no prop is given — no hardcoded root either
-                way, same as before), just with no in-page toggle anymore.
-                Beatle's own field can explore a different destination
-                freely; it was never wired to change what the credentials
-                form claims into, and still isn't -- exploring and
-                claiming stay two different actions, on purpose. */}
-            {!secureContextOk && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
-                <Typography variant="body2" sx={{ color: 'warning.main', textAlign: 'center', fontSize: '0.8rem' }}>
-                  Signing in requires a secure connection.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  size="small"
-                  onClick={() => {
-                    if (typeof window === 'undefined') return;
-                    // Swapping just the scheme on the CURRENT origin assumes
-                    // https lives on the same port http does -- not
-                    // guaranteed (a dev proxy, a non-standard port mapping).
-                    // The configured endpoint's own origin is the one this
-                    // page's own reachability/registration logic already
-                    // trusts as "where https for this root actually is";
-                    // preserve path/search/hash so the button lands you
-                    // back where you were, not the bare root.
-                    try {
-                      const httpsOrigin = new URL(resolvedEndpoint).origin;
-                      window.location.href = `${httpsOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`;
-                    } catch {
-                      window.location.href = window.location.href.replace(/^http:/, 'https:');
-                    }
-                  }}
-                  data-gui-node-id={`${nodeId}.https`}
-                >
-                  Open HTTPS
-                </Button>
-              </Box>
-            )}
-          </Box>
-
-        <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {credentialsForm && (
-            <>
-              <TextField
-                label="Username"
-                data-gui-node-id={`${nodeId}.username`}
-                value={credentialsForm.username}
-                onChange={(e) => credentialsForm.setUsername(e.target.value)}
-                disabled={pending || !secureContextOk}
-                autoFocus
-                fullWidth
-              />
-              <TextField
-                label="Secret"
-                data-gui-node-id={`${nodeId}.secret`}
-                type="password"
-                value={credentialsForm.password}
-                onChange={(e) => credentialsForm.setPassword(e.target.value)}
-                disabled={pending || !secureContextOk}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleEnter(); }}
-                fullWidth
-              />
-            </>
-          )}
-          {error && (
-            <Typography variant="body2" sx={{ color: 'error.main' }}>
-              {error.message}
-            </Typography>
-          )}
-          <Box
-            component="button"
-            type="button"
-            onClick={handleEnter}
-            disabled={pending || !secureContextOk || (!!credentialsForm && (!credentialsForm.username.trim() || !credentialsForm.password))}
-            data-gui-node-id={`${nodeId}.submit`}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 1,
-              p: 1.25,
-              border: '1px solid',
-              borderColor: 'primary.main',
-              borderRadius: 1,
-              background: 'transparent',
-              color: 'primary.main',
-              cursor: pending ? 'wait' : 'pointer',
-              fontWeight: 600,
-              '&:hover': { bgcolor: 'action.hover' },
-            }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {pending ? '…' : '.me'}
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, alignSelf: 'center' }}>
-            <Box
-              component="button"
-              type="button"
-              onClick={() => { setRegistrationComplete(false); setMode('register'); }}
-              disabled={!secureContextOk}
-              data-gui-node-id={`${nodeId}.register`}
-              sx={{
-                background: 'transparent',
-                border: 0,
-                color: 'text.secondary',
-                cursor: secureContextOk ? 'pointer' : 'not-allowed',
-                opacity: secureContextOk ? 1 : 0.5,
-                fontSize: '0.8rem',
-                textDecoration: 'underline',
-                p: 0,
-              }}
-            >
-              New here? Register
-            </Box>
-            <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
-              ·
-            </Typography>
-            <Box
-              component="button"
-              type="button"
-              onClick={() => { setRecoveryComplete(false); setMode('recover'); }}
-              disabled={!secureContextOk}
-              data-gui-node-id={`${nodeId}.recover`}
-              sx={{
-                background: 'transparent',
-                border: 0,
-                color: 'text.secondary',
-                cursor: secureContextOk ? 'pointer' : 'not-allowed',
-                opacity: secureContextOk ? 1 : 0.5,
-                fontSize: '0.8rem',
-                textDecoration: 'underline',
-                p: 0,
-              }}
-            >
-              Recover Account
-            </Box>
-          </Box>
-        </Box>
-        </>
-      )}
-    </Box>
+    <SearchField
+      query={searchQuery}
+      onQueryChange={setSearchQuery}
+      results={searchMatches}
+      onSelectResult={visitUser}
+      placeholder="Search .me"
+      ariaLabel="Search .me"
+      onExpandedChange={onExpandedChange}
+      collapsedSize={collapsedSize}
+      data-gui-node-id="GUI.bars.top.search"
+    />
   );
 };
 
@@ -1596,7 +807,7 @@ const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id
     }
   }
 
-  const shellSx = { minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
+  const shellSx = { minHeight: 'var(--gui-layout-min-height, 100vh)', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
 
   if (!gatewayId || !challenge || !state || !returnTo || !returnToUrl) {
     return (
@@ -1924,7 +1135,7 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
     }
   }
 
-  const shellSx = { minHeight: '100vh', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
+  const shellSx = { minHeight: 'var(--gui-layout-min-height, 100vh)', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', px: 3, py: 6, boxSizing: 'border-box' as const };
 
   if (!returnTo || !returnToUrl) {
     return (
@@ -2143,17 +1354,29 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 // /keychain/claim and /keychain/admin-sign are deliberately NOT nested
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
+/**
+ * Shows its children unless the left bar is expanded. The position is written once: beside the QR in the bar when the
+ * bar is open, and in the top bar otherwise (the bar's `view` is only known inside the Layout, hence a component).
+ */
+const UnlessLeftBarExpanded: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { view } = useLeftSidebar();
+  return view === 'expanded' ? null : <>{children}</>;
+};
+
 const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
-  // Same derivation CleakerLandingHome/CleakerUsersView already use for
+  // Same derivation QRConnect/CleakerUsersView already use for
   // "which namespace is this page" -- the explicit `cleakerEndpoint` prop,
   // never the session's own namespace, so signing in or out can't move it,
   // and never window.location either (see requireCleakerEndpoint's own
   // doc comment for why that guess was removed).
   const resolvedEndpoint = requireCleakerEndpoint(props.cleakerEndpoint);
   const namespaceRootLabel = deriveNamespaceRootLabel(resolvedEndpoint);
+
+  // The position badge now lives in the left bar (see `positionBadge` below), so the search field no longer shares its
+  // row with it and nothing has to fade out when it expands.
 
   // A real, verified transport for the sidebar's public read -- seeded
   // ONCE from window.location, not re-derived on every render (this isn't
@@ -2180,6 +1403,28 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   }, []);
   const verifiedRoot = useVerifiedCleakerRoot(rootSeed);
 
+  // What is behind this door, layer by layer. Distinct from verifiedRoot: that one answers "is the root confirmed",
+  // this one answers WHICH layer (nginx / backend / monad) is missing when it is not, and tells "nothing there"
+  // (off, grey) from "something answered and refused" (error, red) by who produced the response.
+  // A story or a test may give the reading its own fetch (ConnectionSeams); production passes nothing.
+  const connectionSeams = React.useContext(ConnectionSeamsContext);
+  const doorLayers = useDoorLayers({
+    origin: typeof window !== 'undefined' ? window.location.origin : '',
+    monadTransport: verifiedRoot.transportOrigin,
+    fetchImpl: connectionSeams.fetchImpl,
+  });
+  const monadOff = doorLayers.monad === 'off';
+  const monadChecking = doorLayers.monad === 'checking';
+  // The root is verified once, at mount, and a first failure used to stay a failure for the life of the page: a monad
+  // that came up AFTER the page loaded left the QR red until a reload. When the layers say the monad is up and the
+  // root is not confirmed, verify it again.
+  const monadUp = doorLayers.monad === 'up';
+  React.useEffect(() => {
+    if (monadUp && verifiedRoot.status !== 'confirmed') verifiedRoot.promote(rootSeed);
+    // Only the monad coming up triggers it; the verification itself moves `verifiedRoot.status`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monadUp]);
+
   // The persistent "where am I" position — namespace/identity + the CURRENT route's path — shown at the
   // shell level (below) so it survives navigation instead of only existing on the Landing page's own QR.
   // Three things kept separate, per the review that asked for this: WHICH namespace is queried
@@ -2188,23 +1433,86 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // read as "signed in as someone"). One expression, one QR value, both built from the SAME three parts
   // here — not two independent derivations that could drift (the earlier gap this closes).
   const location = useLocation();
+  const navigate = useNavigate();
+  // The identity (the QR, the sign-in/register/recover card) is a PAGE of the namespace, at `/.me`: it has an address,
+  // survives a refresh, and Back returns to where you were. It used to open as a dialog over whatever page you were on;
+  // that is gone. `/` stays the namespace's home.
+  const IDENTITY_ROUTE = '/.me';
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
-  const positionIdentity = authenticated && session?.semanticNamespace ? session.semanticNamespace : namespaceRootLabel;
-  const positionExpression = `${positionIdentity}${currentNodePath}`;
+  // The namespace the person SELECTED and that actually connected (the card's typed root, promoted by
+  // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
+  // the badge cannot name a namespace nothing answered for.
+  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null);
+  const positionIdentity = shownNamespace({
+    authenticated: authenticated ? session?.semanticNamespace : null,
+    selected: selectedNamespace,
+    root: {
+      status: monadOff ? 'off' : verifiedRoot.status,
+      cleakerEndpoint: verifiedRoot.cleakerEndpoint,
+      answeredNamespace: verifiedRoot.answeredNamespace,
+      confirmedLabel: verifiedRoot.confirmedLabel,
+      lastAttemptFailed: verifiedRoot.lastAttemptFailed,
+    },
+    guess: namespaceRootLabel,
+    guessIsProvisional: props.namespaceSource === 'address',
+  });
+  // Nothing has said which namespace this is yet (it was only the address): say so, do not name the hostname.
+  const resolvingNamespace = !positionIdentity;
+  // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
+  // page's own origin is CHECKED to answer for that namespace (verifiedRoot). positionExpression.ts.
+  const positionComposed = composePosition({
+    namespace: positionIdentity,
+    // the SEMANTIC path only: `currentNodePath` is where the GUI navigated, not a node of the namespace
+    path: props.semanticPath ?? '/',
+    page: typeof window !== 'undefined'
+      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
+      : null,
+    root: {
+      status: monadOff ? 'off' : verifiedRoot.status,
+      cleakerEndpoint: verifiedRoot.cleakerEndpoint,
+      answeredNamespace: verifiedRoot.answeredNamespace,
+      confirmedLabel: verifiedRoot.confirmedLabel,
+      lastAttemptFailed: verifiedRoot.lastAttemptFailed,
+    },
+  });
+  // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
+  const positionExpression = positionComposed.compact;
+  const positionExpressionFull = positionComposed.full;
+  // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
+  // address for its own roots, the chosen host for another root. The GUI route is not part of it (that is the surface;
+  // a QR for a link does not carry where the page happens to be).
+  const selectedRoot = cardNamespace({
+    selected: ctx?.selectedLink?.namespace,
+    root: { status: verifiedRoot.status, cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed },
+    address: namespaceRootLabel,
+    source: props.namespaceSource ?? 'declared',
+  }).namespace;
+  const linkEndpoint = endpointForRoot(selectedRoot, {
+    resolvedEndpoint,
+    localRoot: namespaceRootLabel,
+    confirmedRoot: verifiedRoot.confirmedLabel,
+  });
   const positionQrValue = useMemo(() => {
     try {
       const authedUsername = authenticated && session?.semanticNamespace
         ? String(session.semanticNamespace).split('.')[0]
         : undefined;
-      // buildCleakerNamespaceUrl has no path parameter of its own (namespace/identity only) — the current
-      // node path is appended here, after it. Verified correct for the plain-namespace case (no handle
-      // prefix); the interaction with its own "/@handle" form for a localish surface is a real, named,
-      // unverified edge case, not silently assumed to compose the same way.
-      return `${buildCleakerNamespaceUrl(resolvedEndpoint, authedUsername)}${currentNodePath}`;
+      return linkQrValue({ endpoint: linkEndpoint, namespace: selectedRoot, handle: authedUsername });
     } catch {
-      return resolvedEndpoint;
+      return linkEndpoint;
     }
-  }, [resolvedEndpoint, authenticated, session?.semanticNamespace, currentNodePath]);
+  }, [linkEndpoint, selectedRoot, authenticated, session?.semanticNamespace]);
+  // The exact size the position QRme badge will render at for
+  // `positionQrValue` -- read via `resolveTopbarQrSize()` (QR.me.tsx's own
+  // exported single source of truth, see its doc comment) so the search
+  // icon sitting next to it in the same flex row (below) can be sized to
+  // match exactly, instead of a hardcoded 40 that drifts from whatever
+  // the badge actually renders at (flagged live 2026-10-02: "no están a
+  // la par, no están cuadrados").
+  const positionBadgeSize = useMemo(
+    () => resolveTopbarQrSize(positionQrValue),
+    [positionQrValue],
+  );
   // One effective connection state for the position badge, from verifiedRoot ALONE — never from Beatle's
   // own separate channel state. This is deliberate, not an oversight: mixing two independently-updating
   // signals into one ring+label pair is exactly the bug found on the Landing page's own QR (the ring
@@ -2212,11 +1520,20 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // real disconnect). verifiedRoot.status is already the one signal both the sidebar and /netget treat as
   // authoritative — reusing it here, rather than adding a second source, is what keeps the ring and the
   // label unable to disagree by construction.
-  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' = verifiedRoot.status;
-  const positionStatusLabel = verifiedRoot.status === 'checking' ? 'Checking…'
+  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' = monadOff ? 'off' : verifiedRoot.status;
+  const positionStatusLabel = monadOff ? 'No .me here'
+    : verifiedRoot.status === 'checking' ? 'Checking…'
     : verifiedRoot.status === 'error' ? 'Could not connect'
-    : verifiedRoot.status === 'confirmed' ? 'Connected'
+    : verifiedRoot.status === 'confirmed' ? 'Service answered'
     : '';
+  // Three different facts, never one: the service at this link answered; a session is open through it; and its authority
+  // was checked. The client can establish the first two. The third has no source here yet, so it is always stated as not
+  // verified, and nothing drawn on the badge stands for it.
+  const linkFacts = [
+    positionStatusLabel || 'Not checked',
+    authenticated && session?.semanticNamespace ? `Signed in as ${session.semanticNamespace}` : 'No session',
+    'Authority not verified',
+  ].join(' · ');
 
   // The gateway is reached at the address this page was loaded from when that address answers it
   // (every host of a namespace -- its root, www, a handle -- is served by the same monad). Browser
@@ -2276,6 +1593,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // success -- this is what keeps the sidebar (and /netget) from silently
   // drifting from whatever Beatle's own resolution shows in the QR.
   const handleBeatleNamespaceResolved = useCallback((namespace: string) => {
+    setSelectedNamespace(namespace);
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
   }, [verifiedRoot.promote, rootSeed]);
 
@@ -2284,6 +1602,18 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
   const barSlots = leftBarSlots(doc, { authenticated });
+  const hiddenBarItems = useMemo(() => new Set((props.hideBarItems ?? []).map(String)), [props.hideBarItems]);
+
+  // Routes whose page needs a layer that is off right now: their sidebar link is dimmed (still a link; the page it
+  // opens says which layer is missing).
+  const offRoutes = new Set(
+    flattenGuiDocument(doc)
+      .filter((entry) => entry.parentId === 'GUI.content' && entry.route && entry.needs && doorBlocks(doorLayers, entry.needs))
+      .map((entry) => entry.route as string),
+  );
+
+  // What the landing is given. The same object feeds the landing route and the identity card dialog.
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
   // Every page the document declares under GUI.content: what renders and
   // where it is served both come from the document.
@@ -2291,13 +1621,29 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
     .map((entry) => {
       const route = documentRoute(entry.route);
-      const element = renderGuiDocumentPage(entry.id, {
+      // A page whose layer is off is replaced, here, by the one panel that says which layer is missing -- the
+      // same on every route -- instead of each page printing its own error for the same missing thing. The
+      // landing is exempt: it is the way in, and shows the panel itself next to the QR.
+      const isLanding = entry.id === LANDING_ID || entry.component === 'Landing';
+      const blocked = !isLanding && entry.needs && doorBlocks(doorLayers, entry.needs);
+      // Until the layer the page needs has been read, the page is not rendered at all (it would show its own
+      // "HTTP 404" for the moment it takes to find out).
+      const waiting = !isLanding && entry.needs && !blocked && doorPending(doorLayers, entry.needs);
+      const element = waiting ? (
+        <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
+      ) : blocked ? (
+        <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
+          <DoorLayersPanel layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} data-gui-node-id={`${entry.id}.off`} />
+        </Box>
+      ) : renderGuiDocumentPage(entry.id, {
         React,
         registry: pageRegistry,
         doc,
         props:
-          entry.id === LANDING_ID
-            ? { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status }
+          entry.component === 'Welcome'
+            ? { ...props, welcome: { namespace: resolvingNamespace ? (verifiedRoot.status === 'error' ? 'sin respuesta' : 'resolviendo…') : positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
+            : isLanding
+            ? landingProps
             : entry.id === 'GUI.content.netget'
               ? {
                   ...props,
@@ -2310,30 +1656,221 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         : <Route key={entry.id} path={route.path} element={element} />;
     });
 
+  // The position badge + search field, as real TopBar right-side actions
+  // (`Layout`'s own `TopBar.elementsRight`) -- NOT hand-rolled
+  // `position: fixed` elements living outside the Layout/TopBar system
+  // entirely, which is what they were before (confirmed live 2026-10-02,
+  // after chasing several rounds of alignment/sizing bugs that kept
+  // recurring precisely because they weren't going through the same,
+  // already-correct flex-row chrome TopBar already provides for exactly
+  // this -- `Right Elements`, `display:flex, alignItems:center, gap:1.25`
+  // -- the same lane Beatle and other real TopBar actions already use).
+  // `Namespace.tsx`'s `<Layout>` never configured a `TopBar` prop at all
+  // before this -- only `LeftBar` -- so TopBar's own chrome (AppBar,
+  // brand/logo) is now enabled for the first time, left at its own
+  // defaults (no `logo`/`title` override) rather than customized, per
+  // explicit instruction to adopt it "en modo default" first and tune
+  // from there once it's visibly working.
+  // The position badge leads the LEFT bar, in the place Home used to take: the landing IS the QR, so the badge is
+  // the way back to it as well as the connection state. Only the search field stays in the top bar.
+  // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
+  // than that, so it is scaled as a whole and given the same breathing room above and below.
+  const RAIL_BADGE_SIZE = 34;
+  // The QR IS the bar's control: it expands and contracts the left bar (and, with the bar off on a narrow screen, it is the
+  // small corner QR that brings it back). The identity page is reached from the address beside it.
+  const positionBadgeFor = (onToggle: () => void, label: string) => (
+    <Box
+      component="button"
+      type="button"
+      onClick={onToggle}
+      aria-label={label}
+      aria-description={`${positionExpressionFull} — ${linkFacts}`}
+      title={`${positionExpressionFull} — ${linkFacts}`}
+      data-position-expression={positionExpressionFull}
+      data-gui-node-id="GUI.bars.left.identity"
+      sx={{
+        // The whole cell is the control, flush with the corner: a corner is a target that cannot be overshot.
+        position: 'relative',
+        display: 'flex',
+        width: '100%',
+        height: '100%',
+        minWidth: 56,
+        minHeight: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 0,
+        m: 0,
+        border: 'none',
+        background: 'none',
+        cursor: 'pointer',
+        color: 'inherit',
+        '&:hover': { backgroundColor: 'action.hover' },
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
+      }}
+    >
+      <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
+      <QRme
+        variant="topbar"
+        value={positionQrValue}
+        username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
+        status={positionStatus}
+        statusLabel={positionStatusLabel}
+        perimeterLabel={positionExpression}
+        perimeterRootLabel={namespaceRootLabel}
+        clickFlip={false}
+        hoverFlip={false}
+        cursor="pointer"
+        data-gui-node-id="GUI.bars.top.position"
+      />
+      </Box>
+      {/* A session is open through this link: its own mark, apart from the ring (which says only that the service answered). */}
+      {authenticated && session?.semanticNamespace ? (
+        <Box
+          aria-hidden
+          data-gui-node-id="GUI.bars.left.session"
+          sx={{
+            position: 'absolute',
+            right: 6,
+            bottom: 5,
+            width: 14,
+            height: 14,
+            borderRadius: '50%',
+            backgroundColor: 'primary.main',
+            color: 'primary.contrastText',
+            fontSize: 9,
+            fontWeight: 700,
+            lineHeight: '14px',
+            textAlign: 'center',
+            textTransform: 'uppercase',
+            fontFamily: 'monospace',
+            boxShadow: '0 0 0 2px var(--mui-palette-background-nav, rgba(0,0,0,0.4))',
+          }}
+        >
+          {String(session.semanticNamespace).charAt(0)}
+        </Box>
+      ) : null}
+    </Box>
+  );
+
+  // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
+  // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
+  // full, unambiguous form is its title.
+  const topBarLeftElements = (positionExpression || resolvingNamespace)
+    ? [
+        {
+          type: 'action' as const,
+          props: {
+            element: (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                <UnlessLeftBarExpanded>
+                {/* No home icon: being at the namespace is being home. The address is the way back to `/`. */}
+                <Box
+                  component={Link}
+                  to="/"
+                  aria-label="Home"
+                  data-gui-node-id="GUI.bars.top.namespace"
+                  data-gui-component="namespace"
+                  data-position-expression={positionExpressionFull}
+                  title={positionExpressionFull}
+                  sx={{
+                    display: 'block',
+                    minWidth: 0,
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    color: location.pathname === '/' ? 'primary.main' : 'text.primary',
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
+                </Box>
+                </UnlessLeftBarExpanded>
+              </Box>
+            ),
+          },
+        },
+      ]
+    : [];
+
+  const topBarRightElements = [
+    {
+      type: 'action' as const,
+      props: {
+        element: (
+          <CleakerTopSearch
+            cleakerEndpoint={props.cleakerEndpoint}
+            netgetMonadOrigin={props.netgetMonadOrigin}
+            collapsedSize={positionBadgeSize}
+          />
+        ),
+      },
+    },
+  ];
+
   return (
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
-      <CleakerTopSearch cleakerEndpoint={props.cleakerEndpoint} netgetMonadOrigin={props.netgetMonadOrigin} />
-      {/* The persistent position badge (see positionExpression/positionQrValue above) — visible on every
-          route this shell renders, including /netget, not only the Landing page's own bigger QR. Bubble
-          variant (small, click-to-toggle avatar/QR, no edit affordance): this is a read-only "where am I"
-          indicator, not the sign-in surface. */}
-      {/* top-right, left of the search icon (CleakerTopSearch sits at right: 12/20) -- top-LEFT was tried
-          first and collided with the sidebar's own toggle button occupying that exact corner. */}
-      <Box sx={{ position: 'fixed', top: { xs: 12, sm: 20 }, right: { xs: 56, sm: 64 }, zIndex: 21 }}>
-        <QRme
-          variant="topbar"
-          value={positionQrValue}
-          username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
-          status={positionStatus}
-          statusLabel={positionStatusLabel}
-          perimeterLabel={positionExpression}
-          perimeterRootLabel={namespaceRootLabel}
-          data-gui-node-id="GUI.bars.top.position"
-        />
-      </Box>
       <Layout
+        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 0.25 } }}
         LeftBar={{
-          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end],
+          toggle: ({ view, toggle }) => positionBadgeFor(toggle, view === 'expanded' ? 'Collapse sidebar' : view === 'mobile' ? 'Open navigation' : 'Expand sidebar'),
+          // Shown while the bar is open: where you are, written out, and the way to the identity page.
+          header: (
+            <Box
+              component={Link}
+              to={IDENTITY_ROUTE}
+              title={positionExpressionFull}
+              data-position-expression={positionExpressionFull}
+              data-gui-node-id="GUI.bars.left.position"
+              data-gui-component="namespace"
+              sx={{
+                display: 'block',
+                minWidth: 0,
+                // The QR stays exactly where it is in the rail (its cell is as wide as the rail), and the address pulls in
+                // over the cell's empty right margin so it hangs ~6px from the QR instead of ~25px.
+                ml: '-10px',
+                position: 'relative',
+                zIndex: 1,
+                fontFamily: 'monospace',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                lineHeight: 1.25,
+                color: 'text.primary',
+                textDecoration: 'none',
+                wordBreak: 'break-word',
+                '&:hover': { textDecoration: 'underline' },
+              }}
+            >
+              {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
+            </Box>
+          ),
+          // `active` applied ONCE, HERE, uniformly across every element
+          // regardless of which of the two sources below it came from --
+          // not inside `leftBarSlots()` itself (see that function's own
+          // comment for why: its output feeds both `barSlots.start`/`.end`
+          // -- recomputed fresh every render -- AND, via
+          // `cleakerNavigationComposition.ts`'s `builtinScopeOf()`, a
+          // MODULE-LEVEL CONSTANT frozen at import time, which would never
+          // reflect a later navigation for anything resolved through that
+          // second path). Flagged live (2026-10-02): Home/Netget (reached
+          // via `barSlots.start`/`.end`) highlighted correctly on their
+          // own first attempt; Users/Blockchain/URL (reached via
+          // `resolved`, `useCleakerRootSidebar`'s cached composition)
+          // never did, for exactly that reason.
+          elements: [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end]
+            .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
+            // Home is the top bar's; the bar leads with the QR (its toggle, below), not with another way back to `/`.
+            .filter((el) => !(el.type === 'link' && el.props.to === '/'))
+            .map((el): LeftBarElement =>
+            el.type === 'link'
+                ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
+                : el
+          ),
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
           // of these exact components -- ThemeLauncher and DevToolsLauncher
           // are real, already-built launchers (this.gui's own ThemeContext/
@@ -2361,15 +1898,69 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           {/* Every page is declared by the GUI document and rendered through the
               same renderer mount(spec) uses. */}
           {documentPageRoutes}
+          {/* A path the document does not declare: where a browser lands when nginx's own failure page (a 502 at
+              /gateway-identity, a monad that is not registered) has been turned into this entry point. While the
+              layers are being read, or while one is off, it says which and what was asked for; when everything is
+              up there is nothing at this path, so it goes to the way in. */}
+          <Route
+            path="*"
+            element={<UnknownPath layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} />}
+          />
         </Routes>
       </Layout>
     </Box>
   );
 };
 
+// What a path that is none of the document's pages shows. See the catch-all route in the shell.
+const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: string }> = ({ layers, namespace, location }) => {
+  const asked = useLocation().pathname;
+  const reading = layers.backend === 'checking' || layers.monad === 'checking';
+  if (!reading && !doorBlocks(layers, 'both')) return <Navigate to="/" replace />;
+  return (
+    <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
+      <DoorLayersPanel layers={layers} namespace={namespace} location={location} asked={asked} data-gui-node-id="GUI.content.unknown" />
+    </Box>
+  );
+};
+
+// The namespace's home ("/"): the welcome. It says WHICH namespace this is (never with the port: the port belongs to
+// the surface, and the surface is said on its own line) and where you are being served from; the identity is a page of
+// its own (`/.me`), one link away.
+const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string; origin: string } }> = ({
+  welcome,
+  'data-gui-node-id': nodeId = 'GUI.content.home',
+  'data-gui-component': nodeComponent = 'Welcome',
+}) => (
+  <Box
+    data-gui-node-id={nodeId}
+    data-gui-component={nodeComponent}
+    sx={{ px: { xs: 3, sm: 6 }, py: { xs: 5, sm: 8 }, maxWidth: 720, mx: 'auto', boxSizing: 'border-box' }}
+  >
+    <Typography variant="overline" sx={{ opacity: 0.55, letterSpacing: '0.12em', display: 'block' }}>
+      Home
+    </Typography>
+    <Typography variant="h4" component="h1" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+      Welcome to{' '}
+      <Box component="span" data-gui-node-id={`${nodeId}.namespace`} sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
+        {welcome?.namespace || ''}
+      </Box>
+    </Typography>
+    {welcome?.origin ? (
+      <Typography variant="body2" sx={{ mt: 1.5, opacity: 0.65, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+        served from {welcome.origin}
+      </Typography>
+    ) : null}
+    <Typography variant="body2" sx={{ mt: 4 }}>
+      <Link to="/.me" data-gui-node-id={`${nodeId}.me`}>Open your .me</Link>
+    </Typography>
+  </Box>
+);
+
 // Components the GUI document may name (`component`), by that name.
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
-  Landing: CleakerLandingHome,
+  Landing: QRConnect,
+  Welcome: WelcomePage,
   Users: CleakerUsersView,
   Blockchain: CleakerBlockchainView,
   Url: CleakerUrlView,
@@ -2441,10 +2032,20 @@ const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
 // provides) when already inside one; only a truly standalone render
 // (netget's real App.jsx today — Namespace renders as a SIBLING of
 // netget's own <Router>, not nested inside it) gets its own <BrowserRouter>.
-const Namespace: React.FC<NamespaceProps> = (props) => (
-  <RouterProvider>
-    <CleakerRoutes {...props} />
-  </RouterProvider>
-);
+// The shell reads and writes the page's one `.me` (the door's diagnosis asks it, under GUI.door). Under `<Cleaker>` there
+// is always one; a caller that mounts the shell directly gets a local one made for it, so nothing below has to ask
+// whether a `.me` exists.
+const WithMe: React.FC<NamespaceProps> = (props) => {
+  const found = useOptionalMe();
+  const routes = (
+    <RouterProvider>
+      <CleakerRoutes {...props} />
+    </RouterProvider>
+  );
+  if (found) return routes;
+  return <Me>{routes}</Me>;
+};
+
+const Namespace: React.FC<NamespaceProps> = (props) => <WithMe {...props} />;
 
 export default Namespace;

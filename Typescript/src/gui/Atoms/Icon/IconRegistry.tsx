@@ -100,6 +100,23 @@ function MaterialIconResolver(props: any) {
   );
 }
 
+// `glyph:𓆣` -- the text after the prefix IS the icon (a hieroglyph, an emoji), drawn in the same box and colour as any
+// other icon. Not a name to look up, so it is never normalized.
+function GlyphIconResolver(props: any) {
+  const { name, fill: _f, weight: _w, grade: _g, opticalSize: _o, className, style, iconColor, fontSize, ...rest } = props;
+  const glyph = String(name).slice(String(name).indexOf(':') + 1);
+  return (
+    <span
+      {...rest}
+      aria-hidden="true"
+      className={className}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, fontSize: fontSize ?? 24, color: iconColor, userSelect: 'none', ...style }}
+    >
+      {glyph}
+    </span>
+  );
+}
+
 function createLazyResolver(prefix: 'lucide' | 'mui', iconKey: string): React.LazyExoticComponent<React.ComponentType<any>> {
   const registryKey = `${prefix}:${iconKey}`;
   if (!iconRegistry[registryKey]) {
@@ -185,7 +202,12 @@ function createLazyResolver(prefix: 'lucide' | 'mui', iconKey: string): React.La
   return iconRegistry[registryKey];
 }
 
+// `orb:monad` -- the monad.ai orb itself (MonadOrbIcon.tsx), loaded on first use.
+const MonadOrbLazy = React.lazy(() => import('./MonadOrbIcon'));
+
 export function resolveIcon(name: string): React.ComponentType<any> {
+  if (String(name || '').startsWith('glyph:')) return GlyphIconResolver;
+  if (/^orb:monad$/i.test(String(name || '').trim())) return MonadOrbLazy;
   const normalizedName = normalizeIconName(name);
   const [prefix, iconKey] = normalizedName.includes(':')
     ? normalizedName.split(':') as ['lucide' | 'mui' | 'material', string]

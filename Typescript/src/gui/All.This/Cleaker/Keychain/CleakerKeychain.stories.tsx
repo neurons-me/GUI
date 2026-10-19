@@ -16,7 +16,7 @@ import type { KeychainKey, KeychainView } from './keychainState';
 // one call) -- there's no server-side two-step "request, then someone
 // approves it later" state for a screen to represent.
 const meta: Meta<typeof CleakerKeychain> = {
-  title: 'All.This/Cleaker/Keychain',
+  title: 'Pieces/Keychain',
   component: CleakerKeychain,
   parameters: {
     layout: 'fullscreen',

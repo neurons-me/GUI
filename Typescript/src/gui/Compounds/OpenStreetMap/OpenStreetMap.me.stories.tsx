@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import { SpecBoundary } from '@/runtime/SpecBoundary';
 import OpenStreetMapResolver, {
   OpenStreetMapChipResolver,
@@ -66,7 +66,7 @@ function MeBoundMap({ live, markerList, legendWidth, height }: Args & { height: 
     <button type="button" onClick={onClick} data-testid={testId} style={{ font: 'inherit', padding: '2px 8px', cursor: 'pointer' }}>{label}</button>
   );
   return (
-    <MeRuntimeProvider me={me} runtime={runtime}>
+    <Me me={me} runtime={runtime}>
       <div style={{ height }}>
         {mounted ? <SpecBoundary spec={spec} registry={SPEC_REGISTRY} runtime={runtime} /> : (
           <div data-testid="me-unmounted" style={{ height: '100%', display: 'grid', placeItems: 'center', border: '1px dashed currentColor', opacity: 0.6 }}>map unmounted</div>
@@ -81,7 +81,7 @@ function MeBoundMap({ live, markerList, legendWidth, height }: Args & { height: 
         {btn('me.trucks.heavy.available(300): direct, no notify', () => me.trucks.heavy.available(300), 'me-direct')}
         {btn('announce trucks.heavy.available', () => bridge.announce(['trucks.heavy.available']), 'me-announce')}
       </div>
-    </MeRuntimeProvider>
+    </Me>
   );
 }
 

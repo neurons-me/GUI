@@ -67,4 +67,23 @@ assert.equal(users.component, 'Users');
 assert.equal(users.route, '/users');
 assert.strictEqual(mergeGuiDocument(GUI_DOCUMENT, undefined), GUI_DOCUMENT);
 
+// `needs`: the layer a page cannot work without. The landing is the way in and needs nothing; the pages that read
+// the .me need the monad; the netget page needs the gateway API. Only pages (parts with a route) declare it, and
+// it survives a merge so an app can declare its own.
+const byId = new Map(entries.map((e) => [e.id, e]));
+assert.equal(byId.get('GUI.content.landing')!.needs, undefined, 'the landing is the way in');
+for (const id of ['users', 'blockchain', 'url', 'keychain']) assert.equal(byId.get(`GUI.content.${id}`)!.needs, 'monad', id);
+assert.equal(byId.get('GUI.content.netget')!.needs, 'backend');
+for (const entry of entries) {
+  if (entry.needs) {
+    assert.ok(entry.route, `${entry.id}: only a page declares needs`);
+    assert.ok(['monad', 'backend', 'both'].includes(entry.needs), `${entry.id}: unknown needs "${entry.needs}"`);
+  }
+}
+const mergedNeeds = flattenGuiDocument(mergeGuiDocument(GUI_DOCUMENT, {
+  GUI: { children: { content: { children: { logs: { component: 'Logs', route: '/logs', needs: 'both' } } } } },
+})).find((e) => e.id === 'GUI.content.logs');
+assert.equal(mergedNeeds?.needs, 'both');
+
+
 console.log('guiDocument.test.ts: all assertions passed');

@@ -12,6 +12,8 @@ export type QRProps = {
   fg?: string;
   /** Rounded corner radius (px) for modules (0 = square) */
   moduleRadius?: number;
+  /** Corner radius (px) of the outer clip around the modules (0 = square corners). */
+  cornerRadius?: number;
   /** Quiet zone in modules */
   quietZone?: number;
   /** Error correction level */
@@ -472,6 +474,7 @@ export default function QR({
   bg = "var(--qr-bg, transparent)",
   fg = "var(--qr-fg, currentColor)",
   moduleRadius = 0,
+  cornerRadius = 12,
   quietZone = 4,
   ecc = "H",
   asciiHeader,
@@ -591,7 +594,7 @@ const overlayD = useMemo(() => {
         {/* clip to rounded outer rect if bg is transparent */}
         <defs>
           <clipPath id={clipId}>
-            <rect x={0} y={0} width={renderedSize} height={renderedSize} rx={12} ry={12} />
+            <rect x={0} y={0} width={renderedSize} height={renderedSize} rx={cornerRadius} ry={cornerRadius} />
           </clipPath>
         </defs>
 

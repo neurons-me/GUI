@@ -8,7 +8,7 @@ import UsersTable from './Usernames';
 // leaks nothing a claim doesn't already advertise. Sibling to Cleaker/Cleaker
 // (the login/card widget), not nested inside it — this is its own view.
 const meta: Meta<typeof UsersTable> = {
-  title: 'All.This/Cleaker/Users',
+  title: 'Pieces/Users',
   component: UsersTable,
   parameters: {
     layout: 'fullscreen',

@@ -142,7 +142,7 @@ const mockItems: JsonSearchItem[] = [
 ];
 
 const meta: Meta<typeof SearchBar> = {
-  title: 'All.This/SearchBar',
+  title: 'Pieces/SearchBar',
   component: SearchBar,
   tags: ['autodocs'],
   args: {

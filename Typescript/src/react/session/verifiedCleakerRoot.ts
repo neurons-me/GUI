@@ -293,6 +293,31 @@ export async function verifyCleakerRootGeneration(
   return { stale: guard.current !== generation, result, netget: netgetCheck };
 }
 
+/**
+ * What a confirmation is ABOUT. `status` deliberately stays 'confirmed' after a later promote() fails (the sidebar and
+ * /netget keep working against the root that did verify), which makes it useless for deciding whether the NEW context is
+ * verified. These three facts say it exactly:
+ *   confirmedLabel      the namespace label of the last attempt that succeeded;
+ *   answeredNamespace   what that attempt's transport said it answers for;
+ *   lastAttemptFailed   the most recent attempt failed: whatever is being shown now was not confirmed by it.
+ */
+export type RootBindingFacts = {
+  confirmedLabel: string | null;
+  answeredNamespace: string | null;
+  lastAttemptFailed: boolean;
+};
+
+export const NO_ROOT_BINDING: RootBindingFacts = { confirmedLabel: null, answeredNamespace: null, lastAttemptFailed: false };
+
+/** The facts after an attempt to verify `label` finished. A failure keeps the older confirmation but marks it not current. */
+export function bindingFactsAfter(
+  prev: RootBindingFacts,
+  attempt: { label: string; ok: boolean; answeredNamespace: string | null },
+): RootBindingFacts {
+  if (attempt.ok) return { confirmedLabel: attempt.label, answeredNamespace: attempt.answeredNamespace, lastAttemptFailed: false };
+  return { ...prev, lastAttemptFailed: true };
+}
+
 export type VerifiedCleakerRoot = {
   status: CleakerRootStatus;
   /** The Monad-read transport -- `cleakerEndpoint` or `${cleakerEndpoint}/apps/netget`,
@@ -315,6 +340,16 @@ export type VerifiedCleakerRoot = {
    * mix of an old context's Monad state and a new one's Netget state).
    */
   netget: NetgetGatewayCheck;
+  /**
+   * The namespace the confirmed transport ANSWERED for (`target.namespace.me` of its /__surface), exactly as it said it,
+   * or null when it did not say. This is what the origin claims about itself -- not an authority over the namespace
+   * (see checkMonadSurfaceClaim). It exists so a caller can compare "the namespace I am showing" with "the namespace
+   * this origin answered for" instead of assuming the two from their names.
+   */
+  answeredNamespace: string | null;
+  /** See RootBindingFacts: the label that was confirmed, and whether the latest attempt failed. */
+  confirmedLabel: string | null;
+  lastAttemptFailed: boolean;
   /**
    * Re-verifies `seed` (both the Monad contract and Netget's, in
    * parallel) and, only if the Monad side succeeds, promotes ALL of the
@@ -351,6 +386,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
   const [signature, setSignature] = React.useState<SignatureCheck>('absent');
   const [monad, setMonad] = React.useState<ProbedMonad | null>(null);
   const [netget, setNetget] = React.useState<NetgetGatewayCheck>({ available: false, gatewayId: null });
+  const [bindingFacts, setBindingFacts] = React.useState<RootBindingFacts>(NO_ROOT_BINDING);
   const guardRef = React.useRef<GenerationGuard>({ current: 0 });
   const everConfirmedRef = React.useRef(false);
 
@@ -366,7 +402,9 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
         setSignature(result.signature);
         setMonad(result.monad);
         setNetget(netgetCheck);
+        setBindingFacts((prev) => bindingFactsAfter(prev, { label: seed.label, ok: true, answeredNamespace: result.namespace ?? null }));
       } else if (everConfirmedRef.current) {
+        setBindingFacts((prev) => bindingFactsAfter(prev, { label: seed.label, ok: false, answeredNamespace: null }));
         // A later promote() that fails must not undo an earlier real
         // confirmation -- transportOrigin/signature/netget already stayed
         // put; status does too, so a bad Beatle destination can't make an
@@ -374,6 +412,7 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
         setStatus('confirmed');
       } else {
         setStatus('error');
+        setBindingFacts((prev) => bindingFactsAfter(prev, { label: seed.label, ok: false, answeredNamespace: null }));
       }
     });
   }, []);
@@ -385,5 +424,5 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { status, transportOrigin, cleakerEndpoint, signature, monad, netget, promote: verify };
+  return { status, transportOrigin, cleakerEndpoint, signature, monad, netget, answeredNamespace: bindingFacts.answeredNamespace, confirmedLabel: bindingFacts.confirmedLabel, lastAttemptFailed: bindingFacts.lastAttemptFailed, promote: verify };
 }

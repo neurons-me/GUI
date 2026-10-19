@@ -4,7 +4,7 @@ import { renderToString } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import ME from 'this.me';
 import { createMeRuntime } from '../src/runtime/run-me';
-import { MeRuntimeProvider } from '../src/react/MeRuntimeProvider';
+import { Me } from '../src/react/Me';
 import { renderNode } from '../src/runtime/renderer';
 import { makeMuiTheme } from '../src/gui/Theme/fromTokens';
 import { themeTokens } from '../src/gui/Theme/styles/theme.tokens';
@@ -165,7 +165,7 @@ function boundValuesFollowTheRuntime() {
   const runtime = createMeRuntime(me, { subscribe: bridge.subscribe });
   const theme = themeOf(neuronsDark, 'dark');
   const html = () => renderToString(
-    h(MeRuntimeProvider, { me, runtime },
+    h(Me, { me, runtime },
       h(ThemeProvider, { theme },
         h(OpenStreetMap, FRAME,
           h(OpenStreetMap.Legend, { items: [{ label: 'queued', bind: 'trucks.inQueue' }, { label: 'missing', bind: 'trucks.nothing' }] }),

@@ -73,3 +73,138 @@ export function clearLocalIdentityVault(namespace: string): void {
   const storage = getStorage();
   storage?.removeItem(storageKey(namespace));
 }
+
+
+// ── identity vaults, found by NAMESPACE (a port is not part of it) ───────────────────────────────────────────────────
+//
+// A phrase-made identity's root lives in a vault whose key is the full namespace. A port written in the root used to be
+// part of that key, so the same person under `name.space:8080` looked for another key, found nothing, and tried the
+// compound seed instead (a different identity, refused by the monad). The vault of an identity is now FOUND by the
+// namespace without its port, and written under that name. Rules, because two spellings may hold different identities:
+//
+//   * the canonical key (no port) is where new vaults are written; the original keys are NEVER removed or rewritten;
+//   * a lookup reads every stored spelling of the same namespace; if they unlock to ONE root it is used (and copied to
+//     the canonical key when that is missing); if they unlock to DIFFERENT roots it is a conflict and nothing is written
+//     or chosen: the caller shows it and asks;
+//   * sharing the namespace's name does not hand a credential to another transport: a vault is only a stored root, what
+//     it signs is decided by the link the person signs in through.
+//
+// The low-level functions above are untouched (the keychain's vault slots reuse them with keys that are not namespaces).
+
+/** The namespace as a vault names it: lower case, no trailing `:port`. */
+export function canonicalVaultNamespace(namespace: string): string {
+  return String(namespace || '').trim().toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+}
+
+/** Every stored vault key whose namespace is `namespace` once a port is ignored (any spelling). */
+export function storedVaultKeysFor(namespace: string): string[] {
+  const storage = getStorage();
+  const canonical = canonicalVaultNamespace(namespace);
+  if (!storage || !canonical) return [];
+  const out: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+    if (canonicalVaultNamespace(key.slice(STORAGE_PREFIX.length)) === canonical) out.push(key.slice(STORAGE_PREFIX.length));
+  }
+  return out;
+}
+
+export type VaultCandidate = { key: string; root: Uint8Array };
+
+export type VaultFinding =
+  | { status: 'none' }
+  | { status: 'found'; key: string; root: Uint8Array; migrated: boolean; otherKeys: string[] }
+  | { status: 'conflict'; candidates: VaultCandidate[] };
+
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * Finds the identity vault of `namespace` under `password`, whatever port its key was written with.
+ * Throws what `unwrapIdentityRoot` throws when vaults exist and none opens with this password.
+ */
+export async function findLocalIdentityVault(namespace: string, password: string): Promise<VaultFinding> {
+  const storage = getStorage();
+  const keys = storedVaultKeysFor(namespace);
+  if (!storage || keys.length === 0) return { status: 'none' };
+
+  const opened: VaultCandidate[] = [];
+  let authError: unknown = null;
+  for (const key of keys) {
+    const raw = storage.getItem(STORAGE_PREFIX + key);
+    if (!raw) continue;
+    try {
+      opened.push({ key, root: await unwrapIdentityRoot(JSON.parse(raw) as IdentityRootEnvelope, password) });
+    } catch (error) {
+      authError = error;
+    }
+  }
+  if (opened.length === 0) throw authError ?? new Error('IDENTITY_VAULT_UNREADABLE');
+
+  const distinct: VaultCandidate[] = [];
+  for (const c of opened) if (!distinct.some((d) => sameBytes(d.root, c.root))) distinct.push(c);
+  if (distinct.length > 1) {
+    // prefer showing the canonical spelling first, then the rest in stored order
+    const canonicalKey = canonicalVaultNamespace(namespace);
+    const ordered = [...opened].sort((x, y) => Number(y.key === canonicalKey) - Number(x.key === canonicalKey));
+    return { status: 'conflict', candidates: ordered.filter((c, i) => ordered.findIndex((o) => sameBytes(o.root, c.root)) === i) };
+  }
+
+  const canonicalKey = canonicalVaultNamespace(namespace);
+  const source = opened.find((c) => c.key === canonicalKey) ?? opened[0];
+  let migrated = false;
+  if (!keys.includes(canonicalKey)) {
+    // a copy under the canonical name; the original stays where it was
+    const raw = storage.getItem(STORAGE_PREFIX + source.key);
+    if (raw) { storage.setItem(STORAGE_PREFIX + canonicalKey, raw); migrated = true; }
+  }
+  return { status: 'found', key: source.key, root: source.root, migrated, otherKeys: keys.filter((k) => k !== source.key) };
+}
+
+/** Writes an identity's vault under the canonical (port-free) namespace. Other spellings are left as they are. */
+export async function saveIdentityVault(namespace: string, rootBytes: Uint8Array, password: string): Promise<void> {
+  await saveLocalIdentityVault(canonicalVaultNamespace(namespace), rootBytes, password);
+}
+
+/** Is there a vault for this namespace under any spelling? */
+export function hasIdentityVault(namespace: string): boolean {
+  return storedVaultKeysFor(namespace).length > 0;
+}
+
+
+// ── which identity a sign-in attempts, and where it comes from ───────────────────────────────────────────────────────
+//
+// A sign-in is by name and secret. There are exactly two sources of the key that signs the OPEN proof, and the attempt
+// states which one it used; there is no third, and no "try the other one if the first did not work":
+//
+//   vault     the root stored in this browser for the namespace (a phrase-made identity), unlocked with the secret;
+//   password  the identity DERIVED from the name and the secret (deriveCompoundSeed(username, secret)): the mechanism of
+//             the form itself, the one every password-made identity has. It is used only when there is NO vault for the
+//             namespace in this browser under any spelling, it is never used after a vault was found or in conflict, and
+//             it is only ever an `open` (never a claim): the monad answers whether that derived key is the registered
+//             one, and a refusal offers recovery instead of creating anything.
+//
+// An `open` is signed: the derived key's proof is sent to the transport the person signs in through. That is the
+// mechanism the person chose by typing a name and a secret in this form; it is reported (`source`), not hidden.
+export type IdentityMechanism =
+  | { kind: 'vault'; source: 'vault'; key: string; rootHex: string }
+  | { kind: 'password'; source: 'password' }
+  | { kind: 'conflict'; candidates: VaultCandidate[] }
+  | { kind: 'conflict-unresolved-choice'; candidates: VaultCandidate[]; choice: string };
+
+export function chooseIdentityMechanism(
+  finding: VaultFinding,
+  choice: string | null | undefined,
+  toHex: (bytes: Uint8Array) => string,
+): IdentityMechanism {
+  if (finding.status === 'found') return { kind: 'vault', source: 'vault', key: finding.key, rootHex: toHex(finding.root) };
+  if (finding.status === 'conflict') {
+    const wanted = String(choice || '').trim().toLowerCase();
+    if (!wanted) return { kind: 'conflict', candidates: finding.candidates };
+    const pick = finding.candidates.find((c) => c.key === wanted);
+    return pick
+      ? { kind: 'vault', source: 'vault', key: pick.key, rootHex: toHex(pick.root) }
+      : { kind: 'conflict-unresolved-choice', candidates: finding.candidates, choice: wanted };
+  }
+  return { kind: 'password', source: 'password' };
+}

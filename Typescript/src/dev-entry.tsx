@@ -37,7 +37,7 @@ async function boot() {
   }
 
   await mount(
-    { type: 'CleakerComposer', props: { endpoint: boot?.apiOrigin || window.location.origin } },
+    { type: 'Cleaker', props: { me, transportOrigin: boot?.apiOrigin || undefined } },
     root,
     { gui: GUI, me, showUnknown: true },
   );

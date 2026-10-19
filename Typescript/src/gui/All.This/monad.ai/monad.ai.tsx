@@ -1,6 +1,7 @@
 // Monad.tsx — Floating .me badge wrapper
 // Renders the draggable animated .me orb and toggles the Session badge
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Box } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
@@ -8,6 +9,7 @@ import type { Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
+import { placeOrbLabel } from "./orbLabelPlacement";
 export type MonadProps = {
   variant?: "bubble" | "inline" | "identity";
   mode?: "float" | "contained";
@@ -17,6 +19,34 @@ export type MonadProps = {
   label?: string;
   /** Drive the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
+  /**
+   * Draw the orb without the dimming glow cycle (the `glow` animation takes the whole orb down to 30-50% opacity, the
+   * right ambience for a floating badge and too faint as an icon). `true` = full strength; a number in (0, 1] is the
+   * steady opacity to hold it at (tone, not size: the orb keeps its own geometry).
+   */
+  solid?: boolean | number;
+  /**
+   * Hairline ring: the width, in px of the orb's own 60px geometry, of a single circumference line. Replaces the 2.5px
+   * border + 3px ring + halo of the badge, which at icon scale read as a heavy, glowing rim. No ring shadow, no halo.
+   * Icon mode also takes its colour from the theme: the circumference and the inner code (identicon) are drawn in
+   * `palette.primary` in both light and dark (red when unhealthy). The floating badge keeps its own fixed palette.
+   */
+  ring?: number;
+  /**
+   * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
+   * "rorschach" texture on a translucent body. `flat` is a plain circle, solid, one colour from the theme (palette.primary
+   * tinted into the surface colour), no highlight, no shading, no texture: the pixel code is what is drawn on it.
+   * `flat` also draws the circumference and the code in the theme's primary (red when unhealthy), as icon mode does.
+   */
+  core?: "glass" | "flat";
+  /**
+   * The factor the CALLER scales this orb by from outside (a page drawing it at 2x, an icon drawing it at 0.4x). The
+   * orb's overlays (the hover label, the identity QR) are drawn at 1/scale so they keep their own size: a label that
+   * doubles with the orb is not a label.
+   */
+  scale?: number;
+  /** Show the hover label. An icon that already has its own label (a rail link) turns it off. */
+  tooltip?: boolean;
   /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
   size?: number;
   children?: ReactNode;
@@ -93,7 +123,72 @@ function resolveMeContext(): MonadContextValue {
   return { hasMe: Boolean(me), me, meName };
 }
 
-export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, children }: MonadProps) {
+/**
+ * The orb's hover label, drawn in the viewport (a portal) so it is not subject to any transform the orb sits under
+ * (a page that scales the orb, a card that clips it) and can be placed against the real margins:
+ *   - it starts over the RIGHT half of the orb (a little left of the orb's centre) and extends to the right;
+ *   - when the right margin is short it slides left to stay inside the viewport, and is capped at the viewport's width
+ *     (ellipsis) when even that is not enough;
+ *   - above the orb; below it when there is no room above.
+ */
+function OrbLabel({ anchor, text, dark }: { anchor: DOMRect; text: string; dark: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const placed = placeOrbLabel(
+      { left: anchor.left, top: anchor.top, width: anchor.width, height: anchor.height },
+      { width: el.offsetWidth, height: el.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+    setPos({ left: placed.left, top: placed.top });
+  }, [anchor, text]);
+  return createPortal(
+    <Box
+      ref={ref}
+      role="tooltip"
+      sx={{
+        position: "fixed",
+        left: pos?.left ?? 0,
+        top: pos?.top ?? 0,
+        visibility: pos ? "visible" : "hidden",
+        maxWidth: "calc(100vw - 16px)",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        zIndex: 1600,
+        pointerEvents: "none",
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        color: dark ? "#baf3ff" : "#005a7a",
+        background: dark ? "rgba(10,14,18,0.85)" : "rgba(255,255,255,0.85)",
+        border: "1px solid rgba(255,255,255,0.2)",
+        backdropFilter: "blur(8px)",
+        borderRadius: "8px",
+        px: 1,
+        py: 0.4,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+      }}
+    >
+      {text}
+    </Box>,
+    document.body,
+  );
+}
+
+export default function Monad({ variant = "bubble", mode = "float", kind, seed, label, healthy, size, solid = false, ring, core = "glass", scale: outerScale, tooltip = true, children }: MonadProps) {
+  const overlayScale = typeof outerScale === "number" && outerScale > 0 ? 1 / outerScale : 1;
+  // where the hovered orb is in the viewport (null when not hovered); the label is placed against it
+  const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
+  const hairline = typeof ring === "number" && ring > 0 ? ring : null;
+  const flatCore = core === "flat";
+  // the theme drives the colours of the circumference and of the code (icon mode and a flat core)
+  const themed = hairline !== null || flatCore;
+  // A flat core is a solid disc: the glow cycle that dims the WHOLE orb to 30-50% would make it translucent again, so
+  // a flat core holds full strength unless a steady opacity was asked for.
+  const solidOpacity = solid === true ? 1 : typeof solid === "number" && solid > 0 && solid <= 1 ? solid : core === "flat" ? 1 : null;
   const [open, setOpen] = useState(false);
   const [qrExpanded, setQrExpanded] = useState(false);
   const identitySize = size ?? 34;
@@ -252,6 +347,11 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
             "25%": { transform: "translateY(-6px) scale(1.05)", borderRadius: "55% 45% 60% 40% / 60% 55% 45% 40%" },
             "50%": { transform: "translateY(-8px) scale(1.1)", borderRadius: "50% 60% 40% 55% / 55% 40% 60% 45%" },
             "75%": { transform: "translateY(-6px) scale(1.05)", borderRadius: "45% 55% 40% 60% / 40% 60% 55% 50%" },
+          },
+          // a circle that stays a circle: only the vertical drift of `float`, none of its scale or blob morph
+          "@keyframes floatSteady": {
+            "0%,100%": { transform: "translateY(0)" },
+            "50%": { transform: "translateY(-3px)" },
           },
           "@keyframes glow": {
             "0%,100%": { opacity: 0.3, boxShadow: "0 0 4px rgba(255,255,255,0.2), 0 0 8px rgba(173,216,230,0.1)" },
@@ -453,6 +553,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               }
             }}
             onMouseDown={mode === "contained" ? undefined : handleMouseDown}
+            onMouseEnter={(e: React.MouseEvent<HTMLElement>) => setLabelAnchor(e.currentTarget.getBoundingClientRect())}
+            onMouseLeave={() => setLabelAnchor(null)}
             sx={(t: Theme) => {
               const primary = t.palette.primary?.main || "#29bfff";
               const lightRing = `0 0 0 3px ${primary}, 0 0 20px 5px color-mix(in srgb, ${primary} 55%, transparent)`;
@@ -469,13 +571,21 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               background: isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              boxShadow: isIdentity
+              boxShadow: isIdentity || hairline !== null
                 ? "none"
+                : flatCore
+                ? (!status.active || status.error
+                    ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
+                    : `0 0 0 3px ${primary}, 0 0 22px 6px color-mix(in srgb, ${primary} 55%, transparent)`)
                 : (!status.active || status.error
                     ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
                     : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
               border: isIdentity
                 ? "none"
+                : hairline !== null
+                ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
+                : flatCore
+                ? `2.5px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
                 : (!status.active || status.error
                     ? "2.5px solid #ff1a1a"
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
@@ -486,7 +596,12 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               color: t.palette.mode === "light" ? primary : "#baf3ff",
               cursor: "pointer",
               userSelect: "none",
-              animation: "float 6s ease-in-out infinite, glow 4.5s ease-in-out infinite",
+              animation: flatCore
+                ? "floatSteady 6s ease-in-out infinite"
+                : solidOpacity !== null
+                ? "float 6s ease-in-out infinite"
+                : "float 6s ease-in-out infinite, glow 4.5s ease-in-out infinite",
+              ...(solidOpacity !== null ? { opacity: solidOpacity } : {}),
               backdropFilter: "blur(10px) saturate(160%)",
               pointerEvents: "auto",
               ...(isIdentity ? {} : { "&::before": {
@@ -507,7 +622,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 mixBlendMode: "screen",
               } }),
               "&:hover": { transform: "scale(1.08)" },
-              "&:hover .monad-tooltip": { opacity: 1, transform: "translateX(-50%) translateY(-2px)" },
+              "&:hover .monad-tooltip": { opacity: 1, transform: `translateX(-50%) translateY(-2px) scale(${overlayScale})` },
             });
             }}
           >
@@ -543,6 +658,19 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               </Box>
             ) : visualKind === "monad" ? (
               <>
+                {flatCore ? (
+                  <Box
+                    aria-hidden="true"
+                    sx={{
+                      position: "absolute",
+                      inset: 5,
+                      borderRadius: "50%",
+                      // solid: the theme's primary tinted into the surface colour. No gradients, no texture, no inset shading.
+                      background: `color-mix(in srgb, ${!status.active || status.error ? "#ff1a1a" : theme.palette.primary.main} 14%, ${theme.palette.background?.paper ?? "#1e1e1e"})`,
+                      pointerEvents: "none",
+                    }}
+                  />
+                ) : (
                 <Box
                   aria-hidden="true"
                   sx={{
@@ -580,6 +708,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                     }}
                   />
                 </Box>
+                )}
                 <Box
                   aria-hidden="true"
                   sx={{
@@ -606,9 +735,13 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                       sx={{
                         borderRadius: "1px",
                         bgcolor: cell.active
-                          ? cell.secondary
-                            ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
-                            : (theme.palette.mode === "light" ? "rgba(10,120,148,0.9)" : "rgba(225,239,236,0.95)")
+                          ? themed
+                            // icon mode / flat core: the code is drawn in the theme's own primary (red when the monad is not healthy),
+                            // the same colour as the circumference around it; the primary cells strong, the secondary softer
+                            ? `color-mix(in srgb, ${!status.active || status.error ? "#ff1a1a" : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
+                            : cell.secondary
+                              ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
+                              : (theme.palette.mode === "light" ? "rgba(10,120,148,0.9)" : "rgba(225,239,236,0.95)")
                           : "transparent",
                         opacity: cell.active ? 1 : 0,
                       }}
@@ -630,7 +763,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                   position: "absolute",
                   bottom: "calc(100% + 10px)",
                   left: "50%",
-                  transform: "translateX(-50%) translateY(4px)",
+                  transform: `translateX(-50%) translateY(4px) scale(${overlayScale})`,
+                  transformOrigin: "bottom center",
                   opacity: 0,
                   transition: "opacity 0.18s ease, transform 0.18s ease",
                   pointerEvents: "auto",
@@ -667,37 +801,15 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ) : null}
               </Box>
             ) : (
-              <Box
-                className="monad-tooltip"
-                sx={{
-                  position: "absolute",
-                  bottom: "calc(100% + 8px)",
-                  left: "50%",
-                  transform: "translateX(-50%) translateY(4px)",
-                  opacity: 0,
-                  transition: "opacity 0.18s ease, transform 0.18s ease",
-                  pointerEvents: "none",
-                  whiteSpace: "nowrap",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  color: theme.palette?.mode === "light" ? "#005a7a" : "#baf3ff",
-                  background: theme.palette?.mode === "light" ? "rgba(255,255,255,0.85)" : "rgba(10,14,18,0.85)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  backdropFilter: "blur(8px)",
-                  borderRadius: "8px",
-                  px: 1,
-                  py: 0.4,
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-                }}
-              >
-                {tooltipLabel}
-              </Box>
+              null
             )}
           </Box>
           </Box>
         </MonadContext.Provider>
       </Box>
+      {labelAnchor && tooltip && !(variant === "identity" && visualKind === "me") && visualKind !== "me" ? (
+        <OrbLabel anchor={labelAnchor} text={tooltipLabel} dark={theme.palette?.mode !== "light"} />
+      ) : null}
     </>
   );
 }

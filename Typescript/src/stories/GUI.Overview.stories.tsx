@@ -10,7 +10,7 @@ import {
   SESSION_SECRET_STORAGE_KEY,
   SESSION_USERNAME_STORAGE_KEY,
 } from '@/gui/All.This/Cleaker/runtimeUsername';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import { useMe } from '@/react/useMe';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
@@ -291,7 +291,9 @@ const DemoBody = () => {
                     </Typography>
 
                     <Box sx={{ pt: 0.5 }}>
-                      <Cleaker />
+                      <Me>
+                        <Cleaker namespace="cleaker.me" />
+                      </Me>
                     </Box>
                   </Stack>
                 </CardContent>
@@ -385,9 +387,9 @@ const Demo = () => {
 
   return (
     <Theme>
-      <MeRuntimeProvider me={me}>
+      <Me me={me}>
         <DemoBody />
-      </MeRuntimeProvider>
+      </Me>
     </Theme>
   );
 };

@@ -7,8 +7,24 @@ type FooterSpec = {
   props?: FooterProps;
 };
 
+const FOOTER_META: RegistryEntry['meta'] = {
+  id: 'layout.footer',
+  label: 'Footer',
+  kind: 'layout',
+  group: 'Layout',
+  path: ['Layout', 'Sidebars'],
+  tags: ['footer', 'brand'],
+  demoSpec: {
+    type: 'Footer',
+    props: {
+      brandLabel: 'neurons.me',
+    },
+  },
+};
+
 const FooterResolver: RegistryEntry = {
   type: 'Footer',
+  meta: FOOTER_META,
   resolve(spec: FooterSpec) {
     const props = spec.props ?? {};
     return (

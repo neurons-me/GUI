@@ -4,7 +4,7 @@ import * as ReactDOM from 'react-dom/client';
 import Theme from '@/gui/Theme/Theme';
 import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import { writeMeValue } from './run-me';
 import { mount } from './mount';
 import type { MeLike } from '@/react/types';
@@ -141,7 +141,7 @@ export function mountApp({ me, app, target = '#root' }: MountAppOptions): void {
 
   createRoot(el).render(
     <Theme initialThemeId={app.theme}>
-      <MeRuntimeProvider me={me}>
+      <Me me={me}>
         <Layout
           LeftBar={{
             initialView: 'expanded',
@@ -152,7 +152,7 @@ export function mountApp({ me, app, target = '#root' }: MountAppOptions): void {
         >
           <View />
         </Layout>
-      </MeRuntimeProvider>
+      </Me>
     </Theme>,
   );
 }

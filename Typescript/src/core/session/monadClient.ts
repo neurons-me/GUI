@@ -228,6 +228,12 @@ export type MonadReadResult<TValue = unknown> = {
   namespace: string;
   path: string;
   value: TValue;
+  /**
+   * What the ledger said about the path: `public` (the value is readable), `closed` (it exists or may exist and is not
+   * disclosed: the value is null for every reader), or null when the answer carried none. Kept apart from `value` so a
+   * closed path is not mistaken for an empty one.
+   */
+  disclosure: 'public' | 'closed' | null;
 };
 
 export type MonadWriteHeadResult = {
@@ -914,12 +920,14 @@ export async function readNamespacePath<TValue = unknown>(
     });
   }
 
+  const disclosure = payload.disclosure === 'public' || payload.disclosure === 'closed' ? payload.disclosure : null;
   return {
     ok: true,
     target,
     namespace: target.namespace.me,
     path: target.path,
     value: target.value as TValue,
+    disclosure,
   };
 }
 

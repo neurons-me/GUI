@@ -34,6 +34,12 @@ export type LeftBarProps = {
   toggleLocation?: 'sidebar' | 'topbar' | 'none';
   header?: ReactNode | { title?: string; icon?: string; iconColor?: string };
   initialView?: LeftBarView;
+  /**
+   * Replaces the bar's expand/collapse arrow with an element of the app's own, which IS the control: the app draws it
+   * and calls `toggle()` (rail <-> expanded; on a narrow screen, open/close the drawer). It leads the header, with
+   * `header` (shown when the bar is not a rail) beside it. Without it the bar keeps its arrow.
+   */
+  toggle?: (state: { view: LeftBarView; toggle: () => void }) => ReactNode;
 };
 
 export type LeftSidebarProps = LeftBarProps;

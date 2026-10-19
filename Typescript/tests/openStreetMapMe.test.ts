@@ -6,7 +6,7 @@ import { renderNode } from '../src/runtime/renderer';
 import { makeMuiTheme } from '../src/gui/Theme/fromTokens';
 import { themeTokens } from '../src/gui/Theme/styles/theme.tokens';
 import neuronsDark from '../src/gui/Theme/Catalog/themes/neurons/dark.tokens';
-import { MeRuntimeProvider } from '../src/react/MeRuntimeProvider';
+import { Me } from '../src/react/Me';
 import OpenStreetMapResolver, {
   OpenStreetMapChipResolver,
   OpenStreetMapControlsResolver,
@@ -52,7 +52,7 @@ const WATCHED = [
 
 function renderSpec() {
   const kernel = createVeracruzKernel();
-  const html = renderToString(h(ThemeProvider, { theme }, h(MeRuntimeProvider, { me: kernel.me, runtime: kernel.runtime },
+  const html = renderToString(h(ThemeProvider, { theme }, h(Me, { me: kernel.me, runtime: kernel.runtime },
     renderNode(veracruzMeSpec(), { React, registry: REGISTRY, runtime: kernel.runtime }))));
   return { ...kernel, html };
 }
@@ -124,7 +124,7 @@ function writesAndNotifications() {
   assert.deepEqual(me('ui.map.selected'), ['n-yard']);
   runtime.action!('me/ui.map.hiddenLayers')(['water']);
   assert.deepEqual(me('ui.map.hiddenLayers'), ['water'], 'one-argument writes pass through');
-  const again = renderToString(h(ThemeProvider, { theme }, h(MeRuntimeProvider, { me, runtime },
+  const again = renderToString(h(ThemeProvider, { theme }, h(Me, { me, runtime },
     renderNode(veracruzMeSpec(), { React, registry: REGISTRY, runtime }))));
   assert.match(again, /<g id="n-yard"[^>]*aria-pressed="true"/);
   assert.match(again, /<g id="n-port"[^>]*aria-pressed="false"/, 'the {read} selection follows the write');
@@ -154,7 +154,7 @@ function specSelectionWritesIdsOnly() {
   const spec = veracruzMeSpec();
   spec.children = [...spec.children, { type: 'SelectionProbe' }];
   const registry = { ...REGISTRY, SelectionProbe: { type: 'SelectionProbe', resolve: () => h(Probe) } };
-  renderToString(h(ThemeProvider, { theme }, h(MeRuntimeProvider, { me, runtime },
+  renderToString(h(ThemeProvider, { theme }, h(Me, { me, runtime },
     renderNode(spec, { React, registry, runtime }))));
   assert.ok(ctx, 'the probe rendered inside the spec map');
   const sel = ctx!.selection;

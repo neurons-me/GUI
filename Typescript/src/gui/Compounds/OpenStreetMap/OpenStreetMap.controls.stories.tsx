@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { MeRuntimeProvider } from '@/react/MeRuntimeProvider';
+import { Me } from '@/react/Me';
 import OpenStreetMap from './OpenStreetMap';
 import type { OsmMarkerScaleMode, OsmOverlayPosition } from './context';
 import type { OsmUserView } from './projection';
@@ -39,7 +39,7 @@ function VeracruzControls({ live, layers, defaultLayersOpen, position, step, max
 }) {
   const { me, runtime } = useKernel(live);
   return (
-    <MeRuntimeProvider me={me} runtime={runtime}>
+    <Me me={me} runtime={runtime}>
       <OpenStreetMap
         {...VERACRUZ_FRAME}
         basemap={VERACRUZ_BASEMAP}
@@ -59,7 +59,7 @@ function VeracruzControls({ live, layers, defaultLayersOpen, position, step, max
         <OpenStreetMap.Chip mono label="avg km/h" bind="trucks.speed.avg" format={(v) => (typeof v === 'number' ? v.toFixed(1) : '—')} minValueCh={4} hideBelow={520} />
         <OpenStreetMap.Chip mono label="simulation" value="06:42 · ×4" variant="adapter" />
       </OpenStreetMap>
-    </MeRuntimeProvider>
+    </Me>
   );
 }
 

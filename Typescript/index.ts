@@ -130,7 +130,6 @@ export { default as ModuleRow } from '@/gui/All.This/src/ModuleRow/ModuleRow';
 export { default as ModulesGrid } from '@/gui/All.This/src/ModulesGrid/ModulesGrid';
 export { default as ModulesList } from '@/gui/All.This/src/ModulesList/ModulesList';
 export { default as Cleaker } from '@/gui/All.This/Cleaker/Cleaker';
-export { default as CleakerComposer } from '@/gui/All.This/Cleaker/CleakerComposer';
 export { default as CleakerQR } from '@/gui/All.This/Cleaker/QR/CleakerQR';
 export { default as Namespace } from '@/gui/All.This/Cleaker/Namespace/namespace';
 export {
@@ -288,6 +287,17 @@ export type {
   SeedSessionOptions,
   SeedSessionWriteOptions,
 } from '@/core/session/createSeedSession';
+// A link writes a value FOR an audience (this.me's audience algebra) and reads it back as one of its members.
+export { writeForAudience, readForAudience, openEnvelope } from '@/core/session/audienceWrite';
+// Reading by address (`me://ana.a-test.local:read/battery`) through the open links of a context; see addressRead.ts.
+export { readAddress, selectLink, subscribeAddress } from '@/core/session/addressRead';
+export type { AddressRead, AddressReadOptions, AddressSubscription } from '@/core/session/addressRead';
+export type {
+  AudienceEnvelope,
+  AudienceFormula,
+  AudienceIdentity,
+  AudienceKey,
+} from '@/core/session/audienceWrite';
 // 3) runtime aggregates (compatibility / inspection convenience)
 // These stay as named exports for modern consumers and explicit compat layers.
 // NOTE: We still import concrete modules (not barrels) to preserve tree-shaking.
@@ -460,16 +470,19 @@ export {
   SelectionProvider,
 } from '@/runtime/selection';
 export { useLauncherPopover, LauncherPopoverProvider } from '@/runtime/launcherPopover';
-export { MeRuntimeProvider, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/MeRuntimeProvider';
+export { Me, useMeRuntime, useOptionalMeRuntimeContext } from '@/react/Me';
+export type { MeProps } from '@/react/Me';
 export {
   SeedSessionProvider,
   SeedSessionContextError,
   useOptionalSeedSessionContext,
 } from '@/react/session/SeedSessionProvider';
-export { useMe } from '@/react/useMe';
+export { useMe, useOptionalMe } from '@/react/useMe';
+export { readMeUsername } from '@/react/meIdentity';
 export { useMeValue } from '@/react/useMeValue';
 export { useMeAction } from '@/react/useMeAction';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';
+export { useAddress } from '@/react/session/useAddress';
 export type { MeLike, MeSubscribeBridge, MeTargetLike } from '@/react/types';
 export type {
   ResolveSeedFromCredentials,

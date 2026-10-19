@@ -85,6 +85,7 @@ export default function MonadMesh({
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.35, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.name}
                   </Typography>
+                  {onWake ? (
                   <Box
                     component="button"
                     onClick={() => onWake?.(entry.name)}
@@ -100,12 +101,15 @@ export default function MonadMesh({
                   >
                     {waking[entry.name] ? 'waking…' : 'wake'}
                   </Box>
+                  ) : null}
                 </Box>
               ))}
             </>
           )}
 
-          {/* Restart all — inside mesh section */}
+          {/* Restart all — inside mesh section. Offered only when something can act on it: a read-only view must not
+              show a button that does nothing. */}
+          {onRestartAll ? (
           <Box sx={{ mt: 1, pt: 0.75, borderTop: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Box
               component="button"
@@ -129,6 +133,7 @@ export default function MonadMesh({
               <Typography variant="caption" sx={{ color: 'error.main', opacity: 0.8, fontSize: '10px' }}>{restartError}</Typography>
             ) : null}
           </Box>
+          ) : null}
         </Box>
       )}
     </Box>

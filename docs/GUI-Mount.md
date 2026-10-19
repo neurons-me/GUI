@@ -1,7 +1,3 @@
-[← Back to GUI Docs](https://neurons-me.github.io/GUI/docs/)
-
----
-
 # GUI Mount
 
 **GUI Mount** is the boundary where a GUI description becomes a live surface.
@@ -273,7 +269,3 @@ The simplest React app does not need `mount`.
 The simplest GUI spec does not need `mountApp`.
 
 They meet later, when apps become namespace-backed surfaces.
-
----
-
-[← Back to GUI Docs](https://neurons-me.github.io/GUI/docs/)

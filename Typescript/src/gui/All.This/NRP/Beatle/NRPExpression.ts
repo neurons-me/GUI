@@ -252,15 +252,26 @@ function allNamespacesValid(node: NRPNode): boolean {
   }
 }
 
-function allNamespacesDomainShaped(node: NRPNode): boolean {
+/**
+ * `declared`: spaces the runtime this page talks to has declared for itself (lowercase). The shape rule is
+ * context-free and wants two labels, so a space of one label (`localhost`, `here`) can only pass because that
+ * runtime said it is one of its own; without that context it still fails, as before.
+ */
+function allNamespacesDomainShaped(node: NRPNode, declared: ReadonlySet<string> = NO_DECLARED_SPACES): boolean {
   switch (node.kind) {
-    case 'namespace':    return node.parsed !== undefined && isValidDomainShape(node.parsed.fqdn);
-    case 'complement':   return allNamespacesDomainShaped(node.operand);
-    case 'union':        return allNamespacesDomainShaped(node.left) && allNamespacesDomainShaped(node.right);
-    case 'intersection': return allNamespacesDomainShaped(node.left) && allNamespacesDomainShaped(node.right);
-    case 'overlay':      return allNamespacesDomainShaped(node.namespace);
+    case 'namespace': {
+      if (node.parsed === undefined) return false;
+      const fqdn = node.parsed.fqdn;
+      return isValidDomainShape(fqdn) || declared.has(String(fqdn ?? '').trim().toLowerCase());
+    }
+    case 'complement':   return allNamespacesDomainShaped(node.operand, declared);
+    case 'union':        return allNamespacesDomainShaped(node.left, declared) && allNamespacesDomainShaped(node.right, declared);
+    case 'intersection': return allNamespacesDomainShaped(node.left, declared) && allNamespacesDomainShaped(node.right, declared);
+    case 'overlay':      return allNamespacesDomainShaped(node.namespace, declared);
   }
 }
+
+const NO_DECLARED_SPACES: ReadonlySet<string> = new Set();
 
 // ── Canonical serializer ───────────────────────────────────────────────────
 // Precedence-aware: inserts parens wherever child prec < parent prec,
@@ -304,13 +315,21 @@ export function canonicalize(node: NRPNode): string {
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
-export function parseNRPExpression(raw: string): NRPExpression {
+export type ParseNRPExpressionOptions = {
+  /** Spaces the runtime declared for itself, e.g. the root a monad confirmed for this page. See allNamespacesDomainShaped. */
+  declaredSpaces?: readonly string[];
+};
+
+export function parseNRPExpression(raw: string, options: ParseNRPExpressionOptions = {}): NRPExpression {
+  const declared: ReadonlySet<string> = options.declaredSpaces?.length
+    ? new Set(options.declaredSpaces.map((space) => String(space).trim().toLowerCase()).filter(Boolean))
+    : NO_DECLARED_SPACES;
   try {
     const tokens = tokenize(raw.trim());
     const ast = new Parser(tokens).parse();
     const canonical = canonicalize(ast);
     const namespaceValid = allNamespacesValid(ast);
-    const domainShapeValid = namespaceValid && allNamespacesDomainShaped(ast);
+    const domainShapeValid = namespaceValid && allNamespacesDomainShaped(ast, declared);
     return { raw, canonical, ast, syntaxValid: true, namespaceValid, domainShapeValid, valid: true };
   } catch (e) {
     const fallback: NRPNode = { kind: 'namespace', value: raw.trim(), parseError: String(e) };

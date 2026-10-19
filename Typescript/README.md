@@ -125,7 +125,7 @@ into patterns, patterns compose into features.
 | `this.gui/atoms` | Primitives — `Box`, `Button`, `Typography`, `Icon`, `Avatar`, … |
 | `this.gui/molecules` | Compositions — `Hero`, `Stack`, `Page`, … |
 | `this.gui/compounds` | Feature panels built from molecules |
-| `this.gui/react` | `.me` bridge — `MeRuntimeProvider`, `useMeValue`, `useMeAction` |
+| `this.gui/react` | `.me` bridge — `Me`, `useMeValue`, `useMeAction` |
 | `this.gui/runtime` | `mountApp`, `declareApp`, `writeMeValue`, `readMeValue` |
 
 ## Docs

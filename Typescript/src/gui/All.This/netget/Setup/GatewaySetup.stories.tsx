@@ -10,7 +10,7 @@ import GatewaySetup from './GatewaySetup';
 // GatewaySetup.tsx's header comment for why claiming from a browser is
 // safe now (the setup-code gate) when it deliberately wasn't before.
 const meta: Meta<typeof GatewaySetup> = {
-  title: 'All.This/netget/Setup',
+  title: 'Pieces/netget/Setup',
   component: GatewaySetup,
   parameters: {
     layout: 'fullscreen',

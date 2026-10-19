@@ -17,7 +17,8 @@ import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { GuiNodeIdBase, useGuiNodeId } from '@/runtime/guiNodeId';
-import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, type EntrypointsView } from './mainServerPresentation';
+import QR from '@/gui/All.This/me/QR';
+import { hostnameOf, gatewayIdOf, describePublicIP, describeEntrypoints, describePort, describeDoor, describeClaim, isOperatorView, readAdminSessionToken, type EntrypointsView, type PortView, type PublicIPDetectionView } from './mainServerPresentation';
 
 export interface MainServerViewProps {
   /** This netget's own base URL (its own backend, not a monad — same
@@ -75,8 +76,8 @@ type MainServerState = {
   // unrelated thing: the port/scheme the CURRENT request itself arrived on,
   // not OpenResty's listen configuration -- kept separate so it's never
   // mistaken for the other.
-  httpListening: boolean;
-  httpsListening: boolean;
+  httpListening: PortView;
+  httpsListening: PortView;
   openrestyMode: string;
   gatewayPort: number | null;
   gatewayScheme: string;
@@ -87,9 +88,20 @@ type MainServerState = {
   // per request the way localIP is.
   localIP: string;
   publicIP: string;
+  // when/how publicIP was last checked, as the gateway reports it (absent from an older gateway)
+  publicIPDetection: PublicIPDetectionView;
   entrypoints: Entrypoint[];
   // whether /entrypoints answered: an unanswered request is not an empty list
   entrypointsView: EntrypointsView;
+  // Which requests answered. "Unclaimed", "unknown" and "no public domain configured" are statements about the server;
+  // they are only made when the request that would say so actually came back.
+  identityAnswered: boolean;
+  namespaceAnswered: boolean;
+  // One line about the claim ("claimed · 1 admin · updated <day>"), or null
+  claimSummary: string | null;
+  // The operator's part of the screen (OpenResty, the machine's own name) is shown only to an admin session the
+  // gateway accepted; a visitor gets the public one
+  operator: boolean;
 };
 
 const EMPTY_STATE: MainServerState = {
@@ -100,41 +112,33 @@ const EMPTY_STATE: MainServerState = {
   bootstrapped: false,
   servingNamespace: '',
   mainServerName: null,
-  httpListening: false,
-  httpsListening: false,
+  httpListening: 'unavailable',
+  httpsListening: 'unavailable',
   openrestyMode: '',
   gatewayPort: null,
   gatewayScheme: '',
   localIP: '',
   publicIP: '',
+  publicIPDetection: null,
   entrypoints: [],
   entrypointsView: { kind: 'unavailable' },
+  identityAnswered: false,
+  namespaceAnswered: false,
+  claimSummary: null,
+  operator: false,
 };
 
-async function fetchJson(base: string, path: string): Promise<any | null> {
+// `status` is 0 when the request itself failed (no answer); `json` is null unless a JSON body came back with a 2xx.
+async function fetchJsonResult(base: string, path: string, headers?: Record<string, string>): Promise<{ status: number; json: any | null }> {
   try {
-    const res = await fetch(`${base}${path}`, { cache: 'no-store', credentials: 'same-origin' });
-    if (!res.ok) return null;
+    const res = await fetch(`${base}${path}`, { cache: 'no-store', credentials: 'same-origin', ...(headers ? { headers } : {}) });
+    if (!res.ok) return { status: res.status, json: null };
     const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) return null;
-    return await res.json();
+    if (!contentType.includes('application/json')) return { status: res.status, json: null };
+    return { status: res.status, json: await res.json() };
   } catch {
-    return null;
+    return { status: 0, json: null };
   }
-}
-
-// xConfig.mainServerName is overloaded: getGatewayRootNamespace() reads it
-// as a namespace fallback (where "local.cleaker" is a perfectly valid
-// answer), but mainServer.cli.ts also uses it as "what public domain does
-// this web server present itself as" (where a local.* value is never a
-// valid answer — it's a local mesh surface name, not a public identity).
-// A local.* value in this field almost always means it was set for the
-// first purpose, not deliberately as this web server's own name — display
-// the correct default (local.netget) for that question instead of
-// repeating whatever Namespace already shows.
-function isLocalMeshValue(value: string): boolean {
-  const v = value.trim().toLowerCase();
-  return v === 'localhost' || v === '127.0.0.1' || v === 'local' || v.startsWith('local.');
 }
 
 // Same masking convention as BlocksTable.tsx's maskHash — a hash is
@@ -145,6 +149,10 @@ function maskHash(hash: string): string {
   if (!value) return '—';
   if (value.length <= 11) return value;
   return `${value.slice(0, 5)}…${value.slice(-5)}`;
+}
+
+function portText(view: PortView): string {
+  return view === 'listening' ? 'listening' : view === 'not-listening' ? 'not listening' : view === 'restricted' ? 'not shown on this door' : 'unavailable';
 }
 
 function StatusDot({ on }: { on: boolean }) {
@@ -206,20 +214,38 @@ function SurfaceList({ title, hint, rows, unavailable = false, emptyText = 'None
 export default function MainServerView({ endpoint, namespaceRootUrl, pollIntervalMs = 5000, sx, 'data-gui-node-id': nodeId = 'MainServerView' }: MainServerViewProps) {
   const [state, setState] = React.useState<MainServerState>(EMPTY_STATE);
   const [connected, setConnected] = React.useState(false);
+  // false until the first round of reads has come back, whatever it said: until then nothing is known, so nothing is claimed.
+  const [loaded, setLoaded] = React.useState(false);
   const [ownerExpanded, setOwnerExpanded] = React.useState(false);
+  const [idCopied, setIdCopied] = React.useState(false);
+  const door = describeDoor(state.mainServerName, state.servingNamespace);
 
   React.useEffect(() => {
     let cancelled = false;
     const base = String(endpoint || '').replace(/\/+$/, '');
 
     async function poll() {
-      const identity = await fetchJson(base, '/gateway-identity');
-      const openresty = await fetchJson(base, '/openresty-status');
-      const entrypointsRes = await fetchJson(base, '/entrypoints');
-      const ipInfo = await fetchJson(base, '/ip-info');
-      const namespaceRes = await fetchJson(base, '/main-server-namespace');
+      // Independent reads, so the first paint waits for the slowest one rather than the sum of the five.
+      // The stored admin session (the one LogsView keeps) goes only on the operator's own status route, and the route
+      // is not asked at all without one: a visitor would only collect a 401 for it.
+      const adminToken = readAdminSessionToken();
+      const [identityR, openrestyR, entrypointsR, ipInfoR, namespaceR] = await Promise.all([
+        fetchJsonResult(base, '/gateway-identity'),
+        adminToken
+          ? fetchJsonResult(base, '/openresty-status', { authorization: `Bearer ${adminToken}` })
+          : Promise.resolve({ status: 0, json: null }),
+        fetchJsonResult(base, '/entrypoints'),
+        fetchJsonResult(base, '/ip-info'),
+        fetchJsonResult(base, '/main-server-namespace'),
+      ]);
+      const identity = identityR.json;
+      const openresty = openrestyR.json;
+      const entrypointsRes = entrypointsR.json;
+      const ipInfo = ipInfoR.json;
+      const namespaceRes = namespaceR.json;
       if (cancelled) return;
 
+      setLoaded(true);
       setConnected(Boolean(identity || openresty || entrypointsRes));
       setState({
         gatewayHost: hostnameOf(identity),
@@ -231,13 +257,18 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         mainServerName: namespaceRes?.mainServerName ? String(namespaceRes.mainServerName) : null,
         gatewayPort: identity && typeof identity.port === 'number' ? identity.port : null,
         gatewayScheme: identity ? String(identity.scheme || '') : '',
-        httpListening: !!openresty?.httpListening,
-        httpsListening: !!openresty?.httpsListening,
+        httpListening: describePort(openresty, 'httpListening', openrestyR.status),
+        httpsListening: describePort(openresty, 'httpsListening', openrestyR.status),
         openrestyMode: String(openresty?.mode || '').toUpperCase(),
         localIP: ipInfo?.success ? String(ipInfo.localIP || '') : '',
         publicIP: ipInfo?.success ? String(ipInfo.publicIP || '') : '',
+        publicIPDetection: ipInfo?.success && ipInfo.publicIPDetection && typeof ipInfo.publicIPDetection === 'object' ? ipInfo.publicIPDetection : null,
         entrypoints: Array.isArray(entrypointsRes?.entrypoints) ? entrypointsRes.entrypoints : [],
         entrypointsView: describeEntrypoints(entrypointsRes),
+        identityAnswered: Boolean(identity),
+        namespaceAnswered: Boolean(namespaceRes),
+        claimSummary: describeClaim(identity),
+        operator: isOperatorView(adminToken, describePort(openresty, 'httpListening', openrestyR.status)),
       });
     }
 
@@ -265,19 +296,23 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
-        <Typography variant="h5" data-gui-node-id={`${nodeId}.host`}>{state.gatewayHost || 'This main server'}</Typography>
+        <Typography variant="h5" data-gui-node-id={`${nodeId}.host`}>{door.door || state.gatewayHost || 'This main server'}</Typography>
         <Typography variant="caption" sx={{ color: connected ? 'success.main' : 'text.secondary' }}>
           {connected ? 'online' : 'connecting…'}
         </Typography>
       </Box>
 
-      {/* Three distinct facts, never collapsed into one another (see
-          Namespace-Is-Context.md): Host is the physical surface answering
-          this request. Namespace is the designated context this netget's
-          own monad claims data under — changing it, not the host, is what
-          determines whether this surface still resolves for the same
-          content. Owner is a separate axis again — who administers this
-          gateway, independent of which namespace it happens to serve. */}
+      {!loaded ? (
+        <Typography variant="body2" data-gui-node-id={`${nodeId}.loading`} sx={{ color: 'text.secondary' }}>
+          Reading this server…
+        </Typography>
+      ) : (
+      <>
+
+      {/* What a visitor needs to know about this server, and no more: the door it answers at and the namespace it
+          points to (two facts, one line -- see Namespace-Is-Context.md: neither is derived from the other), the
+          gateway's identity, and who owns it. The machine's own name and everything about OpenResty belong to the
+          operator and appear only for an admin session the gateway accepted. */}
       <Box
         sx={{
           display: 'flex',
@@ -290,145 +325,162 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
           bgcolor: 'background.paper',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
-            Host
-          </Typography>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-            {state.gatewayHost || '—'}
-          </Typography>
-        </Box>
+        {state.operator && state.gatewayHost ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
+              Machine
+            </Typography>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }} data-gui-node-id={`${nodeId}.machine`}>
+              {state.gatewayHost}
+            </Typography>
+          </Box>
+        ) : null}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
+            {door.door ? 'Door' : 'Namespace'}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+            {door.door ? (
+              <Typography variant="body2" sx={{ fontFamily: 'monospace' }} data-gui-node-id={`${nodeId}.door`}>
+                {door.door}
+              </Typography>
+            ) : null}
+            {door.door && door.namespace ? (
+              <Typography variant="body2" sx={{ color: 'text.disabled' }}>→</Typography>
+            ) : null}
+            {door.namespace ? (
+              <Typography
+                component="a"
+                data-gui-node-id={`${nodeId}.namespace`}
+                href={buildCleakerNamespaceUrl(door.namespace) || `//${door.namespace}`}
+                variant="body2"
+                sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+              >
+                {door.namespace}
+              </Typography>
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                {state.namespaceAnswered ? 'no namespace declared' : 'not available'}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88, pt: 0.25 }}>
             Gateway ID
           </Typography>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace' }} title={state.gatewayId || undefined}>
-            {state.gatewayId ? maskHash(state.gatewayId) : '—'}
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
-            Namespace
-          </Typography>
-          {state.servingNamespace ? (
-            <Typography
-              component="a"
-              data-gui-node-id={`${nodeId}.namespace`}
-              href={buildCleakerNamespaceUrl(state.servingNamespace) || `//${state.servingNamespace}`}
-              variant="body2"
-              sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
-            >
-              {state.servingNamespace}
-            </Typography>
-          ) : (
-            <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
-              unknown
-            </Typography>
-          )}
-        </Box>
-
-        {/* Read-only for now: setting a REAL public main server name involves
-            domain registration + cert provisioning, a separate flow, not a
-            text field (see mainServer.cli.ts). A local.* configured value
-            never counts as "this web server's public name" — see
-            isLocalMeshValue above — so it displays as the honest default
-            (local.netget) instead of repeating what Namespace already shows. */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88 }}>
-            Main Server Name
-          </Typography>
-          {state.mainServerName && !isLocalMeshValue(state.mainServerName) ? (
-            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-              {state.mainServerName}
-            </Typography>
-          ) : (
-            <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
-              local.netget (no public domain configured)
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.15, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace' }} title={state.gatewayId || undefined} data-gui-node-id={`${nodeId}.gatewayId`}>
+                {state.gatewayId ? maskHash(state.gatewayId) : '—'}
+              </Typography>
+              {state.gatewayId ? (
+                <Typography
+                  component="button"
+                  type="button"
+                  variant="caption"
+                  data-gui-node-id={`${nodeId}.gatewayId.copy`}
+                  onClick={() => {
+                    try {
+                      void navigator.clipboard?.writeText(state.gatewayId).then(() => {
+                        setIdCopied(true);
+                        setTimeout(() => setIdCopied(false), 1500);
+                      });
+                    } catch { /* no clipboard: the full id is still the title of the value */ }
+                  }}
+                  sx={{ border: 'none', bgcolor: 'transparent', p: 0, m: 0, cursor: 'pointer', color: 'primary.main' }}
+                >
+                  {idCopied ? 'copied' : 'copy'}
+                </Typography>
+              ) : null}
+            </Box>
+            {state.claimSummary ? (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }} data-gui-node-id={`${nodeId}.claim`}>
+                {state.claimSummary}
+              </Typography>
+            ) : null}
+          </Box>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 88, pt: 0.25 }}>
             Owner
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <StatusDot on={state.bootstrapped} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
             {state.bootstrapped && state.ownerIdentityHash ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.15, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Typography variant="body2">Owned by</Typography>
-                  {state.ownerUsername ? (
-                    (() => {
-                      // Deliberately the bare @username, NOT @username.namespace.
-                      // ownerUsername comes from gateway-claims.json's own
-                      // netget.<gatewayId>.meta.owner ledger -- a gateway-
-                      // administration claim, a different system from a real
-                      // namespace claim (users.<owner> under a namespace
-                      // tree). identityHash is a portable fingerprint,
-                      // independent of any namespace; appending
-                      // servingNamespace here would assert a namespace
-                      // binding this data never actually verified. Everything
-                      // shown here (owner, ownerUsername, bootstrapped) comes
-                      // from a local snapshot with zero remote calls — that
-                      // has to stay true; a fabricated namespace suffix would
-                      // read as a live dependency on some other namespace
-                      // resolving, which is exactly the fragility to avoid.
-                      const root = namespaceRootUrl || endpoint;
-                      const url = root ? buildCleakerNamespaceUrl(root, state.ownerUsername) : '';
-                      const label = `@${state.ownerUsername}`;
-                      return url ? (
-                        <Typography
-                          component="a"
-                          data-gui-node-id={`${nodeId}.owner`}
-                          href={url}
-                          variant="body2"
-                          sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
-                        >
-                          {label}
-                        </Typography>
+              (() => {
+                // Deliberately the bare @username, NOT @username.namespace: ownerUsername comes from the gateway's
+                // own claim ledger, a gateway-administration claim, a different system from a real namespace claim.
+                // identityHash is a portable fingerprint, independent of any namespace; appending the serving
+                // namespace here would assert a binding this data never verified. Everything shown comes from a
+                // local snapshot with zero remote calls, and that has to stay true.
+                const root = namespaceRootUrl || endpoint;
+                const url = root && state.ownerUsername ? buildCleakerNamespaceUrl(root, state.ownerUsername) : '';
+                const label = state.ownerUsername ? `@${state.ownerUsername}` : '';
+                return (
+                  <>
+                    {/* The QR carries the same address the @name links to, nothing else: no key, no secret. */}
+                    {url ? (
+                      <Box data-gui-node-id={`${nodeId}.owner.qr`} sx={{ flexShrink: 0, lineHeight: 0 }}>
+                        <QR value={url} size={88} ecc="M" quietZone={1} cornerRadius={6} />
+                      </Box>
+                    ) : null}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
+                      {label ? (
+                        url ? (
+                          <Typography
+                            component="a"
+                            data-gui-node-id={`${nodeId}.owner`}
+                            href={url}
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                          >
+                            {label}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{label}</Typography>
+                        )
                       ) : (
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{label}</Typography>
-                      );
-                    })()
-                  ) : (
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.disabled', fontStyle: 'italic' }}>
-                      unresolved username
-                    </Typography>
-                  )}
-                </Box>
-                {/* The namespace above is what actually determines resolution — if the
-                    owner reclaims under a different namespace, this surface stops
-                    resolving for them. The identityHash is a secondary, portable
-                    fingerprint of the same .me, useful for verification, not the
-                    primary fact — click to reveal it. */}
-                <Typography
-                  component="button"
-                  type="button"
-                  data-gui-node-id={`${nodeId}.hash`}
-                  onClick={() => setOwnerExpanded((v) => !v)}
-                  variant="caption"
-                  sx={{
-                    fontFamily: 'monospace',
-                    border: 'none',
-                    bgcolor: 'transparent',
-                    p: 0,
-                    m: 0,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    color: 'text.disabled',
-                    wordBreak: ownerExpanded ? 'break-all' : 'normal',
-                  }}
-                  title={ownerExpanded ? 'Collapse' : 'Show full identity hash'}
-                >
-                  {ownerExpanded ? state.ownerIdentityHash : maskHash(state.ownerIdentityHash)}
-                </Typography>
-              </Box>
-            ) : (
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.disabled', fontStyle: 'italic' }}>
+                          unresolved username
+                        </Typography>
+                      )}
+                      {/* The identity hash is a secondary, portable fingerprint of the same .me, useful for
+                          verification, not the primary fact: click to reveal it. */}
+                      <Typography
+                        component="button"
+                        type="button"
+                        data-gui-node-id={`${nodeId}.hash`}
+                        onClick={() => setOwnerExpanded((v) => !v)}
+                        variant="caption"
+                        sx={{
+                          fontFamily: 'monospace',
+                          border: 'none',
+                          bgcolor: 'transparent',
+                          p: 0,
+                          m: 0,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          color: 'text.disabled',
+                          wordBreak: ownerExpanded ? 'break-all' : 'normal',
+                        }}
+                        title={ownerExpanded ? 'Collapse' : 'Show full identity hash'}
+                      >
+                        {ownerExpanded ? state.ownerIdentityHash : maskHash(state.ownerIdentityHash as string)}
+                      </Typography>
+                    </Box>
+                  </>
+                );
+              })()
+            ) : state.identityAnswered ? (
               <Typography variant="body2" sx={{ color: 'warning.main' }}>
                 Unclaimed — no .me owns this surface yet.
+              </Typography>
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>
+                not available
               </Typography>
             )}
           </Box>
@@ -436,24 +488,28 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       </Box>
 
       <Box sx={{ display: 'flex', gap: 3 }}>
+        {/* The gateway omits its private address for a peer outside this machine/LAN: no row, not an empty one. */}
+        {state.localIP ? (
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             Local IP
           </Typography>
           <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-            {state.localIP || '—'}
+            {state.localIP}
           </Typography>
         </Box>
+        ) : null}
         <Box>
           <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
             Public IP
           </Typography>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: describePublicIP(state.publicIP).configured ? 'text.primary' : 'text.disabled' }}>
-            {describePublicIP(state.publicIP).text}
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', color: describePublicIP(state.publicIP, state.publicIPDetection).configured ? 'text.primary' : 'text.disabled' }}>
+            {describePublicIP(state.publicIP, state.publicIPDetection).text}
           </Typography>
         </Box>
       </Box>
 
+      {state.operator ? (
       <Box
         data-gui-node-id={`${nodeId}.openresty`}
         sx={{
@@ -482,15 +538,16 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         </Box>
         <Box sx={{ display: 'flex', gap: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StatusDot on={state.httpListening} />
-            <Typography variant="body2">HTTP :80 {state.httpListening ? 'listening' : 'not listening'}</Typography>
+            <StatusDot on={state.httpListening === 'listening'} />
+            <Typography variant="body2">HTTP :80 {portText(state.httpListening)}</Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <StatusDot on={state.httpsListening} />
-            <Typography variant="body2">HTTPS :443 {state.httpsListening ? 'listening' : 'not listening'}</Typography>
+            <StatusDot on={state.httpsListening === 'listening'} />
+            <Typography variant="body2">HTTPS :443 {portText(state.httpsListening)}</Typography>
           </Box>
         </Box>
       </Box>
+      ) : null}
 
       <SurfaceList
         title="Entrypoints"
@@ -498,6 +555,8 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
         rows={state.entrypointsView.kind === 'list' ? state.entrypointsView.rows : []}
         unavailable={state.entrypointsView.kind === 'unavailable'}
       />
+      </>
+      )}
     </Box>
     </GuiNodeIdBase>
   );
