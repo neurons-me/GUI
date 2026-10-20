@@ -2,7 +2,7 @@
   "name": "this.gui",
   "description": "Generative User Interface — Declarative UI for .me: components, a document model and a runtime inspector. React and TypeScript.",
   "private": false,
-  "version": "4.2.0",
+  "version": "4.2.1",
   "type": "module",
   "main": "./dist/this.gui.cjs",
   "module": "./dist/this.gui.es.js",
