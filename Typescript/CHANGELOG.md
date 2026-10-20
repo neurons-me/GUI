@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.2.1
+
+Package metadata (`description`, `keywords`, `homepage`, `repository`, `bugs`, `author`). No API change.
+
 ## 4.2.0
 
 Additive; nothing existing changes.
