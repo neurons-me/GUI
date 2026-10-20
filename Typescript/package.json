@@ -8,6 +8,14 @@
   "module": "./dist/this.gui.es.js",
   "types": "./dist/index.d.ts",
   "license": "MIT",
+  "homepage": "https://neurons-me.github.io/GUI/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neurons-me/GUI.git"
+  },
+  "bugs": {
+    "url": "https://github.com/neurons-me/GUI/issues"
+  },
   "author": "sui.Gn - neurons.me",
   "keywords": [
     "Generative",
