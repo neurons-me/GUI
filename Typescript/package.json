@@ -1,6 +1,6 @@
 {
   "name": "this.gui",
-  "description": "Generative User Interface",
+  "description": "Generative User Interface — Declarative UI for .me: components, a document model and a runtime inspector. React and TypeScript.",
   "private": false,
   "version": "4.2.0",
   "type": "module",
@@ -16,12 +16,19 @@
   "bugs": {
     "url": "https://github.com/neurons-me/GUI/issues"
   },
-  "author": "sui.Gn - neurons.me",
+  "author": {
+    "name": "sui.gn",
+    "url": "https://neurons.me",
+    "email": "dev@neurons.me"
+  },
   "keywords": [
-    "Generative",
-    "UI",
+    "gui",
+    "generative-ui",
     "declarative-ui",
-    "json-ui"
+    "json-ui",
+    "react",
+    "component-library",
+    "me://"
   ],
   "sideEffects": [
     "**/*.css",
