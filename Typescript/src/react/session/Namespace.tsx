@@ -41,6 +41,9 @@ import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
+import { declaredCapabilities, evaluateRequirement, type CapabilityLink, type CapabilityResolvers } from '@/runtime/capabilities';
+import { GuiCapabilitiesContext, useCapabilityStates } from './useCapabilities';
+import { targetKey } from '@/react/link';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
@@ -123,6 +126,13 @@ export interface NamespaceProps {
   semanticPath?: string;
   /** See CleakerProps.namespaceSource. */
   namespaceSource?: 'declared' | 'address';
+  /**
+   * What the document's `requires: { capability }` parts need, by capability name: one resolver each, called with the SELECTED
+   * link and the session through it (runtime/capabilities.ts). The GUI never interprets the names. The server still authorizes.
+   */
+  capabilities?: CapabilityResolvers;
+  /** Opaque to the GUI: a different scope is resolved again (netget: which gateway it has selected). */
+  capabilityScope?: string;
 }
 
 // netget's own monad, reached the same way any other app reaches its own —
@@ -1586,6 +1596,22 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The root GUI's document plus whatever the app adds on top (netget's pages): one GUI, not two.
   const doc = useMemo<GuiDocument>(() => mergeGuiDocument(GUI_DOCUMENT, props.document), [props.document]);
   const pageRegistry = useMemo(() => ({ ...DOCUMENT_PAGES, ...(props.pages ?? {}) }), [props.pages]);
+  // What the document's capability requirements say for the SELECTED link: resolved by the app's resolvers with the session
+  // through THAT link, per (link, identity, scope). Nothing one link grants is read for another.
+  const capabilityNames = useMemo(() => declaredCapabilities(flattenGuiDocument(doc)), [doc]);
+  const capabilityLink = useMemo<CapabilityLink | null>(() => {
+    const transport = String(ctx?.transportOrigin || '').trim();
+    const namespace = String(ctx?.semanticNamespace || rootSeed.label || '').trim();
+    if (!transport || !namespace) return null;
+    return { id: ctx?.selectedLinkId || targetKey({ namespace, transport }), namespace, transport };
+  }, [ctx?.selectedLinkId, ctx?.transportOrigin, ctx?.semanticNamespace, rootSeed.label]);
+  const capabilityResolution = useCapabilityStates({
+    resolvers: props.capabilities,
+    names: capabilityNames,
+    link: capabilityLink,
+    session: { authenticated, identityHash: ctx?.identityHash ?? null, me: ctx?.me ?? null },
+    scope: props.capabilityScope,
+  });
   const { resolved } = useCleakerRootSidebar(rootSeed.label, sidebarTransport, session, { namedNamespace: namedReads, document: doc });
 
   // A genuine Beatle "connected" resolution re-verifies that SAME
@@ -1601,7 +1627,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
-  const barSlots = leftBarSlots(doc, { authenticated });
+  const barSlots = leftBarSlots(doc, { authenticated, capabilities: capabilityResolution.states });
   const hiddenBarItems = useMemo(() => new Set((props.hideBarItems ?? []).map(String)), [props.hideBarItems]);
 
   // Routes whose page needs a layer that is off right now: their sidebar link is dimmed (still a link; the page it
@@ -1629,7 +1655,22 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       // Until the layer the page needs has been read, the page is not rendered at all (it would show its own
       // "HTTP 404" for the moment it takes to find out).
       const waiting = !isLanding && entry.needs && !blocked && doorPending(doorLayers, entry.needs);
-      const element = waiting ? (
+      // The same declaration that offers or hides the link gates the page behind it, so a typed or followed route cannot
+      // reach what the bar does not offer. Until the capability is resolved nothing is rendered; once denied the part is
+      // either not there (`hide`: the route is one the document does not have) or says it is not available (`disable`).
+      const verdict = evaluateRequirement(entry.requires, { authenticated, capabilities: capabilityResolution.states });
+      const gated = !isLanding && entry.requires !== undefined && !verdict.met;
+      const element = gated ? (
+        verdict.pending ? (
+          <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
+        ) : verdict.whenMissing === 'disable' ? (
+          <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} data-gui-node-id={`${entry.id}.unavailable`}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>Not available through the selected link.</Typography>
+          </Box>
+        ) : (
+          <UnknownPath layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} />
+        )
+      ) : waiting ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
       ) : blocked ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
@@ -1814,6 +1855,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   ];
 
   return (
+    <GuiCapabilitiesContext.Provider value={capabilityResolution}>
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
         TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 0.25 } }}
@@ -1868,7 +1910,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             .filter((el) => !(el.type === 'link' && el.props.to === '/'))
             .map((el): LeftBarElement =>
             el.type === 'link'
-                ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: offRoutes.has(String(el.props.to ?? '')) } }
+                ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: Boolean(el.props.off) || offRoutes.has(String(el.props.to ?? '')) } }
                 : el
           ),
           // Same footer slot netget's own NetGetShell (App.jsx) uses for both
@@ -1909,6 +1951,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         </Routes>
       </Layout>
     </Box>
+    </GuiCapabilitiesContext.Provider>
   );
 };
 
