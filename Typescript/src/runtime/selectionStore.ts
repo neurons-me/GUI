@@ -11,7 +11,7 @@ export type SelectionMeta = {
    * registered (registerNode/useRegisterGuiNode). A hand-written component
    * can tag itself `data-gui-node-id`/`data-gui-component` for hit-testing
    * and path-building (buildResolvedPath) without ever calling
-   * useRegisterGuiNode -- CleakerLanding.tsx does this at 31 call sites,
+   * useRegisterGuiNode -- Namespace.tsx does this at 31 call sites,
    * none registered. Without this fallback the Inspector's own type field
    * showed "unknown" for every one of them despite the DOM plainly naming
    * itself. Never a substitute for a real registration: still no

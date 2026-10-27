@@ -4,7 +4,7 @@ import Theme from '@/gui/Theme/Theme';
 import Passphrase from './Passphrase/Passphrase';
 
 // Isolated so it can be iterated on visually before it's wired into the
-// registration/recovery flows in CleakerLanding — see RegisterMe.tsx for
+// registration/recovery flows in Namespace — see Claim.tsx for
 // the sibling "own page, own story" pattern this follows.
 const meta: Meta<typeof Passphrase> = {
   title: 'All.This/Cleaker',

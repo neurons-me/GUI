@@ -7,7 +7,7 @@
 //
 // No identity is derived here anymore, from a password or otherwise.
 // Signing happens on the Cleaker origin that actually holds the
-// claimant's keychain (see CleakerNetgetClaimView in CleakerLanding.tsx)
+// claimant's keychain (see CleakerNetgetClaimView in Namespace.tsx)
 // — this client's job is only: verify the setup code + issue the
 // challenge, resolve where to send the browser to sign, and submit
 // whatever signed proof comes back. It never sees a private key or an

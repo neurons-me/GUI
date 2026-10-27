@@ -117,7 +117,7 @@ resolved expression.
 Where this lands once real resolution exists: `QRme`
 (`packages/GUI/Typescript/src/gui/All.This/me/QR/QR.me.tsx`) already takes
 a plain `value: string` with no assumption about its shape — today
-`CleakerLanding.tsx`'s `qrValue` is a readable claim URL
+`Namespace.tsx`'s `qrValue` is a readable claim URL
 (`buildCleakerNamespaceUrl(resolvedEndpoint, username)`, the residue this
 file's own "window.location is where set chemistry's ash settles" note
 describes). A resolved set-chemistry expression's QR would encode that
@@ -215,7 +215,7 @@ selection is a choice to surface, not a default to guess.
 ## Closing principle (2026-09-16): no module owns a domain
 
 Everything in this file traces back to one rule, confirmed by removing the
-last hardcoded root (`local.cleaker`/`cleaker.me`) from `CleakerLanding.tsx`
+last hardcoded root (`local.cleaker`/`cleaker.me`) from `Namespace.tsx`
 this session: no layer — `this.me`, `cleaker`, `monad.ai`, `netget`, `GUI`,
 `this.url`, `this.DOM` — is tied to a specific hostname. Each is a direct,
 portable load, same behavior regardless of which domain serves it (see
@@ -230,7 +230,7 @@ semantic guess about namespace meaning, both are just a physical fact about
 the current page/request. `window.location`'s own shape mirrors
 `me://namespace/path` almost exactly:
 `location.origin` ↔ `namespace` (which root), `location.pathname` ↔ `path`
-(what specifically, within that root) — `CleakerLanding.tsx`'s own routes
+(what specifically, within that root) — `Namespace.tsx`'s own routes
 (`/users`, `/blockchain`, `/keychain`, `/url`) are that mirroring made
 concrete: each is a real `path` segment carrying resolved state, exactly
 the role `path` plays in `me://` itself, just surfaced in the one address

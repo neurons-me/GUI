@@ -66,7 +66,7 @@ export interface DependencyStatus {
 }
 
 /** The signed proof returned from the Cleaker-origin claim view, carried
- *  back on netget's own URL — see CleakerNetgetClaimView (CleakerLanding.tsx)
+ *  back on netget's own URL — see CleakerNetgetClaimView (Namespace.tsx)
  *  for where these fields are produced. Never includes the private key or
  *  any unlock passphrase, only the resulting signature. */
 export interface ClaimReturnProof {

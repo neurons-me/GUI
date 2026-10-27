@@ -125,7 +125,7 @@ function Layout({
       .map((entry) => ({
         id: entry.id,
         // A page's type is the component that implements it (landing ->
-        // CleakerLanding); a bar or group is just its own name.
+        // Namespace); a bar or group is just its own name.
         type: entry.component ?? entry.type,
         parentId: entry.parentId,
         enabled: entry.parentId === 'GUI.bars' ? barOn[entry.type] : true,

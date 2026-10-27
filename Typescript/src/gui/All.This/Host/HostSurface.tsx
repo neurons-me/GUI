@@ -1,7 +1,7 @@
 // HostSurface.tsx — the physical/topological dashboard for a host (e.g.
 // local.host's own root). Deliberately NOT Cleaker: no claim, no identity,
 // no namespace jargon — just what this machine reports about its own
-// hardware and activity. See CleakerLanding.tsx for the identity/claim
+// hardware and activity. See Namespace.tsx for the identity/claim
 // landing (local.cleaker) — the two are separate surfaces on purpose (see
 // the naming-migration decision: local.host is the floor, local.cleaker is
 // a room in it).

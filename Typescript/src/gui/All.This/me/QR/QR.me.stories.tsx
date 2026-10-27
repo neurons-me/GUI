@@ -37,6 +37,20 @@ export const FallbackOnly: Story = {
   },
 };
 
+// The connection-status ring, with its label now also surfaced as a hover
+// tooltip (previously only reachable via the accessible aria-label) -- see
+// QR.me.tsx's own `statusLabel` doc comment.
+export const ConnectionStatus: Story = {
+  args: { variant: 'topbar', diameter: 40 },
+  render: (args) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+      <QRme {...args} status="checking" statusLabel="Checking…" />
+      <QRme {...args} status="confirmed" statusLabel="Connected" />
+      <QRme {...args} status="error" statusLabel="Could not connect" />
+    </div>
+  ),
+};
+
 export const Sizes: Story = {
   render: (args) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>

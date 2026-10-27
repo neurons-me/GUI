@@ -35,7 +35,7 @@
 // no shared React context or backend bridges that. So once a setup code
 // is accepted and a challenge issued, this screen hands off to a
 // dedicated "sign this claim" view living ON that Cleaker origin (see
-// CleakerNetgetClaimView in CleakerLanding.tsx) via a full-page redirect,
+// CleakerNetgetClaimView in Namespace.tsx) via a full-page redirect,
 // and picks the flow back up when the browser returns carrying a signed
 // proof — never the private key or any unlock passphrase — as URL params.
 import * as React from 'react';

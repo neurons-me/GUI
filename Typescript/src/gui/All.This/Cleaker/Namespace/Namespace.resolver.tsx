@@ -1,10 +1,10 @@
 import * as React from 'react';
 import type { RegistryEntry } from '@/Registry/types';
-import Namespace, { type NamespaceProps } from './namespace';
+import NamespaceInspector, { type NamespaceInspectorProps } from './namespace';
 
 type NamespaceSpec = {
   type: 'Namespace';
-  props?: NamespaceProps;
+  props?: NamespaceInspectorProps;
 };
 
 export const meta = {
@@ -24,7 +24,7 @@ const NamespaceResolver: RegistryEntry = {
   type: 'Namespace',
   resolve(spec: NamespaceSpec) {
     const props = spec.props ?? {};
-    return <Namespace {...props} />;
+    return <NamespaceInspector {...props} />;
   },
 };
 

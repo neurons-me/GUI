@@ -5,7 +5,7 @@
 // reproduces the exact wire secret the server already scrypt's `noise`
 // against, so this hits the ordinary, already-existing open() endpoint —
 // no new server capability, and the phrase/root never leave the client.
-// See RegisterMe.tsx for the mirror-image flow (claim, not recover).
+// See Claim.tsx for the mirror-image flow (claim, not recover).
 import React, { useState } from 'react';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
@@ -23,7 +23,7 @@ export interface RecoverAccountProps {
   onSwitchToSignIn?: () => void;
   /**
    * Fires once recovery AND the new local vault are both done — not just
-   * once open() succeeds. Same reasoning as RegisterMe's onRegistered: a
+   * once open() succeeds. Same reasoning as Claim's onRegistered: a
    * host page that also renders its own authenticated view needs to wait
    * for the whole flow, not just the moment `authenticated` flips true.
    */
@@ -54,7 +54,7 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
 
   const handleRecover = async () => {
     if (!canSubmit) return;
-    // Left unguarded (matches RegisterMe's claim-attempt convention): the
+    // Left unguarded (matches Claim's claim-attempt convention): the
     // session provider records the failure as session.error — including
     // INVALID_RECOVERY_PHRASE for a malformed phrase, or the generic
     // INVALID_CLAIM a wrong username/phrase pairing produces — before
@@ -72,10 +72,10 @@ export default function RecoverAccount({ namespace, onSwitchToSignIn, onRecovere
     setVaultError(null);
     try {
       // Re-derived rather than carried over from handleRecover — same
-      // reasoning as RegisterMe's own vault step: raw root bytes live in
+      // reasoning as Claim's own vault step: raw root bytes live in
       // memory only as long as this one call needs them.
       const rootBytes = await deriveIdentityRootBytesFromPhrase(words);
-      // Same fix as RegisterMe.tsx's own vault save -- keyed by this
+      // Same fix as Claim.tsx's own vault save -- keyed by this
       // browser's own guessed full namespace, matching what
       // loginWithCleaker looks up later, not semanticNamespace's
       // server-confirmed (possibly differently-canonicalized) value. See

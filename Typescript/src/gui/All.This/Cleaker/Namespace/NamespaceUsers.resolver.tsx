@@ -1,5 +1,5 @@
 import type { RegistryEntry } from '@/Registry/types';
-import Namespace, { type NamespaceProps } from './namespace';
+import NamespaceInspector, { type NamespaceInspectorProps } from './namespace';
 
 /**
  * NamespaceUsers — standalone users view of a namespace.
@@ -7,9 +7,9 @@ import Namespace, { type NamespaceProps } from './namespace';
  */
 const NamespaceUsersResolver: RegistryEntry = {
   type: 'NamespaceUsers',
-  resolve(spec: { type: 'NamespaceUsers'; props?: NamespaceProps }) {
+  resolve(spec: { type: 'NamespaceUsers'; props?: NamespaceInspectorProps }) {
     const props = spec.props ?? {};
-    return <Namespace {...props} defaultTab="users" tabs={['users']} />;
+    return <NamespaceInspector {...props} defaultTab="users" tabs={['users']} />;
   },
 };
 

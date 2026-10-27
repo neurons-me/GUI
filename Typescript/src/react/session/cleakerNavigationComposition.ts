@@ -42,7 +42,7 @@ const BUILTIN_ONLY = resolveSidebarComposition(['builtin'], { builtin: BUILTIN_S
  *
  * `namespaceRootLabel`/`transportOrigin` come from the same explicit
  * `cleakerEndpoint`-derived values every other view on this page already
- * uses (see CleakerLanding.tsx's requireCleakerEndpoint/
+ * uses (see Namespace.tsx's requireCleakerEndpoint/
  * deriveNamespaceRootLabel/getNetgetMonadOrigin) -- NOT from the session,
  * so signing in or out never changes which namespace is considered
  * "visited." Only whether the 'personal' layer is present depends on

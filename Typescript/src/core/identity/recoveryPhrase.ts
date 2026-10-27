@@ -2,7 +2,7 @@
 // derivation. Nothing here ever leaves this module unencrypted except the
 // words themselves, which the caller is responsible for showing to the
 // person once and never transmitting anywhere (see Passphrase.tsx and
-// RegisterMe.tsx's use of it).
+// Claim.tsx's use of it).
 //
 // Deliberately built on @scure/bip39 (audited, maintained, standard
 // wordlist/checksum) rather than hand-rolled entropy/checksum logic — "no

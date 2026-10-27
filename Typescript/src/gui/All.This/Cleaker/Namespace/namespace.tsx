@@ -29,7 +29,7 @@ import {
   resolveSemanticRootName,
 } from '../surfaceModel';
 
-export interface NamespaceProps {
+export interface NamespaceInspectorProps {
   endpoint?: string;
   defaultTab?: 'users' | 'blocks' | 'details' | 'surface';
   /** Restrict which tabs are visible. Omit to show all. */
@@ -287,7 +287,7 @@ function mergeSurfaceEntry(
   };
 }
 
-export default function Namespace({
+export default function NamespaceInspector({
   endpoint: endpointProp = 'http://localhost:8161',
   defaultTab = 'users',
   tabs: allowedTabs,
@@ -310,7 +310,7 @@ export default function Namespace({
   framed = true,
   'data-gui-node-id': dataGuiNodeId = 'Namespace',
   'data-gui-component': dataGuiComponent = 'Namespace',
-}: NamespaceProps) {
+}: NamespaceInspectorProps) {
   const { me } = useRuntimeEnvironment();
   const [endpoint, setEndpoint] = useState(endpointProp || 'http://localhost:8161');
   const [connected, setConnected] = useState(false);

@@ -114,7 +114,7 @@ async function fetchJsonWithTimeout(
 // unmatched route, which frontend_local's own server does) reads as
 // `alive` below purely because response.ok was true -- confirmed live as a
 // real gap, not a hypothetical one.
-function isGenuineSurfacePayload(payload: unknown): boolean {
+export function isGenuineSurfacePayload(payload: unknown): boolean {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
   return !('text' in (payload as Record<string, unknown>));
 }

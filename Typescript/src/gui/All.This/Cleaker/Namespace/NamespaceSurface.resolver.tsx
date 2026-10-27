@@ -1,5 +1,5 @@
 import type { RegistryEntry } from '@/Registry/types';
-import Namespace, { type NamespaceProps } from './namespace';
+import NamespaceInspector, { type NamespaceInspectorProps } from './namespace';
 
 /**
  * NamespaceSurface — standalone surface/telemetry view of a namespace.
@@ -7,9 +7,9 @@ import Namespace, { type NamespaceProps } from './namespace';
  */
 const NamespaceSurfaceResolver: RegistryEntry = {
   type: 'NamespaceSurface',
-  resolve(spec: { type: 'NamespaceSurface'; props?: NamespaceProps }) {
+  resolve(spec: { type: 'NamespaceSurface'; props?: NamespaceInspectorProps }) {
     const props = spec.props ?? {};
-    return <Namespace {...props} defaultTab="surface" tabs={['surface']} />;
+    return <NamespaceInspector {...props} defaultTab="surface" tabs={['surface']} />;
   },
 };
 

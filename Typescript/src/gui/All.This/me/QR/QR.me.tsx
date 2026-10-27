@@ -1,6 +1,6 @@
 import React from 'react';
 import { getContrastRatio } from '@mui/material/styles';
-import { Avatar, Box, Typography } from '@/gui/Atoms';
+import { Avatar, Box, Tooltip, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import { useGuiTheme } from '@/gui-internals/Hooks';
 import QR, { getQrModuleCount, snapQrCellSize } from '../QR';
@@ -695,6 +695,21 @@ export default function QRme({
       )}
       {showPerimeterLabel && (
         <>
+          {/* `title` only (the Tooltip handles its own aria-describedby) --
+              this stays aria-hidden itself, same as before: the ACCESSIBLE
+              label for the status is, and remains, the root box's own
+              aria-label a few lines down (keyboard/screen-reader users get
+              it whether or not they ever hover this exact pixel). This is
+              purely the mouse-hover affordance over the colored dot a
+              sighted user actually looks at for "what does this color
+              mean" -- not over the whole QR (that area is for scanning/
+              click-to-flip, flagged live 2026-10-06 as the wrong hover
+              target for this). pointerEvents must flip to 'auto' (the
+              QR's own root box below is otherwise stacked on top and would
+              swallow the hover first) and needs a z-index to actually win
+              that stacking fight, since neither element sets one otherwise
+              and DOM order alone would leave the later (root) box on top. */}
+          <Tooltip title={statusLabel || ''} disableHoverListener={!statusLabel} disableFocusListener disableTouchListener={!statusLabel}>
           <Box
             aria-hidden="true"
             data-gui-node-id={`${qrBase}.status`}
@@ -707,9 +722,12 @@ export default function QRme({
               top: statusDotCy - statusDotRadius - 2,
               width: statusDotRadius * 2 + 4,
               height: statusDotRadius * 2 + 4,
-              pointerEvents: 'none',
+              pointerEvents: statusLabel ? 'auto' : 'none',
+              zIndex: 1,
+              borderRadius: '50%',
             }}
           />
+          </Tooltip>
           {perimeterTextBox && (
             <Box
               aria-hidden="true"
