@@ -274,7 +274,7 @@ export default function Footer(props: FooterProps) {
     <Bar
       ref={BarRef}
       id={id}
-      data-gui-node-id="GUI.bars.footer"
+      data-gui-node-id="GUI.window.layout.bars.bottom"
       data-gui-component="footer"
       className={className}
       data-testid={dataTestId}

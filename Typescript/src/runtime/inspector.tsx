@@ -40,7 +40,7 @@ type TreeEntry = {
   hintKind: 'declared' | 'guessed' | null;
   /**
    * Actually on the page: an element of its own, or -- for a group like
-   * GUI.bars -- one below it. Distinct from `enabled`: a page that is
+   * GUI.window.layout.bars -- one below it. Distinct from `enabled`: a page that is
    * declared and configured but whose route isn't active is enabled and not
    * rendered.
    */
@@ -220,7 +220,7 @@ export function buildTreeModel() {
     const parent = parentOf(id);
     const el = elements.get(id);
     // Relative to the nearest ancestor whose id it extends (a toggle under
-    // the header is 'GUI.bars.left.toggle': relative to the bar, not the header).
+    // the header is 'GUI.window.layout.bars.left.toggle': relative to the bar, not the header).
     let prefixed: string | null = null;
     for (let a: string | null = parent, hops = 0; a && hops < 30; a = parentOf(a), hops++) {
       if (id.startsWith(`${a}.`)) {
@@ -1750,7 +1750,7 @@ export function RuntimeInspector({
         return;
       }
       // A declared part with nothing rendered (an off bar, a group like
-      // GUI.bars): selectable by id, there is just no element behind it.
+      // GUI.window.layout.bars): selectable by id, there is just no element behind it.
       selectNode(entry.id);
       setSelectedMeta(null);
     },

@@ -97,7 +97,7 @@ function BootstrapAction({ command }: { command: string; origin?: string }) {
       <Box
         component="button"
         type="button"
-        data-gui-node-id="GUI.content.off.start-command"
+        data-gui-node-id="GUI.window.layout.content.off.start-command"
         onClick={copy}
         sx={{
           px: 2.5, py: 0.75, borderRadius: 1.5, border: '1px solid', borderColor: 'primary.main', bgcolor: 'transparent',
@@ -180,7 +180,7 @@ function NetgetSummary({ netget, open, onToggle, nodeId, align }: { netget: Netg
   );
 }
 
-export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.content.off' }: DoorLayersPanelProps) {
+export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.off' }: DoorLayersPanelProps) {
   const [open, setOpen] = React.useState(false);
   // The page's one `.me`: each new reading is written under GUI.door and asked again.
   const { me } = useMe();

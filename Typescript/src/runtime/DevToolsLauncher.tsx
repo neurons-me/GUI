@@ -30,7 +30,7 @@ const DevToolsLauncher: React.FC<DevToolsLauncherProps> = ({ sx }) => {
   const leftSidebarContext = React.useContext(LeftSidebarContext);
   const isRailView = leftSidebarContext?.view === 'rail';
   const [open, setOpen] = useLauncherPopover('devtools');
-  // Its parts hang under the id it is given (`GUI.bars.left.footer.devtools`)
+  // Its parts hang under the id it is given (`GUI.window.layout.bars.left.footer.devtools`)
   // and are on the tree only while they are on the page: nothing without a
   // selection provider, the label unless the bar is a rail, the two toggles
   // while the menu is open.

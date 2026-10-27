@@ -6,7 +6,7 @@
 // Extracted verbatim (2026-09-29) from `CleakerLandingHome`, the inline
 // component that used to live inside `@/react/session/Namespace.tsx`
 // (Namespace.tsx's own `GUI` shell still mounts this at the document's
-// `GUI.content.landing` page — see `DOCUMENT_PAGES.Landing` there). No
+// `GUI.window.layout.content.landing` page — see `DOCUMENT_PAGES.Landing` there). No
 // behavior changed by the move: same mode state machine, same
 // registrationComplete/recoveryComplete guards, same provider/session
 // wiring. See this file's own inline comments (carried over unchanged) for
@@ -174,7 +174,7 @@ export type QRConnectProps = DocumentPageProps & {
 
 const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
-  // (GUI.content.landing) -- declared is not the same as mounted.
+  // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
   const username = view?.credentialsForm?.username.trim() || '';
   // A handle the `.me` above declared goes into the sign-in field once, when the form first exists. Not again: if the

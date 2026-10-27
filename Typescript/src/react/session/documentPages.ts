@@ -30,7 +30,7 @@ export type DocumentPageProps = NamespaceProps & {
 // props branch) checks `entry.id === LANDING_ID` to decide which page gets
 // the extra `onBeatleNamespaceResolved`/`sharedRootStatus` props -- same
 // constant, one definition, both sides of that check.
-export const LANDING_ID = 'GUI.content.landing';
+export const LANDING_ID = 'GUI.window.layout.content.landing';
 
 // No hardcoded root here on purpose — cleaker.me/local.cleaker were never
 // structurally special, just two values `cleakerEndpoint` happened to hold

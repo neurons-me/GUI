@@ -76,7 +76,7 @@ function QuietLink({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-export default function ConnectFailure({ expression, layers, trace = [], location, onConnectPublic, onDismiss, 'data-gui-node-id': nodeId = 'GUI.content.connect-failure' }: ConnectFailureProps) {
+export default function ConnectFailure({ expression, layers, trace = [], location, onConnectPublic, onDismiss, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.connect-failure' }: ConnectFailureProps) {
   const [view, setView] = React.useState<View>('menu');
   const publicIsThis = expression.trim().toLowerCase() === PUBLIC_NAMESPACE;
 

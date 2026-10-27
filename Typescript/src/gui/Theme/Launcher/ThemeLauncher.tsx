@@ -50,7 +50,7 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   // layout/reflow work to make the tab appear to hang for several seconds.
   const optionalSelection = useOptionalSelection();
   const inspectorSelectedNodeId = optionalSelection?.selectedNodeId;
-  // Its parts hang under the id it is given (`GUI.bars.left.footer.theme`),
+  // Its parts hang under the id it is given (`GUI.window.layout.bars.left.footer.theme`),
   // and are on the tree only while they are on the page: the avatar and label
   // unless the full catalog is open, the label unless the bar is a rail, the
   // two preview buttons while the preview is open.

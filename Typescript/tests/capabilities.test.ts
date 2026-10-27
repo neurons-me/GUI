@@ -65,9 +65,9 @@ const doc: GuiDocument = {
 };
 assert.deepEqual(declaredCapabilities(flattenGuiDocument(doc)), ['x:admin', 'x:audit'], 'unique, sorted, sessions are not capabilities');
 const entry = (id: string) => flattenGuiDocument(doc).find((e) => e.id === id)!;
-assert.deepEqual(entry('GUI.bars.left.admin').requires, { capability: 'x:admin' }, 'the requirement survives flattening as declared (plain JSON)');
-assert.deepEqual(entry('GUI.content.admin').requires, { capability: 'x:admin' }, 'a page carries the same requirement as its link');
-assert.equal(entry('GUI.content.signed').requires, 'session');
+assert.deepEqual(entry('GUI.window.layout.bars.left.admin').requires, { capability: 'x:admin' }, 'the requirement survives flattening as declared (plain JSON)');
+assert.deepEqual(entry('GUI.window.layout.content.admin').requires, { capability: 'x:admin' }, 'a page carries the same requirement as its link');
+assert.equal(entry('GUI.window.layout.content.signed').requires, 'session');
 
 // ── the left bar follows the verdicts ────────────────────────────────────────────────────────────────────────────────
 const idsOf = (els: any[]) => els.map((e) => e.props.id);
@@ -84,7 +84,7 @@ assert.deepEqual(offOf(bar({ authenticated: true, capabilities: { 'x:admin': 'de
 assert.deepEqual(offOf(bar({ authenticated: true, capabilities: { 'x:admin': 'granted', 'x:audit': 'granted' } })), { open: false, signed: false, admin: false, audit: false }, 'both granted: nothing disabled');
 assert.deepEqual(idsOf(bar({ authenticated: false, capabilities: { 'x:admin': 'granted' } })), ['open', 'admin', 'audit'], 'a granted capability is honoured as the resolver said (the app decides what it needs), "signed" still needs its session, and audit is present but disabled');
 // the declared path is the node id, as before
-assert.equal(bar({ authenticated: true, capabilities: { 'x:admin': 'granted' } })[2].props['data-gui-node-id'], 'GUI.bars.left.admin');
+assert.equal(bar({ authenticated: true, capabilities: { 'x:admin': 'granted' } })[2].props['data-gui-node-id'], 'GUI.window.layout.bars.left.admin');
 
 // ── a key per link, identity and scope ─────────────────────────────────────────────────────────────────────────────────
 const linkA = { id: 'acme.test@https://a.test', namespace: 'acme.test', transport: 'https://a.test' };

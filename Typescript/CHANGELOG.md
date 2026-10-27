@@ -2,8 +2,16 @@
 
 ## Unreleased
 
-Additive, except the two left-bar items marked below (`requires: 'session'` works as before).
+Additive, except the items marked **Changed** below (`requires: 'session'` works as before).
 
+- **Changed: the GUI's own ids moved under `GUI.window.layout`.** `GUI.bars.*` is now `GUI.window.layout.bars.*` and `GUI.content.*` is
+  `GUI.window.layout.content.*`; the bottom bar is `bars.bottom` (a side, like `left`/`right`/`top`; `footer` stays the name of a
+  bar's own footer section, `bars.left.footer`). `window` is the surface the GUI is presented on, `layout` its structure. This is
+  what `data-gui-node-id`, the Inspector and `me.GUI...` paths show, so anything that selects by those ids must follow. A document
+  an app declares in the previous shape (`GUI: { children: { bars, content } }`, with `bars.footer`) is read as the current one
+  (`migrateLegacyGuiDocument`), so apps that extend the GUI document keep working unchanged. Component names (`LeftBar`, `RightBar`,
+  `TopBar`, `Footer`) and the `.me` path of persisted sidebar state (`layout.sidebar.scopes...`) do not change. The shape and the
+  migration live in `runtime/guiIds.ts`; a test fails if the previous ids are written anywhere else in the source.
 - **LeftBar `brand` is rendered, and the arrow is its own control.** `brand` was typed on `LeftBar` but never drawn; it now leads
   the header in the rail, the expanded bar and the mobile drawer, in a cell as wide as the rail. With a `brand` and no `toggle`,
   the standard arrow is drawn as a tall, thin tab on the bar's right border (14.5px wide, 35px tall in a 48px header, with a third

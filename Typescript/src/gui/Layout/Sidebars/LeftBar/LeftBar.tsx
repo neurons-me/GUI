@@ -104,7 +104,7 @@ const LeftSidebar = ({
   const hasFooterElements =
     Array.isArray(resolvedFooterElements) && resolvedFooterElements.length > 0;
   const initialViewApplied = useRef(false);
-  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.bars.left';
+  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.window.layout.bars.left';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
     'data-gui-component': dataGuiComponent || 'left',

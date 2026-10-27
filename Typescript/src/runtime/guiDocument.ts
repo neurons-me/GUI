@@ -2,6 +2,7 @@ import documentJson from './GUI.document.json';
 import { renderNode } from './renderer';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { evaluateRequirement, type CapabilityState, type GuiRequirement } from './capabilities';
+import { barId, migrateLegacyGuiDocument } from './guiIds';
 
 /**
  * The GUI's own declaration of itself: a static, JSON-serializable tree
@@ -13,7 +14,7 @@ import { evaluateRequirement, type CapabilityState, type GuiRequirement } from '
  * visibility/encryption belong to the kernel, never to this file, and no
  * private value may be written into it.
  *
- * Ids are paths (`GUI.bars.left`), the same syntax as `me.GUI.bars.left`; a
+ * Ids are paths (`GUI.window.layout.bars.left`), the same syntax as `me.GUI.window.layout.bars.left`; a
  * node's parent is its path minus the last segment.
  */
 export type GuiDocumentNode = {
@@ -35,7 +36,7 @@ export type GuiDocumentNode = {
    */
   needs?: 'monad' | 'backend' | 'both';
   /**
-   * An element of a bar (children of `GUI.bars.left`): where it navigates and its icon. A part with `to`
+   * An element of a bar (children of `GUI.window.layout.bars.left`): where it navigates and its icon. A part with `to`
    * under a bar is an element of that bar; the bar's own composition (what the namespace adds) layers
    * around these.
    */
@@ -59,7 +60,7 @@ export type GuiDocumentNode = {
 export type GuiDocument = Record<string, GuiDocumentNode>;
 
 export type GuiDocumentEntry = {
-  /** Path, e.g. `GUI.bars.left`. */
+  /** Path, e.g. `GUI.window.layout.bars.left`. */
   id: string;
   /** Last path segment, e.g. `left`. */
   type: string;
@@ -80,6 +81,8 @@ export type GuiDocumentEntry = {
 export const GUI_DOCUMENT = documentJson as GuiDocument;
 
 export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocumentEntry[] {
+  // A document in the previous shape (bars and content directly under the root) is read as the current one.
+  doc = migrateLegacyGuiDocument(doc);
   const out: GuiDocumentEntry[] = [];
   const walk = (key: string, node: GuiDocumentNode, parentId?: string) => {
     const id = parentId ? `${parentId}.${key}` : key;
@@ -158,6 +161,8 @@ export function renderGuiDocumentPage(
  */
 export function mergeGuiDocument(base: GuiDocument, extension: GuiDocument | undefined): GuiDocument {
   if (!extension) return base;
+  base = migrateLegacyGuiDocument(base);
+  extension = migrateLegacyGuiDocument(extension);
   const mergeNode = (a: GuiDocumentNode | undefined, b: GuiDocumentNode): GuiDocumentNode => {
     if (!a) return structuredCloneNode(b);
     const out: GuiDocumentNode = { ...b, ...a };
@@ -188,7 +193,7 @@ export type LeftBarSlots = {
 };
 
 /**
- * The left bar's elements as the document declares them (children of `GUI.bars.left` that have `to`), split by
+ * The left bar's elements as the document declares them (children of `GUI.window.layout.bars.left` that have `to`), split by
  * `placement`, in declaration order. An element carries its document path as its node id, so the inspector shows
  * ONE node for it (the declared one), not a second runtime-numbered copy. An element that `requires` something is offered
  * only when it holds (runtime/capabilities.ts): without a session, or while its capability is denied or not yet resolved, it
@@ -200,9 +205,9 @@ export function leftBarSlots(
   options: { authenticated?: boolean; capabilities?: Readonly<Record<string, CapabilityState>> } = {}
 ): LeftBarSlots {
   const slots: LeftBarSlots = { start: [], defaults: [], end: [] };
-  const prefix = 'GUI.bars.left.';
+  const prefix = `${barId('left')}.`;
   flattenGuiDocument(doc)
-    .filter((e) => e.parentId === 'GUI.bars.left' && e.to)
+    .filter((e) => e.parentId === barId('left') && e.to)
     .forEach((e) => {
       const verdict = evaluateRequirement(e.requires, options);
       if (!verdict.met && verdict.whenMissing === 'hide') return;

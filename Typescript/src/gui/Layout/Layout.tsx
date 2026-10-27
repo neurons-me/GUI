@@ -1,6 +1,7 @@
 // Layout/Layout/Layout.tsx
 import { GuiParent, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument } from '@/runtime/guiDocument';
+import { GUI_BARS_ID } from '@/runtime/guiIds';
 import { LeftBarProvider } from '@/gui-internals/Contexts/LeftSidebarContext';
 import { RightBarProvider } from '@/gui-internals/Contexts/RightSidebarContext';
 import Box from '@/gui/Atoms/Box/Box';
@@ -116,7 +117,7 @@ function Layout({
     sticky: Boolean(stickyOptionsChild) || hasStickyOptions,
     left: Boolean(leftBarElement) || hasLeftBar,
     right: Boolean(rightBarChild) || hasRightBar,
-    footer: Boolean(footerChild) || Boolean(resolvedFooter),
+    bottom: Boolean(footerChild) || Boolean(resolvedFooter),
   };
   useRegisterGuiNodes(
     flattenGuiDocument()
@@ -128,7 +129,7 @@ function Layout({
         // Namespace); a bar or group is just its own name.
         type: entry.component ?? entry.type,
         parentId: entry.parentId,
-        enabled: entry.parentId === 'GUI.bars' ? barOn[entry.type] : true,
+        enabled: entry.parentId === GUI_BARS_ID ? barOn[entry.type] : true,
         provenance: { source: 'document', documentPath: entry.id, note: entry.note },
       }))
   );
@@ -180,7 +181,7 @@ function Layout({
                 {...(typeof resolvedLeftBar === 'object' ? (resolvedLeftBar as any) : {})}
               />
             ))}
-            <GuiParent id="GUI.content">{resolvedContent}</GuiParent>
+            <GuiParent id="GUI.window.layout.content">{resolvedContent}</GuiParent>
             {rightBarChild ?? (hasRightBar && (
               <RightBarComponent
                 elements={[]}

@@ -9,7 +9,7 @@ import {
   type ScopeData,
 } from '@/gui/Layout/Sidebars/Composition/sidebarComposition';
 
-// The navigation defaults come from the GUI document (`GUI.bars.left`, elements with placement `default`), not
+// The navigation defaults come from the GUI document (`GUI.window.layout.bars.left`, elements with placement `default`), not
 // from a list here. This is the LAST-RESORT layer: it only shows up for an id neither of the two `.me` layers
 // below declares.
 function builtinScopeOf(doc: GuiDocument): ScopeData {

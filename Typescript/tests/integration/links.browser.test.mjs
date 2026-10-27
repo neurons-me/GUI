@@ -237,12 +237,12 @@ async function main() {
         const btn = document.querySelector('button[aria-label$="sidebar"], button[aria-label="Open navigation"]');
         if (!btn) return null;
         const r = btn.getBoundingClientRect();
-        const qr = btn.querySelector('[data-gui-node-id="GUI.bars.top.position"]');
+        const qr = btn.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.position"]');
         return { x: r.x, y: r.y, w: r.width, h: r.height, title: btn.getAttribute('title') || '', face: qr ? qr.getAttribute('aria-label') : null };
       });
       const qrValues = () => page.evaluate(() => {
         const all = [...document.querySelectorAll('[data-qr-value]')];
-        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.bars.top.position');
+        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.window.layout.bars.top.position');
         const card = all.find((e) => e !== badge);
         return { badge: badge ? badge.getAttribute('data-qr-value') : null, card: card ? card.getAttribute('data-qr-value') : null };
       });
@@ -274,7 +274,7 @@ async function main() {
       await signIn(page, 'ana', 'secret-a');
       const inA = await signedInAs(page);
       const c2 = await corner();
-      const mark = await page.locator('[data-gui-node-id="GUI.bars.left.session"]').count();
+      const mark = await page.locator('[data-gui-node-id="GUI.window.layout.bars.left.session"]').count();
       check('6.7 a session is its own mark and sentence, apart from the answer', backA && inA && mark === 1 && /Signed in as ana\.a\.test/.test(c2.title) && /Service answered/.test(c2.title), c2 ? c2.title : '');
       check('6.8 nothing drawn claims verified authority', !/authority verified|Authority: verified/i.test(c2.title.replace(/Authority not verified/, '')) && /Authority not verified/.test(c2.title));
       await context.close();
@@ -287,7 +287,7 @@ async function main() {
       const { context, page } = await open(browser, harness, [door], { ns: 'door.test', transport: 'http://door.test' });
       const values = () => page.evaluate(() => {
         const all = [...document.querySelectorAll('[data-qr-value]')];
-        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.bars.top.position');
+        const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.window.layout.bars.top.position');
         const card = all.find((e) => e !== badge);
         return { badge: badge ? badge.getAttribute('data-qr-value') : null, card: card ? card.getAttribute('data-qr-value') : null };
       });

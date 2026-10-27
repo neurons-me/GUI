@@ -91,7 +91,7 @@ const RightBar = ({
   const sidebarWidth =
     isMobile || view === 'mobile' ? 0 : view === 'expanded' ? EXPANDED_WIDTH : RAIL_WIDTH;
   const layoutRightOffset = Math.max(0, totalRightInset - sidebarWidth);
-  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.bars.right';
+  const adminNodeId = dataGuiNodeId ? String(dataGuiNodeId) : id ? String(id) : 'GUI.window.layout.bars.right';
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
     'data-gui-component': dataGuiComponent || 'right',

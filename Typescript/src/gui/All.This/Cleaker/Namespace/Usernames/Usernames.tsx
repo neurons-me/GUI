@@ -89,7 +89,7 @@ export default function UsersTable({
   const [copied, setCopied] = useState(false);
   const parentNodeId = String(dataGuiNodeId || "UsersTable");
   const parentNodeType = String(dataGuiComponent || "UsersTable");
-  // Ids are paths (`GUI.content.users.table.shell.rows.ana`): the same syntax
+  // Ids are paths (`GUI.window.layout.content.users.table.shell.rows.ana`): the same syntax
   // as everywhere else in the GUI, and a part's parent is its path minus the
   // last segment. The table itself is the root; "" names it.
   const nodeId = useCallback(

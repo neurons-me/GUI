@@ -191,7 +191,7 @@ function fillRecoveryWords(canvasElement: HTMLElement, words: string[]) {
 // confirm every one of those sessions is the SAME identity, not a new or
 // different one silently created.
 function readIdentityLabel(canvasElement: HTMLElement): string {
-  const el = canvasElement.querySelector('[data-gui-node-id="GUI.content.landing"] .MuiTypography-caption');
+  const el = canvasElement.querySelector('[data-gui-node-id="GUI.window.layout.content.landing"] .MuiTypography-caption');
   if (!el || !el.textContent) throw new Error('authenticated identity label not found');
   return el.textContent.trim();
 }

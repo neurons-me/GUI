@@ -1,7 +1,7 @@
 /**
  * Declarative requirements on the parts of a GUI document.
  *
- * An app declares what it OFFERS in its document (`GUI.bars.left.<id>` elements and `GUI.content.<id>` pages). What a person can
+ * An app declares what it OFFERS in its document (`GUI.window.layout.bars.left.<id>` elements and `GUI.window.layout.content.<id>` pages). What a person can
  * USE is decided from the context of the SELECTED link: its session, and a scope the app chooses. A part says what it needs:
  *
  *   requires: 'session'                                  someone has signed in through the selected link

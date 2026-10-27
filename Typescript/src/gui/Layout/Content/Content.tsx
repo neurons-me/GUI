@@ -26,7 +26,7 @@ const Content: React.FC<ContentProps> = ({ children, sx, disableInsetPadding = f
     <Box
       id="content"
       component="main"
-      data-gui-node-id="GUI.content"
+      data-gui-node-id="GUI.window.layout.content"
       data-gui-component="content"
       sx={{
         position: 'relative',

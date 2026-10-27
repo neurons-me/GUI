@@ -5,13 +5,13 @@ import { around, linkTree, type NavModel } from '../src/runtime/inspectorNav';
 //      └─ content ─ landing
 const children: Record<string, string[]> = {
   GUI: ['bars', 'content'],
-  bars: ['top', 'sticky', 'left', 'right', 'footer'],
+  bars: ['top', 'sticky', 'left', 'right', 'bottom'],
   content: ['landing'],
   top: [], sticky: [], left: ['header', 'link'], right: [], footer: [], landing: [], header: [], link: [],
 };
 const parents: Record<string, string | null> = {
   GUI: null, bars: 'GUI', content: 'GUI',
-  top: 'bars', sticky: 'bars', left: 'bars', right: 'bars', footer: 'bars', landing: 'content',
+  top: 'bars', sticky: 'bars', left: 'bars', right: 'bars', bottom: 'bars', landing: 'content',
   header: 'left', link: 'left',
 };
 const model: NavModel = { parentOf: (id) => parents[id] ?? null, childrenOf: (id) => children[id] ?? [] };
@@ -20,7 +20,7 @@ const model: NavModel = { parentOf: (id) => parents[id] ?? null, childrenOf: (id
 assert.deepEqual(around(model, 'left'), { parent: 'bars', prev: 'sticky', next: 'right', child: 'header', at: 2, total: 5 });
 // Ends of a row have nothing on one side.
 assert.deepEqual(around(model, 'top'), { parent: 'bars', prev: null, next: 'sticky', child: null, at: 0, total: 5 });
-assert.deepEqual(around(model, 'footer'), { parent: 'bars', prev: 'right', next: null, child: null, at: 4, total: 5 });
+assert.deepEqual(around(model, 'bottom'), { parent: 'bars', prev: 'right', next: null, child: null, at: 4, total: 5 });
 // An only child has no sideways move.
 assert.deepEqual(around(model, 'landing'), { parent: 'content', prev: null, next: null, child: null, at: 0, total: 1 });
 // The root has no parent and no siblings, only a way down.
@@ -48,9 +48,9 @@ const reachDown = (parents: Map<string, string | null>, root: string) => {
 };
 {
   // A healthy tree: nothing orphaned, everything climbs to GUI and is reached from it.
-  const ids = ['GUI', 'GUI.bars', 'GUI.bars.left', 'GUI.bars.left.link.0', 'GUI.content'];
-  const dom: Record<string, string> = { 'GUI.bars.left.link.0': 'GUI.bars.left' };
-  const decl: Record<string, string> = { 'GUI.bars': 'GUI', 'GUI.bars.left': 'GUI.bars', 'GUI.content': 'GUI' };
+  const ids = ['GUI', 'GUI.window.layout.bars', 'GUI.window.layout.bars.left', 'GUI.window.layout.bars.left.link.0', 'GUI.window.layout.content'];
+  const dom: Record<string, string> = { 'GUI.window.layout.bars.left.link.0': 'GUI.window.layout.bars.left' };
+  const decl: Record<string, string> = { 'GUI.window.layout.bars': 'GUI', 'GUI.window.layout.bars.left': 'GUI.window.layout.bars', 'GUI.window.layout.content': 'GUI' };
   const { parents, orphans } = linkTree({ ids, declaredParent: (i) => decl[i], domParent: (i) => dom[i], root: 'GUI' });
   assert.deepEqual(orphans, []);
   for (const id of ids) assert.equal(climb(parents, id).at(-1), 'GUI');
@@ -59,19 +59,19 @@ const reachDown = (parents: Map<string, string | null>, root: string) => {
 {
   // A part with no declared parent and no element (a table's empty-state) is
   // filed under the node its id is a path under -- not orphaned.
-  const ids = ['GUI', 'GUI.content', 'GUI.content.users.table', 'GUI.content.users.table/empty-state', 'GUI.content.users.table/rows/x'];
-  const { parents, orphans } = linkTree({ ids, declaredParent: (i) => (i === 'GUI.content' ? 'GUI' : i === 'GUI.content.users.table' ? 'GUI.content' : null), domParent: () => null, root: 'GUI' });
-  assert.equal(parents.get('GUI.content.users.table/empty-state'), 'GUI.content.users.table');
-  assert.equal(parents.get('GUI.content.users.table/rows/x'), 'GUI.content.users.table');
+  const ids = ['GUI', 'GUI.window.layout.content', 'GUI.window.layout.content.users.table', 'GUI.window.layout.content.users.table/empty-state', 'GUI.window.layout.content.users.table/rows/x'];
+  const { parents, orphans } = linkTree({ ids, declaredParent: (i) => (i === 'GUI.window.layout.content' ? 'GUI' : i === 'GUI.window.layout.content.users.table' ? 'GUI.window.layout.content' : null), domParent: () => null, root: 'GUI' });
+  assert.equal(parents.get('GUI.window.layout.content.users.table/empty-state'), 'GUI.window.layout.content.users.table');
+  assert.equal(parents.get('GUI.window.layout.content.users.table/rows/x'), 'GUI.window.layout.content.users.table');
   assert.deepEqual(orphans, []);
 }
 {
   // The id's own path beats where the markup happens to put the element: a
   // toggle drawn outside its bar still belongs to the toggle.
-  const ids = ['GUI', 'GUI.bars', 'GUI.bars.left', 'GUI.bars.left.toggle', 'GUI.bars.left.toggle.mobile'];
-  const decl: Record<string, string> = { 'GUI.bars': 'GUI', 'GUI.bars.left': 'GUI.bars', 'GUI.bars.left.toggle': 'GUI.bars.left' };
-  const { parents, orphans } = linkTree({ ids, declaredParent: (i) => decl[i], domParent: (i) => (i === 'GUI.bars.left.toggle.mobile' ? 'GUI' : null), root: 'GUI' });
-  assert.equal(parents.get('GUI.bars.left.toggle.mobile'), 'GUI.bars.left.toggle');
+  const ids = ['GUI', 'GUI.window.layout.bars', 'GUI.window.layout.bars.left', 'GUI.window.layout.bars.left.toggle', 'GUI.window.layout.bars.left.toggle.mobile'];
+  const decl: Record<string, string> = { 'GUI.window.layout.bars': 'GUI', 'GUI.window.layout.bars.left': 'GUI.window.layout.bars', 'GUI.window.layout.bars.left.toggle': 'GUI.window.layout.bars.left' };
+  const { parents, orphans } = linkTree({ ids, declaredParent: (i) => decl[i], domParent: (i) => (i === 'GUI.window.layout.bars.left.toggle.mobile' ? 'GUI' : null), root: 'GUI' });
+  assert.equal(parents.get('GUI.window.layout.bars.left.toggle.mobile'), 'GUI.window.layout.bars.left.toggle');
   assert.deepEqual(orphans, []);
 }
 {

@@ -153,7 +153,7 @@ const MeLauncher: React.FC<MeLauncherProps> = ({ sx, cleakerEndpoint }) => {
   const isRailView = leftSidebarContext?.view === 'rail';
   const [open, setOpen] = useLauncherPopover('me');
   const bubbleRef = useRef<HTMLDivElement>(null);
-  // Its parts hang under the id it is given (`GUI.bars.left.footer.me`) and are
+  // Its parts hang under the id it is given (`GUI.window.layout.bars.left.footer.me`) and are
   // on the tree only while they are on the page: nothing without a session
   // view, the label unless the bar is a rail. (The QR registers itself.)
   const base = useGuiNodeId('MeLauncher');

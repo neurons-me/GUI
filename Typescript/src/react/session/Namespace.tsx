@@ -284,7 +284,7 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
   return null;
 };
 
-// The directory search. It belongs to the TOP of the GUI (GUI.bars.top.search),
+// The directory search. It belongs to the TOP of the GUI (GUI.window.layout.bars.top.search),
 // not to any one page: fixed to the top-right corner, it comes from above
 // every route. Filtering is the only piece specific to it -- collapse, expand,
 // focus and the results dropdown live in SearchField (a generic Molecule);
@@ -347,7 +347,7 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
       ariaLabel="Search .me"
       onExpandedChange={onExpandedChange}
       collapsedSize={collapsedSize}
-      data-gui-node-id="GUI.bars.top.search"
+      data-gui-node-id="GUI.window.layout.bars.top.search"
     />
   );
 };
@@ -359,8 +359,8 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
 // deliberately separate from endpoint (the API to fetch FROM, netget's own
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
-const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.users', 'data-gui-component': nodeComponent = 'Users' }) => {
-  // Declared by the GUI document (GUI.content.users), not registered by a hook.
+const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.users', 'data-gui-component': nodeComponent = 'Users' }) => {
+  // Declared by the GUI document (GUI.window.layout.content.users), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -391,8 +391,8 @@ const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, ne
 // as one stream today, see Namespace-Is-Context.md §4 for the split this
 // should eventually render as). Reuses BlocksTable rather than building a
 // second ledger view.
-const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.content.blockchain', 'data-gui-component': nodeComponent = 'Blockchain' }) => {
-  // Declared by the GUI document (GUI.content.blockchain), not registered by a hook.
+const CleakerBlockchainView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.blockchain', 'data-gui-component': nodeComponent = 'Blockchain' }) => {
+  // Declared by the GUI document (GUI.window.layout.content.blockchain), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -431,7 +431,7 @@ const URL_VIEW_STATE_COLOR: Record<string, string> = {
 // resolved server-side (handleNrpOpen ignores ast) — so this will sit at
 // 'resolving' forever today. That's shown, not hidden: the point is
 // expressing real NRP intent through the real protocol, not faking a result.
-const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'data-gui-node-id': nodeId = 'GUI.content.url', 'data-gui-component': nodeComponent = 'Url' }) => {
+const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.url', 'data-gui-component': nodeComponent = 'Url' }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
     () => deriveNamespaceRootLabel(resolvedEndpoint),
@@ -512,7 +512,7 @@ const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'dat
 // tree instead of a hardcoded demo phrase, and the endpoint is whatever
 // transportOrigin the session itself claimed/opened against — never a
 // second, separately-configured origin to keep in sync.
-const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.keychain', 'data-gui-component': nodeComponent = 'Keychain' }) => {
+const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.keychain', 'data-gui-component': nodeComponent = 'Keychain' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [client, setClient] = useState<KeychainClient | null>(null);
   const [keys, setKeys] = useState<KeychainKey[]>([]);
@@ -672,7 +672,7 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
 // (normalizeProofMessage(payload) below) -- it proves WHICH attempt this
 // return belongs to, not WHAT is being claimed, so signing it would
 // conflate two different guarantees for no benefit.
-const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.netget.claim', 'data-gui-component': nodeComponent = 'Claim' }) => {
+const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.netget.claim', 'data-gui-component': nodeComponent = 'Claim' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -979,7 +979,7 @@ const CleakerNetgetClaimView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id
 // itself in the same cross-origin round trip, so only one opaque,
 // short-lived, non-secret value (the session token) ever has to travel
 // back through the URL -- never a raw signature or challenge.
-const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.content.netget.sign', 'data-gui-component': nodeComponent = 'Sign' }) => {
+const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.netget.sign', 'data-gui-component': nodeComponent = 'Sign' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo') || '';
@@ -1286,7 +1286,7 @@ const CleakerNetgetAdminSignView: React.FC<DocumentPageProps> = ({ 'data-gui-nod
 // authority, not just visibility, and belongs in its own pass, verified
 // against disposable infrastructure rather than this installation's real
 // gateway. This pass only reads and displays.
-const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget, 'data-gui-node-id': nodeId = 'GUI.content.netget', 'data-gui-component': nodeComponent = 'Netget' }) => {
+const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: string; available: boolean; gatewayId: string | null } }> = ({ netget, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.netget', 'data-gui-component': nodeComponent = 'Netget' }) => {
   // The setup code and the claim go to the gateway at THIS page's own origin, and to nowhere else. An
   // endpoint that came from a name (a namespace Beatle resolved, a verified root) is good enough to
   // READ a status from, but the setup code is what makes a claim as trustworthy as one made at the
@@ -1623,7 +1623,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
   }, [verifiedRoot.promote, rootSeed]);
 
-  // The left bar's own elements come from the document (`GUI.bars.left`): what leads the bar ("back to the
+  // The left bar's own elements come from the document (`GUI.window.layout.bars.left`): what leads the bar ("back to the
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
   // Netget). The document decides which of them exist; the session only decides whether a `requires: session`
   // element is shown.
@@ -1634,17 +1634,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // opens says which layer is missing).
   const offRoutes = new Set(
     flattenGuiDocument(doc)
-      .filter((entry) => entry.parentId === 'GUI.content' && entry.route && entry.needs && doorBlocks(doorLayers, entry.needs))
+      .filter((entry) => entry.parentId === 'GUI.window.layout.content' && entry.route && entry.needs && doorBlocks(doorLayers, entry.needs))
       .map((entry) => entry.route as string),
   );
 
   // What the landing is given. The same object feeds the landing route and the identity card dialog.
   const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
-  // Every page the document declares under GUI.content: what renders and
+  // Every page the document declares under GUI.window.layout.content: what renders and
   // where it is served both come from the document.
   const documentPageRoutes = flattenGuiDocument(doc)
-    .filter((entry) => entry.parentId === 'GUI.content' && entry.component && entry.route)
+    .filter((entry) => entry.parentId === 'GUI.window.layout.content' && entry.component && entry.route)
     .map((entry) => {
       const route = documentRoute(entry.route);
       // A page whose layer is off is replaced, here, by the one panel that says which layer is missing -- the
@@ -1685,7 +1685,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             ? { ...props, welcome: { namespace: resolvingNamespace ? (verifiedRoot.status === 'error' ? 'sin respuesta' : 'resolviendo…') : positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
             : isLanding
             ? landingProps
-            : entry.id === 'GUI.content.netget'
+            : entry.id === 'GUI.window.layout.content.netget'
               ? {
                   ...props,
                   netget: netgetForView,
@@ -1730,7 +1730,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       aria-description={`${positionExpressionFull} — ${linkFacts}`}
       title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
-      data-gui-node-id="GUI.bars.left.identity"
+      data-gui-node-id="GUI.window.layout.bars.left.identity"
       sx={{
         // The whole cell is the link, flush with the corner: a corner is a target that cannot be overshot.
         position: 'relative',
@@ -1762,14 +1762,14 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         clickFlip={false}
         hoverFlip={false}
         cursor="pointer"
-        data-gui-node-id="GUI.bars.top.position"
+        data-gui-node-id="GUI.window.layout.bars.top.position"
       />
       </Box>
       {/* A session is open through this link: its own mark, apart from the ring (which says only that the service answered). */}
       {authenticated && session?.semanticNamespace ? (
         <Box
           aria-hidden
-          data-gui-node-id="GUI.bars.left.session"
+          data-gui-node-id="GUI.window.layout.bars.left.session"
           sx={{
             position: 'absolute',
             right: 6,
@@ -1810,7 +1810,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                   component={Link}
                   to="/"
                   aria-label="Home"
-                  data-gui-node-id="GUI.bars.top.namespace"
+                  data-gui-node-id="GUI.window.layout.bars.top.namespace"
                   data-gui-component="namespace"
                   data-position-expression={positionExpressionFull}
                   title={positionExpressionFull}
@@ -1871,7 +1871,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               to={IDENTITY_ROUTE}
               title={positionExpressionFull}
               data-position-expression={positionExpressionFull}
-              data-gui-node-id="GUI.bars.left.position"
+              data-gui-node-id="GUI.window.layout.bars.left.position"
               data-gui-component="namespace"
               sx={{
                 display: 'block',
@@ -1965,7 +1965,7 @@ const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: s
   if (!reading && !doorBlocks(layers, 'both')) return <Navigate to="/" replace />;
   return (
     <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
-      <DoorLayersPanel layers={layers} namespace={namespace} location={location} asked={asked} data-gui-node-id="GUI.content.unknown" />
+      <DoorLayersPanel layers={layers} namespace={namespace} location={location} asked={asked} data-gui-node-id="GUI.window.layout.content.unknown" />
     </Box>
   );
 };
@@ -1975,7 +1975,7 @@ const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: s
 // its own (`/.me`), one link away.
 const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string; origin: string } }> = ({
   welcome,
-  'data-gui-node-id': nodeId = 'GUI.content.home',
+  'data-gui-node-id': nodeId = 'GUI.window.layout.content.home',
   'data-gui-component': nodeComponent = 'Welcome',
 }) => (
   <Box
@@ -2040,7 +2040,7 @@ const StandalonePage: React.FC<{ children: React.ReactNode }> = ({ children }) =
         type: entry.component ?? entry.type,
         parentId: entry.parentId,
         // No bars here: declared, off.
-        enabled: entry.parentId !== 'GUI.bars',
+        enabled: entry.parentId !== 'GUI.window.layout.bars',
         provenance: { source: 'document', documentPath: entry.id, note: entry.note },
       }))
   );
@@ -2048,12 +2048,12 @@ const StandalonePage: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 // The steps of the netget claim (claim, sign) are declared under
-// GUI.content.netget and served on their own routes, outside the shell.
+// GUI.window.layout.content.netget and served on their own routes, outside the shell.
 const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
   <Routes>
     <Route path="/*" element={<GUI {...props} />} />
     {flattenGuiDocument()
-      .filter((entry) => entry.parentId === 'GUI.content.netget' && entry.component && entry.route)
+      .filter((entry) => entry.parentId === 'GUI.window.layout.content.netget' && entry.component && entry.route)
       .map((entry) => (
         <Route
           key={entry.id}

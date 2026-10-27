@@ -1,9 +1,9 @@
 /**
  * The id of an element of the left bar, as a path under the bar's own id.
  *
- * Links and menus are numbered (`GUI.bars.left.link.0`). A footer action that
- * has a label is named by it -- `GUI.bars.left.footer.theme`,
- * `GUI.bars.left.footer.devtools` -- so a launcher that lives there and hangs
+ * Links and menus are numbered (`GUI.window.layout.bars.left.link.0`). A footer action that
+ * has a label is named by it -- `GUI.window.layout.bars.left.footer.theme`,
+ * `GUI.window.layout.bars.left.footer.devtools` -- so a launcher that lives there and hangs
  * its own parts under that id (`...footer.theme.avatar`) reads the same in
  * every app, whatever position it sits in. An element can still name itself
  * with `data-gui-node-id`.
@@ -22,7 +22,7 @@ export function leftBarSlug(label: unknown): string {
 
 export function getSidebarRootPath(nodeId: string): string {
   const normalized = String(nodeId || '').trim();
-  if (!normalized) return 'GUI.bars.left';
+  if (!normalized) return 'GUI.window.layout.bars.left';
   const parts = normalized.split(':');
   if (parts.length > 1) return parts.slice(1).join(':');
   return normalized.replace(/[^\w.-]+/g, '.');

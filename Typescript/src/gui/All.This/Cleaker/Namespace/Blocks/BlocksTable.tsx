@@ -356,7 +356,7 @@ export function BlocksTable({
   const [expandedNamespaces, setExpandedNamespaces] = React.useState<Record<string, boolean>>({});
   const parentNodeId = String(dataGuiNodeId || 'BlocksTable');
   const parentNodeType = String(dataGuiComponent || 'BlocksTable');
-  // Ids are paths (`GUI.content.blockchain.table.rows.12.hash.copy`): the same
+  // Ids are paths (`GUI.window.layout.content.blockchain.table.rows.12.hash.copy`): the same
   // syntax as everywhere else in the GUI, and a part's parent is its path minus
   // the last segment. The table itself is the root; "" names it.
   const nodeId = React.useCallback(
