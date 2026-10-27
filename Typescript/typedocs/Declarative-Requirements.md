@@ -25,9 +25,13 @@ The same declaration gates the link in the bar **and** the page behind its route
 ## The app supplies resolvers
 
 ```tsx
+const capabilities = {
+  'gateway:admin': async ({ link, session, scope, signal }) => { /* return true | 'granted' | false */ },
+};
+
 <Cleaker
   document={DOCUMENT} pages={PAGES}
-  capabilities={{ 'gateway:admin': async ({ link, session, scope, signal }) => /* true | 'granted' | false */ }}
+  capabilities={capabilities}
   capabilityScope={selectedGatewayId} />
 ```
 
