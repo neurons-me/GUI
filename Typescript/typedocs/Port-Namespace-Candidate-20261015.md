@@ -139,7 +139,7 @@ This candidate evaluates the SET; it does not approve the restructure.
 | interface — separable in intent | `20c85667` | main-server view: the door and its namespace on one line, owner card with QR, operator part only for an accepted admin session |
 | interface — separable in intent | `b5dcd6e7` | feat(identity card): Keys and Wallet icons between the name and the fingerprint |
 | interface — separable in intent | `e6026e34` | identity card: icons closer to the QR (air above matches air below) |
-| interface — separable in intent | `8425bc77` | Icon: glyph:<text> draws the text as the icon; the Netget link uses netget's glyph |
+| interface — separable in intent | `8425bc77` | Icon: `glyph:<text>` draws the text as the icon; the Netget link uses netget's glyph |
 | position-label chain — textual dependency of the link/port commits | `da1e8cae` | QR: the namespace and the address bar are written together (namespace@host) when they are different places |
 | position-label chain — textual dependency of the link/port commits | `226e53a5` | position expression: the NRP's overlay spelling (namespace/path @ surface), checked against the parser |
 | position-label chain — textual dependency of the link/port commits | `071bf16e` | position label: abbreviate only a CHECKED binding; the semantic path is never a GUI route |
@@ -147,11 +147,11 @@ This candidate evaluates the SET; it does not approve the restructure.
 | position-label chain — textual dependency of the link/port commits | `b6a50ebe` | position label: a failed re-resolution cannot reuse the old confirmation; the scheme is shown when it is the reason; a full expression for copying |
 | interface — separable in intent | `7947d949` | top bar: the namespace is written at its left, on every page |
 | interface — separable in intent | `6a5cf8b3` | identity is a page (/.me), not a dialog; a Home icon sits next to the namespace in the top bar |
-| interface — separable in intent | `826a29bf` | home: '/' is the welcome (Welcome to <namespace>), the identity card lives at /.me |
+| interface — separable in intent | `826a29bf` | home: '/' is the welcome (`Welcome to <namespace>`), the identity card lives at /.me |
 | position-label chain — textual dependency of the link/port commits | `a1985c3e` | the shell names the namespace the monad ANSWERED for, not the address |
 | link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `98dcbb8f` | card: the selected link decides the namespace, the hostname does not |
 | link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `17934e04` | link: links, sessions, context, location and surface as pure values |
-| link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `8b27b0b9` | test: the link conditions against the real <Cleaker> (red: selection while a session is open) |
+| link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `8b27b0b9` | test: the link conditions against the real `<Cleaker>` (red: selection while a session is open) |
 | link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `f45fc42b` | session: one session per link; the card selects a link while another keeps its session |
 | link model — dependency of the port change (per-link sessions, checkWrittenDoor) | `95b80cb7` | link: workspace -- namespace contexts with zero, one or several open pages |
 | **THE PORT CHANGE** | `f7e1a807` | tests: a port in the root -- the vault key and the live path (characterization, contract, disposable monad) |
