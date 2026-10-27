@@ -16,6 +16,12 @@
 // 4. NO SILENT FALLBACK ON A MALFORMED NAMESPACE (MalformedNamespaceErrors, 2026-10-02 regression check): a non-empty but
 //    malformed namespace must throw a real error, not silently resolve to a default ('cleaker.me') as if nothing were
 //    wrong. Confirmed via a real error boundary (this is a render-phase throw), not by reading the parser in isolation.
+// 5. THE SAME JOURNEY THROUGH A GATEWAY (IdentityJourneyThroughGateway, formerly RegisterThroughLocalCleakerGateway, 2026-10-05):
+//    register, back up the 12 words, sign out, sign in again -- all the SAME identity -- with the transport going through a
+//    real OpenResty's `/apps/netget` mesh-proxy prefix (netget's generator, unmodified) instead of a direct monad connection.
+//    A gateway alias is not a monad origin: handing `cleakerEndpoint` to the session as its transport 405s on the first signed
+//    call, so the transport must be the mesh prefix (modules/netget/Typescript/tests/cleaker-signin-gateway-routing.test.ts
+//    proves the same at library level). Needs a disposable monad AND a disposable gateway in front of it (see below).
 //
 // Run it with (from Typescript/, after starting a disposable monad):
 //   SEED=<random 32-byte hex> ME_STATE_DIR=<scratch dir> PORT=18322 \
@@ -28,6 +34,13 @@
 // the root-cause trace in this repo's history (the former QRConnect.verify story, merged into this file). Claim persistence itself already respects
 // ME_STATE_DIR automatically (modules/monad/Typescript/src/claim/
 // manager.ts's getClaimStorePaths()).
+//
+// Check 5 also needs a disposable gateway in front of a disposable monad (OpenResty from netget's own generator, temp prefix,
+// free high ports, an apps.json entry registering the monad as `netget` under the same root); pass its origin in:
+//   VITE_DISPOSABLE_GATEWAY_ORIGIN=http://127.0.0.1:<port> npx vitest run --project=storybook \
+//     src/gui/All.This/Cleaker/Cleaker.4-verify.stories.tsx -t IdentityJourneyThroughGateway
+// The setup shape is modules/netget/Typescript/tests/cleaker-signin-gateway-routing.test.ts. It is import.meta.env, not
+// process.env: this file runs in the browser through Vite's module graph, which only exposes VITE_-prefixed variables.
 import * as React from "react";
 import type { Meta } from "@storybook/react";
 import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
@@ -345,6 +358,102 @@ IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement })
   await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
   const identityLabelAfterFreshLogin = readIdentityLabel(canvasElement);
   expect(identityLabelAfterFreshLogin).toBe(identityLabelAfterRegister);
+
+  await user.click(canvas.getByRole('button', { name: /Sign out/i }));
+  await waitFor(
+    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    { timeout: 8000 },
+  );
+};
+
+// Check 5 (first written 2026-10-05 as RegisterThroughLocalCleakerGateway, for the `Cleaker.stories.tsx` story that passed
+// no explicit transport): the register / back up / sign out / sign in journey with the transport going through a REAL gateway's
+// `/apps/netget` mesh-proxy prefix rather than a direct monad connection. A gateway is not a monad origin -- the session's
+// transport must be the mesh prefix (`<Cleaker transport=...>`), never the address of the gateway's own door -- and a real
+// signed call is what proves it (the first one, the claim, is the one that failed when the transport was the bare alias).
+//
+// What stays stubbed is the same thing `disposableDoorSeams` always stubs: the gateway's `/gateway-identity` ("bootstrapped"),
+// because this verifies the identity flow, not netget's own setup. `/__surface` is read through the gateway's mesh prefix
+// (that is where the monad answers it; the door's root `/__surface` is the admin SPA). Everything else -- the claim, the
+// sign-in -- is a real signed request through the gateway.
+//
+// import.meta.env, not process.env: this runs in the browser through Vite's module graph, where only VITE_ variables exist.
+const DISPOSABLE_GATEWAY_ORIGIN = ((import.meta as any).env?.VITE_DISPOSABLE_GATEWAY_ORIGIN || '').replace(/\/+$/, '');
+const GATEWAY_TRANSPORT = `${DISPOSABLE_GATEWAY_ORIGIN}/apps/netget`;
+
+export const IdentityJourneyThroughGateway = () => (
+  <ConnectionSeamsContext.Provider value={disposableDoorSeams(GATEWAY_TRANSPORT)}>
+    <Theme>
+      <Me>
+        <Cleaker namespace={DISPOSABLE_ROOT_LABEL} transport={GATEWAY_TRANSPORT} />
+      </Me>
+    </Theme>
+  </ConnectionSeamsContext.Provider>
+);
+
+IdentityJourneyThroughGateway.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  if (!DISPOSABLE_GATEWAY_ORIGIN) {
+    throw new Error(
+      'VITE_DISPOSABLE_GATEWAY_ORIGIN is not set -- start the disposable monad and the disposable gateway in front of it ' +
+      "first (see this file's header) and pass its origin, e.g. VITE_DISPOSABLE_GATEWAY_ORIGIN=http://127.0.0.1:PORT.",
+    );
+  }
+  const canvas = within(canvasElement);
+  const user = userEvent.setup();
+  const username = `verify-gw-${Date.now().toString(36)}`;
+  const password = 'verify-throwaway-password';
+  const fullNamespace = `${username}.${DISPOSABLE_ROOT_LABEL}`;
+
+  // ---- Register, through the gateway ----
+  // The shell lands on the welcome page ("/"); the identity card, with its register / sign-in form, is the page at /.me
+  // (6a5cf8b3: "identity is a page, not a dialog"), reached through the page's own link. The explicit timeouts are for the
+  // real round trips to the gateway (findBy*'s default is 1 s); the whole story must still fit the 15 s test limit.
+  await user.click(await canvas.findByRole('link', { name: /Open your \.me/i }, { timeout: 8000 }));
+  await user.click(await canvas.findByRole('button', { name: 'New here? Register' }, { timeout: 8000 }));
+  fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
+  fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: password } });
+  fireEvent.change(canvas.getByLabelText('Confirm Secret'), { target: { value: password } });
+  const submit = await waitFor(() => {
+    const button = canvas.getByRole('button', { name: 'Claim Username' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  await user.click(submit);
+
+  // The backup step is reached (not skipped by the `authenticated` flip), names the real namespace, and shows 12 real words.
+  await waitFor(() => expect(canvas.getByText('Back Up Your Identity')).toBeInTheDocument(), { timeout: 8000 });
+  expectNotAuthenticatedYet(canvas, 'gateway register: at Back Up Your Identity');
+  await waitFor(() => expect(canvas.getByText(fullNamespace)).toBeInTheDocument(), { timeout: 8000 });
+  const capturedWords = readRevealedWords(canvasElement);
+  expect(capturedWords).toHaveLength(12);
+  expect(capturedWords.every((w) => /^[a-z]+$/.test(w))).toBe(true);
+
+  await user.click(canvas.getByText("I've written down my 12 words in a safe place"));
+  await user.click(canvas.getByRole('button', { name: 'Continue' }));
+
+  await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
+  const identityLabelAfterRegister = readIdentityLabel(canvasElement);
+  expect(identityLabelAfterRegister.length).toBeGreaterThan(0);
+
+  // ---- Sign out ----
+  await user.click(canvas.getByRole('button', { name: /Sign out/i }));
+  await waitFor(
+    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    { timeout: 8000 },
+  );
+
+  // ---- Sign in again with the same credentials, through the gateway: the SAME identity ----
+  fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
+  fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: password } });
+  const loginSubmit = await waitFor(() => {
+    const button = canvas.getByRole('button', { name: '.me' });
+    expect(button).toBeEnabled();
+    return button;
+  });
+  await user.click(loginSubmit);
+
+  await waitFor(() => expect(canvas.getByRole('button', { name: /Sign out/i })).toBeInTheDocument(), { timeout: 8000 });
+  expect(readIdentityLabel(canvasElement)).toBe(identityLabelAfterRegister);
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
