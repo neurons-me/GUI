@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+    defaults:
+      run:
+        working-directory: Typescript
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: Typescript/package-lock.json
+
+      - name: Install
+        run: npm ci --no-fund
+
+      # The last step of test:runtime drives a real browser (tests/integration/links.browser.test.mjs).
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      # package.json has no "test" script; test:runtime is the suite (also the "prebuild" gate). No build is needed.
+      - name: Test
+        run: npm run test:runtime
