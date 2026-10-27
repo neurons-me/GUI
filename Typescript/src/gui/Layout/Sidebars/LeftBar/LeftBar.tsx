@@ -7,7 +7,7 @@ import { LeftSidebarElement, LeftSidebarProps } from './LeftBar.types';
 import LeftSidebarLink from './components/LeftSidebarLink/LeftSidebarLink';
 import LeftSidebarMenu from './components/LeftSidebarMenu/LeftSidebarMenu';
 import LeftSidebarAction from './components/LeftSidebarAction/LeftSidebarAction';
-import LeftSidebarToggleButton from './components/LeftSidebarToggleButton/LeftSidebarToggleButton';
+import LeftSidebarToggleButton, { EDGE_TAB_SPACE } from './components/LeftSidebarToggleButton/LeftSidebarToggleButton';
 import { useLeftSidebar, useGuiTheme, useGuiMediaQuery, useUpdateInsets, useInsets } from '@/gui-internals/Hooks';
 import { Box, Typography } from '@/gui/Atoms';
 import { Drawer } from '@/gui/Molecules';
@@ -127,7 +127,7 @@ const LeftSidebar = ({
       const iconColor = (header as any).iconColor;
       return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          {iconName ? <Icon name={iconName} iconColor={iconColor} /> : null}
+          {iconName && !brand ? <Icon name={iconName} iconColor={iconColor} /> : null}
           {view !== 'rail' && title ? (
             <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: 0.2 }}>
               {title}
@@ -163,7 +163,7 @@ const LeftSidebar = ({
     );
   const headerContent = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView, placement: 'inline' | 'edge' = 'edge') => {
     const text = headerNode ? (
-      <Box key="header-text" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: leadingCell ? 1 : undefined }}>
+      <Box key="header-text" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: leadingCell ? 1 : undefined, pr: brand && !customToggle && placement === 'edge' ? `${EDGE_TAB_SPACE}px` : 0 }}>
         {headerNode}
       </Box>
     ) : null;

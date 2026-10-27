@@ -7,19 +7,23 @@ type LeftSidebarToggleButtonProps = {
   expanded: boolean;
   onToggle: () => void;
   /**
-   * `inline` (default): a button in the header's flow. `edge`: a tall tab on the bar's right border, centred on the
+   * `inline` (default): a button in the header's flow. `edge`: a tall tab inside the bar's right border, centred on the
    * header, for a header whose leading cell belongs to the app's brand (the whole rail is only 72px wide, so the brand
-   * keeps the cell and the arrow sits on the line between the bar and the page). The header must be `position: relative`.
+   * keeps the cell and the arrow sits against the border, inside the bar, so it never covers anything outside it). The header must
+   * be `position: relative`, and what leads it leaves `EDGE_TAB_SPACE` px free on the right.
    */
   placement?: 'inline' | 'edge';
   ['data-gui-node-id']?: string;
   ['data-gui-component']?: string;
 };
 
-// The handle is a tall tab, not a disc: a control used this often is easier to hit by height than by width, and the bar's
-// border is a vertical line. It is 19px wide (the 24px disc it replaces, 21% narrower) and nearly as tall as the header,
-// inside a target 36px wide and the header's full height, so a miss lands on it and not on the page behind.
-const EDGE_TARGET_WIDTH = 36;
+// The handle is a tall tab, not a disc: a control used this often is easier to hit by height than by width. It is 19px wide
+// (the 24px disc it replaced, 21% narrower) and nearly as tall as the header. It sits entirely INSIDE the bar, flush with
+// the border and rounded on the side that faces the bar: whatever is outside the bar (the top bar's location label starts a
+// few pixels past the border) is never covered, and its target, the tab plus 1px and the header's full height, takes no
+// clicks from anything outside either. Whatever leads the header must leave this much room on the right (`EDGE_TAB_SPACE`).
+export const EDGE_TAB_SPACE = 24;
+const EDGE_TARGET_WIDTH = 20;
 const EDGE_HANDLE_WIDTH = 19;
 const EDGE_HANDLE_MAX_HEIGHT = 44;
 
@@ -43,22 +47,24 @@ const LeftSidebarToggleButton: React.FC<LeftSidebarToggleButtonProps> = ({
           position: 'absolute',
           top: 0,
           bottom: 0,
-          right: -EDGE_TARGET_WIDTH / 2,
+          right: 0,
           width: EDGE_TARGET_WIDTH,
           p: 0,
           zIndex: 2,
           borderRadius: 0,
+          justifyContent: 'flex-end',
           '&:focus-visible': { outline: 'none' },
           // Only the tab is drawn; the rest of the target is invisible.
           '& .gui-edge-handle': {
             width: EDGE_HANDLE_WIDTH,
             height: 'calc(100% - 8px)',
             maxHeight: EDGE_HANDLE_MAX_HEIGHT,
-            borderRadius: '6px',
+            borderRadius: '6px 0 0 6px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             border: '1px solid',
+            borderRight: 'none',
             borderColor: 'divider',
             bgcolor: 'background.paper',
             color: 'text.secondary',

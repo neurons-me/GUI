@@ -127,21 +127,25 @@ WithBrand.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 
   const brand = await canvas.findByRole("link", { name: "Open the app home" });
   const arrow = await canvas.findByRole("button", { name: "Expand sidebar" });
-  // Two separate controls, and the arrow sits on the bar's right border, not inside the brand's cell.
+  // Two separate controls. The arrow is a tab INSIDE the bar, flush with its right border: nothing of it is outside the bar,
+  // so it can never cover what sits beside the bar (the top bar's location label starts a few pixels past the border).
   expect(brand.contains(arrow)).toBe(false);
   const bar = canvasElement.querySelector("aside.LeftSidebar") as HTMLElement;
   const barRight = bar.getBoundingClientRect().right;
   const arrowRect = arrow.getBoundingClientRect();
-  expect(Math.abs((arrowRect.left + arrowRect.right) / 2 - barRight)).toBeLessThan(2);
-  // The target is as tall as the header and 36px wide; what is drawn in it is a tall tab (19px wide, more than twice as tall).
+  expect(arrowRect.right).toBeLessThanOrEqual(barRight + 0.5);
+  expect(arrowRect.right).toBeGreaterThanOrEqual(barRight - 1.5);
+  // The target is the tab plus a pixel and as tall as the header; what is drawn in it is a tall tab (19px wide, more than twice as tall).
   const headerRect = (canvasElement.querySelector('aside.LeftSidebar header') as HTMLElement).getBoundingClientRect();
-  expect(arrowRect.width).toBeGreaterThanOrEqual(36);
+  expect(arrowRect.width).toBeGreaterThanOrEqual(19);
+  expect(arrowRect.width).toBeLessThanOrEqual(22);
   expect(arrowRect.height).toBeGreaterThanOrEqual(headerRect.height - 1);
   const tabRect = (arrow.querySelector(".gui-edge-handle") as HTMLElement).getBoundingClientRect();
   expect(tabRect.width).toBeGreaterThanOrEqual(18);
   expect(tabRect.width).toBeLessThanOrEqual(20);
   expect(tabRect.height).toBeGreaterThan(tabRect.width * 2);
   expect(tabRect.height).toBeLessThanOrEqual(headerRect.height);
+  expect(tabRect.right).toBeLessThanOrEqual(barRight + 0.5);
 
   // The brand navigates and leaves the bar a rail.
   await user.click(brand);
@@ -153,6 +157,13 @@ WithBrand.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   await user.click(arrow);
   await waitFor(() => expect(canvas.getByRole("button", { name: "Collapse sidebar" })).toHaveAttribute("aria-expanded", "true"));
   expect(brandActivations).toBe(1);
+
+  // Expanded: the header's text stops before the tab, and the header's own icon is not drawn next to the brand (one mark).
+  const expandedHeader = canvasElement.querySelector("aside.LeftSidebar header") as HTMLElement;
+  const expandedTab = (canvas.getByRole("button", { name: "Collapse sidebar" }).querySelector(".gui-edge-handle") as HTMLElement).getBoundingClientRect();
+  const title = within(expandedHeader).getByText("Workspace").getBoundingClientRect();
+  expect(title.right).toBeLessThanOrEqual(expandedTab.left);
+  expect(within(expandedHeader).queryByText("apps")).toBeNull();
 
   // The brand is still the same link in the expanded bar and still only navigates.
   await user.click(canvas.getByRole("link", { name: "Open the app home" }));
