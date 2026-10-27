@@ -55,8 +55,8 @@ const until = async (page, fn, arg, timeout = 3000) => {
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
 const signedInAs = (page) => until(page, () => /Sign out/i.test(document.body.innerText), null, 2500);
 
-async function open(browser, harness, monads, { ns = 'a.test', transport = 'http://a.test' } = {}) {
-  const context = await browser.newContext();
+async function open(browser, harness, monads, { ns = 'a.test', transport = 'http://a.test', viewport } = {}) {
+  const context = await browser.newContext(viewport ? { viewport } : undefined);
   await routeMonads(context, monads);
   const page = await context.newPage();
   page.on('pageerror', () => { /* an operation a link refuses is reported by the check that did it */ });
@@ -299,6 +299,30 @@ async function main() {
       const afterBrand = await page.evaluate(() => ({ state: document.querySelector('button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"]')?.getAttribute('aria-label') || null, path: window.location.pathname }));
       check('6.11 the brand goes to the identity page and does not change the bar', afterBrand.path === '/.me' && afterBrand.state === 'Collapse sidebar', `${afterBrand.state}, path /users -> ${afterBrand.path}`);
       check('6.8 nothing drawn claims verified authority', !/authority verified|Authority: verified/i.test(c2.title.replace(/Authority not verified/, '')) && /Authority not verified/.test(c2.title));
+      await context.close();
+    }
+
+    // ── 6b. A narrow window: the bar is a drawer, and it replaces the top bar's left end instead of sitting under it ──────
+    {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      const { context, page } = await open(browser, harness, [a], { viewport: { width: 500, height: 800 } });
+      const opener = page.locator('button[aria-label="Open navigation"]');
+      check('6.12 narrow window: the bar is off and its opener is the standard button', (await opener.count()) === 1 && (await page.locator('aside.LeftSidebar').count()) === 0, `openers: ${await opener.count()}`);
+      await opener.click();
+      await page.waitForTimeout(700);
+      const m = await page.evaluate(() => {
+        const R = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
+        const drawer = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.left"]');
+        const header = drawer && drawer.querySelector('header');
+        const top = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top"]');
+        const label = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.namespace"]');
+        const lr = R(label);
+        const at = lr ? document.elementFromPoint(lr.x + 4, (lr.y + lr.b) / 2) : null;
+        return { drawer: R(drawer), header: R(header), top: R(top), label: lr, vh: window.innerHeight, coveredByDrawer: !!(at && at.closest('[data-gui-node-id="GUI.window.layout.bars.left"]')) };
+      });
+      check('6.13 the open drawer starts at the top of the window and takes its whole height', !!m.drawer && m.drawer.y === 0 && Math.abs(m.drawer.h - m.vh) < 1, m.drawer ? `y=${m.drawer.y} h=${m.drawer.h} (window ${m.vh})` : 'no drawer');
+      check('6.14 its header is the top bar\'s row: one header, not a second one under it', !!m.header && !!m.top && Math.abs(m.header.y - m.top.y) < 1 && Math.abs(m.header.b - m.top.b) < 2, m.header && m.top ? `header ${m.header.y}-${m.header.b}, top bar ${m.top.y}-${m.top.b}` : 'missing');
+      check('6.15 the top bar\'s own location label is not drawn over the drawer\'s header', m.coveredByDrawer, m.label ? `label at x=${m.label.x}: ${m.coveredByDrawer ? 'under the drawer' : 'visible'}` : 'no label');
       await context.close();
     }
 

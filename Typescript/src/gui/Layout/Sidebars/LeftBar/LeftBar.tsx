@@ -475,8 +475,11 @@ const LeftSidebar = ({
           sx={{
             '& .MuiDrawer-paper': {
               width: 220,
-              top: `${navInset}px`,
-              height: `calc(100vh - ${navInset}px)`,
+              // A temporary drawer sits over everything, dimmed page included: it starts at the top of the window and covers
+              // the top bar's own left end, so there is one header (the drawer's, `headerHeight` tall = the top bar's row)
+              // and not a second one under the top bar with its label repeated.
+              top: 0,
+              height: '100vh',
               display: 'flex',
               flexDirection: 'column',
               borderRight: '1px solid',

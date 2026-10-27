@@ -19,7 +19,7 @@ Additive, except the items marked **Changed** below (`requires: 'session'` works
   edge, soft shadow, deeper on hover, sunk when pressed, in light and dark) with a target 15.5px wide and as tall as the header,
   `aria-expanded` and a state-aware label. The tab and its arrow are centred on the header like the brand. It keeps clear of the
   brand on the inside, the header's text stops before it, and the app moves whatever sits just outside the bar to make room
-  (Cleaker moves the top bar's location label: `elementsLeftSx.pl`). A `header` object's `icon` is not drawn when there is a `brand` (the brand is the mark; only the
+  (Cleaker moves the top bar's location label: `elementsLeftSx.pl`). On a narrow window the temporary drawer starts at the top of the window and covers the top bar's left end, so it is the one header (its row is the top bar's) and the top bar's location label is not repeated under it. A `header` object's `icon` is not drawn when there is a `brand` (the brand is the mark; only the
   title shows). Without `brand` nothing changes, and `toggle` still replaces the arrow. **Changed:** an app that already passed
   `brand` to `LeftBar` will now see it.
 - **Changed in `<Cleaker>`:** the position QR in the left bar is now the `brand`, a link to `/.me`, and no longer the control that
