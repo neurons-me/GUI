@@ -1859,7 +1859,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     <GuiCapabilitiesContext.Provider value={capabilityResolution}>
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
-        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 0.25 } }}
+        // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
+        // the top bar's first pixels; the location label starts past it, with a gap, instead of under it.
+        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 1 } }}
         LeftBar={{
           brand: positionBrand,
           // Shown while the bar is open: where you are, written out, and the way to the identity page.
