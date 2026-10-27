@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-Additive; nothing existing changes (`requires: 'session'` works as before).
+Additive, except the two left-bar items marked below (`requires: 'session'` works as before).
 
+- **LeftBar `brand` is rendered, and the arrow is its own control.** `brand` was typed on `LeftBar` but never drawn; it now leads
+  the header in the rail, the expanded bar and the mobile drawer, in a cell as wide as the rail. With a `brand` and no `toggle`,
+  the standard arrow is drawn as a handle on the bar's right border (inline in the drawer, which would clip it), with a 40px
+  target, `aria-expanded` and a state-aware label. Wrap the brand in a link and it navigates without expanding. Without `brand`
+  nothing changes, and `toggle` still replaces the arrow. **Changed:** an app that already passed `brand` to `LeftBar` will now see it.
+- **Changed in `<Cleaker>`:** the position QR in the left bar is now the `brand`, a link to `/.me`, and no longer the control that
+  expands the bar; on a narrow screen the corner control is the standard "Open navigation" button and the QR leads the drawer.
 - **Declarative requirements on document parts.** `requires` now also takes `{ capability, whenMissing?: 'hide' | 'disable' }`. The
   app supplies one resolver per capability name (`capabilities` on `<Cleaker>`/`<Namespace>`); each is called with the **selected
   link**, the **session through it**, an opaque app `capabilityScope` and an `AbortSignal`. The same declaration gates the link in

@@ -11,6 +11,12 @@ export type LeftBarProps = {
   onClose?: () => void;
   items?: any[];
   children?: ReactNode;
+  /**
+   * The app's mark (a logo, a QR): it leads the header in the rail, the expanded bar and the mobile drawer, in a cell as
+   * wide as the rail. It is the app's own element, so a link around it (`<Link to=...>`) navigates and nothing else: it
+   * is never the expand control. With a `brand` and no `toggle`, the bar's standard arrow is drawn as a handle on the
+   * bar's right border (inline in the mobile drawer), so the mark and the arrow each do one thing.
+   */
   brand?: ReactNode;
   footer?: ReactNode;
   elements?: LeftBarElement[];

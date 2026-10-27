@@ -70,6 +70,7 @@ const LeftSidebar = ({
   footerElements = [],
   footerCollections = [],
   header,
+  brand,
   toggle: customToggle,
   ['data-gui-node-id']: dataGuiNodeId,
   ['data-gui-component']: dataGuiComponent,
@@ -140,7 +141,12 @@ const LeftSidebar = ({
   const headerNode = view === 'rail' ? null : rawHeaderNode;
   // The control that changes the bar's width. The app's own element when it gave one (it leads the header and
   // `headerNode` sits beside it); otherwise the arrow, at the end of the header.
-  const toggleControl = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView) =>
+  // `brand` is the app's mark (a logo, the position QR): it leads the header in every view and is the app's own link, so
+  // it never doubles as the expand control. The control is then the standard arrow, drawn as a handle on the bar's right
+  // border (`edge`) where the bar is a column beside the page; the temporary mobile drawer clips anything past its
+  // border, so there it stays in the header (`inline`).
+  const leadingCell = !!(customToggle || brand);
+  const toggleControl = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView, placement: 'inline' | 'edge') =>
     customToggle ? (
       // Flush with the corner and as tall as the header: the control is the whole cell, not the glyph inside it.
       <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: view === 'rail' ? '100%' : '72px', height: '100%' }}>
@@ -150,20 +156,32 @@ const LeftSidebar = ({
       <LeftSidebarToggleButton
         expanded={expanded}
         onToggle={onToggle}
+        placement={brand ? placement : 'inline'}
         data-gui-node-id={toggleButtonNodeId}
         data-gui-component="toggle"
       />
     );
-  const headerContent = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView) => {
+  const headerContent = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView, placement: 'inline' | 'edge' = 'edge') => {
     const text = headerNode ? (
-      <Box key="header-text" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: customToggle ? 1 : undefined }}>
+      <Box key="header-text" sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: leadingCell ? 1 : undefined }}>
         {headerNode}
       </Box>
     ) : null;
-    const control = <React.Fragment key="toggle">{toggleControl(expanded, onToggle, viewForApp)}</React.Fragment>;
-    return customToggle ? [control, text] : [text, control];
+    const control = <React.Fragment key="toggle">{toggleControl(expanded, onToggle, viewForApp, placement)}</React.Fragment>;
+    const brandCell = brand ? (
+      <Box
+        key="brand"
+        data-gui-node-id={`${adminNodeId}.brand`}
+        data-gui-component="brand"
+        sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: viewForApp === 'rail' ? '100%' : '72px', height: '100%' }}
+      >
+        {brand}
+      </Box>
+    ) : null;
+    if (customToggle) return [brandCell, control, text];
+    return brand ? [brandCell, text, control] : [text, control];
   };
-  const headerJustify = customToggle ? 'flex-start' : headerNode ? 'space-between' : 'flex-end';
+  const headerJustify = leadingCell ? 'flex-start' : headerNode ? 'space-between' : 'flex-end';
 
   useEffect(() => {
     if (typeof setInsets !== 'function') return;
@@ -361,6 +379,7 @@ const LeftSidebar = ({
           data-gui-node-id={headerNodeId}
           data-gui-component="header"
           sx={{
+            position: 'relative',
             flexShrink: 0,
             borderBottom: '1px solid',
             borderColor: 'divider',
@@ -368,9 +387,9 @@ const LeftSidebar = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: headerJustify,
-            px: customToggle ? 0 : 1.5,
+            px: leadingCell ? 0 : 1.5,
             py: 0,
-            gap: customToggle ? 0 : 1.25,
+            gap: leadingCell ? 0 : 1.25,
           }}
         >
           {headerContent(false, () => setView('expanded'), 'rail')}
@@ -470,6 +489,7 @@ const LeftSidebar = ({
             data-gui-node-id={headerNodeId}
             data-gui-component="header"
             sx={{
+              position: 'relative',
               flexShrink: 0,
               borderBottom: '1px solid',
               borderColor: 'divider',
@@ -477,11 +497,11 @@ const LeftSidebar = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: headerJustify,
-              px: customToggle ? 0 : 1.5,
-              gap: customToggle ? 0 : 1.25,
+              px: leadingCell ? 0 : 1.5,
+              gap: leadingCell ? 0 : 1.25,
             }}
           >
-            {headerContent(true, () => setMobileOpen(false), 'expanded')}
+            {headerContent(true, () => setMobileOpen(false), 'expanded', 'inline')}
           </Box>
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
           {hasFooterElements && (
@@ -535,6 +555,7 @@ const LeftSidebar = ({
         data-gui-node-id={headerNodeId}
         data-gui-component="header"
         sx={{
+          position: 'relative',
           flexShrink: 0,
           borderBottom: '1px solid',
           borderColor: 'divider',
@@ -542,9 +563,9 @@ const LeftSidebar = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: headerJustify,
-          px: customToggle ? 0 : 1.5,
+          px: leadingCell ? 0 : 1.5,
           py: 0,
-          gap: customToggle ? 0 : 1.25,
+          gap: leadingCell ? 0 : 1.25,
         }}
       >
         {headerContent(true, () => setView('rail'), 'expanded')}

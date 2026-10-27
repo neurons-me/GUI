@@ -406,9 +406,22 @@ IdentityJourneyThroughGateway.play = async ({ canvasElement }: { canvasElement: 
 
   // ---- Register, through the gateway ----
   // The shell lands on the welcome page ("/"); the identity card, with its register / sign-in form, is the page at /.me
-  // (6a5cf8b3: "identity is a page, not a dialog"), reached through the page's own link. The explicit timeouts are for the
-  // real round trips to the gateway (findBy*'s default is 1 s); the whole story must still fit the 15 s test limit.
-  await user.click(await canvas.findByRole('link', { name: /Open your \.me/i }, { timeout: 8000 }));
+  // (6a5cf8b3: "identity is a page, not a dialog"). The way in is the mark leading the left bar: the app's brand, a link to
+  // /.me, and not the bar's expand control -- that is the arrow beside it. The explicit timeouts are for the real round trips
+  // to the gateway (findBy*'s default is 1 s); the whole story must still fit the 15 s test limit.
+  const brand = await canvas.findByRole('link', { name: 'Open .me' }, { timeout: 8000 });
+  expect(brand).toHaveAttribute('href', '/.me');
+  const arrow = await canvas.findByRole('button', { name: 'Expand sidebar' });
+  expect(brand.contains(arrow)).toBe(false);
+  // The arrow expands the bar and goes nowhere: the welcome page is still the page.
+  await user.click(arrow);
+  await waitFor(() => expect(canvas.getByRole('button', { name: 'Collapse sidebar' })).toHaveAttribute('aria-expanded', 'true'));
+  expect(canvas.queryByRole('button', { name: 'New here? Register' })).toBeNull();
+  await user.click(canvas.getByRole('button', { name: 'Collapse sidebar' }));
+  await waitFor(() => expect(canvas.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument());
+  // The brand goes to the identity page and does not expand the bar.
+  await user.click(canvas.getByRole('link', { name: 'Open .me' }));
+  expect(canvas.queryByRole('button', { name: 'Collapse sidebar' })).toBeNull();
   await user.click(await canvas.findByRole('button', { name: 'New here? Register' }, { timeout: 8000 }));
   fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
   fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: password } });

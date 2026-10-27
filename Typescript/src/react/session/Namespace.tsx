@@ -1717,20 +1717,22 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
   const RAIL_BADGE_SIZE = 34;
-  // The QR IS the bar's control: it expands and contracts the left bar (and, with the bar off on a narrow screen, it is the
-  // small corner QR that brings it back). The identity page is reached from the address beside it.
-  const positionBadgeFor = (onToggle: () => void, label: string) => (
+  // The QR is this app's brand in the left bar (LeftBar's `brand` slot, the same one any other app fills with its logo):
+  // a link to the identity page, and nothing else. Expanding and contracting the bar is the bar's own arrow, so the QR is
+  // never that control. On a narrow screen the corner control is the bar's standard "Open navigation" button and the QR
+  // leads the drawer.
+  const positionBrand = (
     <Box
-      component="button"
-      type="button"
-      onClick={onToggle}
-      aria-label={label}
+      component={Link}
+      to={IDENTITY_ROUTE}
+      aria-label="Open .me"
+      aria-current={location.pathname === IDENTITY_ROUTE ? 'page' : undefined}
       aria-description={`${positionExpressionFull} — ${linkFacts}`}
       title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
       data-gui-node-id="GUI.bars.left.identity"
       sx={{
-        // The whole cell is the control, flush with the corner: a corner is a target that cannot be overshot.
+        // The whole cell is the link, flush with the corner: a corner is a target that cannot be overshot.
         position: 'relative',
         display: 'flex',
         width: '100%',
@@ -1741,8 +1743,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         justifyContent: 'center',
         p: 0,
         m: 0,
-        border: 'none',
-        background: 'none',
+        textDecoration: 'none',
         cursor: 'pointer',
         color: 'inherit',
         '&:hover': { backgroundColor: 'action.hover' },
@@ -1860,7 +1861,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 0.25 } }}
         LeftBar={{
-          toggle: ({ view, toggle }) => positionBadgeFor(toggle, view === 'expanded' ? 'Collapse sidebar' : view === 'mobile' ? 'Open navigation' : 'Expand sidebar'),
+          brand: positionBrand,
           // Shown while the bar is open: where you are, written out, and the way to the identity page.
           header: (
             <Box
