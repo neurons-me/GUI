@@ -133,8 +133,15 @@ WithBrand.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   const barRight = bar.getBoundingClientRect().right;
   const arrowRect = arrow.getBoundingClientRect();
   expect(Math.abs((arrowRect.left + arrowRect.right) / 2 - barRight)).toBeLessThan(2);
+  // The target is as tall as the header and 36px wide; what is drawn in it is a tall tab (19px wide, more than twice as tall).
+  const headerRect = (canvasElement.querySelector('aside.LeftSidebar header') as HTMLElement).getBoundingClientRect();
   expect(arrowRect.width).toBeGreaterThanOrEqual(36);
-  expect(arrowRect.height).toBeGreaterThanOrEqual(36);
+  expect(arrowRect.height).toBeGreaterThanOrEqual(headerRect.height - 1);
+  const tabRect = (arrow.querySelector(".gui-edge-handle") as HTMLElement).getBoundingClientRect();
+  expect(tabRect.width).toBeGreaterThanOrEqual(18);
+  expect(tabRect.width).toBeLessThanOrEqual(20);
+  expect(tabRect.height).toBeGreaterThan(tabRect.width * 2);
+  expect(tabRect.height).toBeLessThanOrEqual(headerRect.height);
 
   // The brand navigates and leaves the bar a rail.
   await user.click(brand);
