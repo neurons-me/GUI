@@ -233,13 +233,16 @@ async function main() {
       const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
       const b = fakeMonad({ origin: 'http://b.test', namespace: 'b.test' });
       const { context, page } = await open(browser, harness, [a, b]);
-      const corner = () => page.evaluate(() => {
-        const btn = document.querySelector('button[aria-label$="sidebar"], button[aria-label="Open navigation"]');
+      // The corner is the app's brand: the position QR, a link to the identity page that carries the three facts in its title.
+      // The bar's expand arrow is a separate control (6.9), so it is not the corner and carries none of these facts.
+      const BRAND = '[data-gui-node-id="GUI.window.layout.bars.left.identity"]';
+      const corner = () => page.evaluate((brandSelector) => {
+        const btn = document.querySelector(brandSelector);
         if (!btn) return null;
         const r = btn.getBoundingClientRect();
         const qr = btn.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.position"]');
         return { x: r.x, y: r.y, w: r.width, h: r.height, title: btn.getAttribute('title') || '', face: qr ? qr.getAttribute('aria-label') : null };
-      });
+      }, BRAND);
       const qrValues = () => page.evaluate(() => {
         const all = [...document.querySelectorAll('[data-qr-value]')];
         const badge = all.find((e) => e.getAttribute('data-gui-node-id') === 'GUI.window.layout.bars.top.position');
@@ -247,14 +250,14 @@ async function main() {
         return { badge: badge ? badge.getAttribute('data-qr-value') : null, card: card ? card.getAttribute('data-qr-value') : null };
       });
       const c0 = await corner();
-      check('6.1 the control is the whole corner cell, flush with the window', !!c0 && c0.x === 0 && c0.y === 0 && c0.w >= 56 && c0.h >= 48, c0 ? `x=${c0.x} y=${c0.y} ${c0.w}x${c0.h}` : 'no control');
-      await page.hover('button[aria-label="Expand sidebar"]');
+      check('6.1 the brand is the whole corner cell, flush with the window', !!c0 && c0.x === 0 && c0.y === 0 && c0.w >= 56 && c0.h >= 48, c0 ? `x=${c0.x} y=${c0.y} ${c0.w}x${c0.h}` : 'no control');
+      await page.hover(BRAND);
       await page.waitForTimeout(250);
       const c1 = await corner();
       check('6.2 pointing at it does not change its face', !!c0 && !!c1 && c0.face === c1.face && /Show avatar/.test(c1.face || ''), `face before/after: ${c0 && c0.face} / ${c1 && c1.face}`);
-      await page.focus('button[aria-label="Expand sidebar"]');
-      const outline = await page.evaluate(() => getComputedStyle(document.querySelector('button[aria-label="Expand sidebar"]')).outlineStyle);
-      check('6.3 keyboard focus is visible', outline !== 'none', `outline: ${outline}`);
+      await page.focus(BRAND);
+      const outline = await page.evaluate((brandSelector) => getComputedStyle(document.querySelector(brandSelector)).outlineStyle, BRAND);
+      check('6.3 keyboard focus on the brand is visible', outline !== 'none', `outline: ${outline}`);
 
       // three facts, kept apart
       check('6.4 service answered, no session, authority not verified are stated separately',
@@ -276,6 +279,25 @@ async function main() {
       const c2 = await corner();
       const mark = await page.locator('[data-gui-node-id="GUI.window.layout.bars.left.session"]').count();
       check('6.7 a session is its own mark and sentence, apart from the answer', backA && inA && mark === 1 && /Signed in as ana\.a\.test/.test(c2.title) && /Service answered/.test(c2.title), c2 ? c2.title : '');
+      // each control does one thing: the brand goes to the identity page and never expands the bar; the arrow expands it and never navigates
+      const arrowBeforeNav = await page.evaluate(() => {
+        const arrow = document.querySelector('button[aria-label="Expand sidebar"], button[aria-label="Collapse sidebar"]');
+        const brand = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.left.identity"]');
+        return { exists: !!arrow, apart: !!arrow && !!brand && !brand.contains(arrow) && !arrow.contains(brand), state: arrow && arrow.getAttribute('aria-label'), expanded: arrow && arrow.getAttribute('aria-expanded'), path: window.location.pathname };
+      });
+      check('6.9 the expand arrow is its own control, apart from the brand', arrowBeforeNav.exists && arrowBeforeNav.apart && arrowBeforeNav.state === 'Expand sidebar' && arrowBeforeNav.expanded === 'false', JSON.stringify(arrowBeforeNav));
+      // start from a page that is neither the identity page nor where the brand points, so "did not navigate" and "navigated" differ
+      await page.evaluate(() => { window.history.pushState({}, '', '/users'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await page.waitForTimeout(400);
+      const pathBeforeArrow = await page.evaluate(() => window.location.pathname);
+      await page.click('button[aria-label="Expand sidebar"]');
+      await page.waitForTimeout(300);
+      const afterArrow = await page.evaluate(() => ({ state: document.querySelector('button[aria-label="Collapse sidebar"]')?.getAttribute('aria-label') || null, path: window.location.pathname }));
+      check('6.10 the arrow expands the bar and does not navigate', pathBeforeArrow === '/users' && afterArrow.state === 'Collapse sidebar' && afterArrow.path === '/users', `${afterArrow.state}, path ${pathBeforeArrow} -> ${afterArrow.path}`);
+      await page.click(BRAND);
+      await page.waitForTimeout(500);
+      const afterBrand = await page.evaluate(() => ({ state: document.querySelector('button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"]')?.getAttribute('aria-label') || null, path: window.location.pathname }));
+      check('6.11 the brand goes to the identity page and does not change the bar', afterBrand.path === '/.me' && afterBrand.state === 'Collapse sidebar', `${afterBrand.state}, path /users -> ${afterBrand.path}`);
       check('6.8 nothing drawn claims verified authority', !/authority verified|Authority: verified/i.test(c2.title.replace(/Authority not verified/, '')) && /Authority not verified/.test(c2.title));
       await context.close();
     }
