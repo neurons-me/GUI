@@ -6,11 +6,12 @@ Additive, except the two left-bar items marked below (`requires: 'session'` work
 
 - **LeftBar `brand` is rendered, and the arrow is its own control.** `brand` was typed on `LeftBar` but never drawn; it now leads
   the header in the rail, the expanded bar and the mobile drawer, in a cell as wide as the rail. With a `brand` and no `toggle`,
-  the standard arrow is drawn as a tall tab flush inside the bar's right border (19px wide, nearly the header's height; inline
-  in the drawer), with a target 20px wide and as tall as the header, `aria-expanded` and a state-aware label. It is entirely
-  inside the bar, so it never covers what sits beside it, and the header's text stops before it. A `header` object's `icon` is
-  not drawn when there is a `brand` (the brand is the mark; only the title shows). Wrap the brand in a link and it navigates without expanding. Without `brand`
-  nothing changes, and `toggle` still replaces the arrow. **Changed:** an app that already passed `brand` to `LeftBar` will now see it.
+  the standard arrow is drawn as a tall, thin tab on the bar's right border (16px wide, nearly the header's height, overhanging
+  the bar by 1.5px, 9% of its width; inline in the drawer), with a target 17px wide and as tall as the header, `aria-expanded`
+  and a state-aware label. It keeps clear of the brand on the inside and of whatever sits just outside the bar, and the
+  header's text stops before it. A `header` object's `icon` is not drawn when there is a `brand` (the brand is the mark; only the
+  title shows). Without `brand` nothing changes, and `toggle` still replaces the arrow. **Changed:** an app that already passed
+  `brand` to `LeftBar` will now see it.
 - **Changed in `<Cleaker>`:** the position QR in the left bar is now the `brand`, a link to `/.me`, and no longer the control that
   expands the bar; on a narrow screen the corner control is the standard "Open navigation" button and the QR leads the drawer.
 - **Declarative requirements on document parts.** `requires` now also takes `{ capability, whenMissing?: 'hide' | 'disable' }`. The

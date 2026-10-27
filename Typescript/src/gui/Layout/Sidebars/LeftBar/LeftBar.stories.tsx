@@ -127,25 +127,34 @@ WithBrand.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 
   const brand = await canvas.findByRole("link", { name: "Open the app home" });
   const arrow = await canvas.findByRole("button", { name: "Expand sidebar" });
-  // Two separate controls. The arrow is a tab INSIDE the bar, flush with its right border: nothing of it is outside the bar,
-  // so it can never cover what sits beside the bar (the top bar's location label starts a few pixels past the border).
+  // Two separate controls. The arrow is a thin tab on the bar's right border that overhangs it by a hair (9% of its width): it
+  // keeps clear of the brand on the inside, and clear of what sits just outside the bar (the top bar's location label starts
+  // 4px past the border).
   expect(brand.contains(arrow)).toBe(false);
   const bar = canvasElement.querySelector("aside.LeftSidebar") as HTMLElement;
   const barRight = bar.getBoundingClientRect().right;
   const arrowRect = arrow.getBoundingClientRect();
-  expect(arrowRect.right).toBeLessThanOrEqual(barRight + 0.5);
-  expect(arrowRect.right).toBeGreaterThanOrEqual(barRight - 1.5);
-  // The target is the tab plus a pixel and as tall as the header; what is drawn in it is a tall tab (19px wide, more than twice as tall).
   const headerRect = (canvasElement.querySelector('aside.LeftSidebar header') as HTMLElement).getBoundingClientRect();
-  expect(arrowRect.width).toBeGreaterThanOrEqual(19);
-  expect(arrowRect.width).toBeLessThanOrEqual(22);
-  expect(arrowRect.height).toBeGreaterThanOrEqual(headerRect.height - 1);
   const tabRect = (arrow.querySelector(".gui-edge-handle") as HTMLElement).getBoundingClientRect();
-  expect(tabRect.width).toBeGreaterThanOrEqual(18);
-  expect(tabRect.width).toBeLessThanOrEqual(20);
+  // Thin and tall: 16px wide, more than twice as tall; the target is the tab plus a pixel and as tall as the header.
+  expect(tabRect.width).toBeGreaterThanOrEqual(15);
+  expect(tabRect.width).toBeLessThanOrEqual(17);
   expect(tabRect.height).toBeGreaterThan(tabRect.width * 2);
   expect(tabRect.height).toBeLessThanOrEqual(headerRect.height);
-  expect(tabRect.right).toBeLessThanOrEqual(barRight + 0.5);
+  expect(arrowRect.height).toBeGreaterThanOrEqual(headerRect.height - 1);
+  expect(arrowRect.width).toBeLessThanOrEqual(tabRect.width + 2);
+  // Overhang past the bar's outer edge: about 9% of the tab's width (1.5px), never more than 2.5px (the label outside starts
+  // 4px past the border).
+  const overhang = tabRect.right - barRight;
+  expect(overhang).toBeGreaterThanOrEqual(1);
+  expect(overhang).toBeLessThanOrEqual(2.5);
+  expect(overhang / tabRect.width).toBeGreaterThanOrEqual(0.06);
+  expect(overhang / tabRect.width).toBeLessThanOrEqual(0.12);
+  expect(arrowRect.right - barRight).toBeLessThanOrEqual(2.5);
+  // Clear of the brand's own content on the inside (the text of the link, not its empty cell).
+  const brandContent = document.createRange();
+  brandContent.selectNodeContents(brand);
+  expect(tabRect.left - brandContent.getBoundingClientRect().right).toBeGreaterThanOrEqual(8);
 
   // The brand navigates and leaves the bar a rail.
   await user.click(brand);
