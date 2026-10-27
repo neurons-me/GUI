@@ -1,6 +1,7 @@
 import documentJson from './GUI.document.json';
 import { renderNode } from './renderer';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
+import { evaluateRequirement, type CapabilityState, type GuiRequirement } from './capabilities';
 
 /**
  * The GUI's own declaration of itself: a static, JSON-serializable tree
@@ -40,8 +41,13 @@ export type GuiDocumentNode = {
    */
   to?: string;
   icon?: string;
-  /** Shown only when the person has proven an identity (`session`). Visibility of DATA is the kernel's; this only hides a link that would lead nowhere. */
-  requires?: 'session';
+  /**
+   * What this part needs before it is offered (runtime/capabilities.ts): `'session'` (someone has signed in through the selected
+   * link) or `{ capability, whenMissing? }` (the app's resolver says the selected link grants it; `whenMissing` is `hide`, the
+   * default, or `disable`). The same declaration gates the link in the bar and the page behind its route. Visibility of DATA is
+   * the kernel's; this decides whether a part is offered, and the server still authorizes every request.
+   */
+  requires?: GuiRequirement;
   /**
    * Where the element sits in the bar: `start` (before what the namespace declares), `default` (a fallback the
    * namespace may override by declaring the same id) or `end` (after). Defaults to `default`.
@@ -65,7 +71,7 @@ export type GuiDocumentEntry = {
   needs?: 'monad' | 'backend' | 'both';
   to?: string;
   icon?: string;
-  requires?: 'session';
+  requires?: GuiRequirement;
   placement?: 'start' | 'default' | 'end';
   /** Ids of the parts the document declares directly under this one. */
   childIds: string[];
@@ -184,19 +190,22 @@ export type LeftBarSlots = {
 /**
  * The left bar's elements as the document declares them (children of `GUI.bars.left` that have `to`), split by
  * `placement`, in declaration order. An element carries its document path as its node id, so the inspector shows
- * ONE node for it (the declared one), not a second runtime-numbered copy. Elements that `require` a session are
- * left out until `authenticated`.
+ * ONE node for it (the declared one), not a second runtime-numbered copy. An element that `requires` something is offered
+ * only when it holds (runtime/capabilities.ts): without a session, or while its capability is denied or not yet resolved, it
+ * is left out (`whenMissing: 'hide'`, the default) or kept and marked `off` (`'disable'`). With no options at all nothing that
+ * requires anything is offered.
  */
 export function leftBarSlots(
   doc: GuiDocument = GUI_DOCUMENT,
-  options: { authenticated?: boolean } = {}
+  options: { authenticated?: boolean; capabilities?: Readonly<Record<string, CapabilityState>> } = {}
 ): LeftBarSlots {
   const slots: LeftBarSlots = { start: [], defaults: [], end: [] };
   const prefix = 'GUI.bars.left.';
   flattenGuiDocument(doc)
     .filter((e) => e.parentId === 'GUI.bars.left' && e.to)
     .forEach((e) => {
-      if (e.requires === 'session' && !options.authenticated) return;
+      const verdict = evaluateRequirement(e.requires, options);
+      if (!verdict.met && verdict.whenMissing === 'hide') return;
       const key = e.id.slice(prefix.length);
       // `active` is NOT computed here on purpose (a 2026-10-02 attempt to
       // do exactly that was reverted) -- this function's own output feeds
@@ -215,7 +224,7 @@ export function leftBarSlots(
       // composition in Namespace.tsx (`withActiveLeftBarState`).
       const element = {
         type: 'link' as const,
-        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id },
+        props: { id: key, label: e.label ?? key, to: e.to, icon: e.icon, 'data-gui-node-id': e.id, ...(verdict.met ? {} : { off: true }) },
       } as LeftBarElement;
       (e.placement === 'start' ? slots.start : e.placement === 'end' ? slots.end : slots.defaults).push(element);
     });

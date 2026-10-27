@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Additive; nothing existing changes (`requires: 'session'` works as before).
+
+- **Declarative requirements on document parts.** `requires` now also takes `{ capability, whenMissing?: 'hide' | 'disable' }`. The
+  app supplies one resolver per capability name (`capabilities` on `<Cleaker>`/`<Namespace>`); each is called with the **selected
+  link**, the **session through it**, an opaque app `capabilityScope` and an `AbortSignal`. The same declaration gates the link in
+  the bar and the page behind its route; pages read the result with `useGuiCapability(name)`. Fail closed; results belong to
+  (link, identity, scope) and a late answer for another key is dropped. The GUI never interprets a capability name. See
+  `typedocs/Declarative-Requirements.md`.
+- A left-bar link that is `off` (a disabled part, or a page whose layer is off) now carries `aria-disabled` and `data-gui-off`.
+
 ## 4.2.1
 
 Package metadata (`description`, `keywords`, `homepage`, `repository`, `bugs`, `author`). No API change.

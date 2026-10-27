@@ -7,6 +7,15 @@ export {
 } from '@/react/session/SeedSessionProvider';
 export { useSeedSession, useOptionalSeedSession } from '@/react/session/useSeedSession';
 export { useAddress } from '@/react/session/useAddress';
+// Declarative requirements: the document says what a part needs, the app's resolvers say what the selected link grants.
+export { useGuiCapability, useGuiCapabilities } from '@/react/session/useCapabilities';
+export type {
+  CapabilityState,
+  CapabilityContext,
+  CapabilityResolver,
+  CapabilityResolvers,
+  GuiRequirement,
+} from '@/runtime/capabilities';
 export {
   SessionSurface,
   useSessionSurface,

@@ -42,6 +42,7 @@ import { namespaceAddress } from '@/react/namespaceAddress';
 import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
 import Namespace from '@/react/session/Namespace';
 import type { GuiDocument } from '@/runtime/guiDocument';
+import type { CapabilityResolvers } from '@/runtime/capabilities';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
@@ -77,9 +78,17 @@ export type CleakerProps = {
    */
   namespaceSource?: 'declared' | 'address';
   footerExtras?: LeftBarElement[];
+  /**
+   * Resolvers for the document's `requires: { capability }` parts, by capability name. Each is called with the SELECTED link and the
+   * session through it (never another link's), and answers whether the part should be offered. Passed straight through to
+   * `Namespace`; the names mean whatever the app says, the GUI never interprets them, and the server still authorizes.
+   */
+  capabilities?: CapabilityResolvers;
+  /** Opaque to the GUI: when it changes the capabilities are resolved again (an app with several targets says which is selected). */
+  capabilityScope?: string;
 };
 
-export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, semanticPath, namespaceSource }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, semanticPath, namespaceSource, capabilities, capabilityScope }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = String(namespaceProp || '').trim();
   const username = readMeUsername(found?.me);
@@ -127,6 +136,8 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         semanticPath={semanticPath}
         namespaceSource={namespaceSource}
         footerExtras={footerExtras}
+        capabilities={capabilities}
+        capabilityScope={capabilityScope}
       />
     </SeedSessionProvider>
   );

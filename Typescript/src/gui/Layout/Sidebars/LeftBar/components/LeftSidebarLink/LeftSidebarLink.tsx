@@ -63,6 +63,7 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
       component={to ? (RouterLink as any) : href ? 'a' : 'div'}
       {...(to ? ({ to } as any) : {})}
       {...(!to && href ? ({ href } as any) : {})}
+      {...(off ? ({ 'aria-disabled': true, 'data-gui-off': 'true' } as any) : {})}
       {...rest}
       sx={{
         display: 'flex',
