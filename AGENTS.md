@@ -212,8 +212,11 @@ code**, not just a build detail — see the react-reconciler landmine below.
 ## CLI scaffold
 
 `npx this.gui my-app` (`bin/cli.ts`, template in `npx/template/`) scaffolds a
-minimal app: `app.ts` (an `AppDeclaration`), `main.tsx` (calls `mountApp`),
-`views/Home.ts`. `README.md`'s "Scaffold a new app" section is the canonical
+minimal app: `app.ts` (an `AppDeclaration`), `main.tsx` (public `me` + runtime
+through `createWsMeRuntime`, `SeedSessionProvider`/`SessionSurface`), `Root.tsx`
+(`AppShell` with the top-bar `position` and the left-bar `brand`),
+`views/Home.tsx` (the `.GUI / Powered by .me / Get started` hero) and
+`views/Spaces.tsx` (Admin). `README.md`'s "Scaffold a new app" section is the canonical
 example — if you change the template, keep the README (and
 `QuickStart.stories.tsx`, which mirrors the template's shape 1:1 on purpose)
 in sync.

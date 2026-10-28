@@ -2,6 +2,7 @@ import { AppShell } from 'this.gui/runtime';
 import type { AppDeclaration } from 'this.gui/runtime';
 import type { RuntimeAdapter } from 'this.gui/runtime';
 import type { MeLike } from 'this.gui/react';
+import { Box } from 'this.gui/atoms';
 
 export interface RootProps {
   app: AppDeclaration;
@@ -22,6 +23,19 @@ const NAV_ITEMS = [
   { route: 'admin', label: 'Admin', icon: 'admin_panel_settings' },
 ];
 
+const BRAND_SX = {
+  width: '100%',
+  height: '100%',
+  minWidth: 56,
+  minHeight: 48,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontWeight: 700,
+  fontSize: '1.25rem',
+  color: 'primary.main',
+} as const;
+
 /**
  * The whole app, always rendered — there is no login wall here. `me`/
  * `runtime` are the public connection from main.tsx, so every view (Home,
@@ -30,5 +44,15 @@ const NAV_ITEMS = [
  * via useSessionSurface() wherever a view needs it.
  */
 export default function Root({ app, me, runtime }: RootProps) {
-  return <AppShell app={app} me={me} runtime={runtime} navItems={NAV_ITEMS} />;
+  return (
+    <AppShell
+      app={app}
+      me={me}
+      runtime={runtime}
+      navItems={NAV_ITEMS}
+      // Where you are, top-left of every view: the namespace and the origin serving it.
+      position={`${app.namespace} @ ${window.location.host}`}
+      brand={<Box sx={BRAND_SX}>{app.title.replace(/[^\p{L}\p{N}]/gu, '').charAt(0).toUpperCase()}</Box>}
+    />
+  );
 }

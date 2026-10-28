@@ -29,8 +29,8 @@ Flags:
 
 What you get (default):
   - Vite + React app pre-wired with this.gui and this.me
-  - mountApp() pattern — declare your app in .me, project it in GUI
-  - ThemeLauncher in the rail out of the box
+  - AppShell — declare your app in .me, project it in GUI
+  - Left rail (nav, Theme, .me, Dev Tools) and a top bar with your position
 
 Docs:
   https://neurons-me.github.io/GUI/

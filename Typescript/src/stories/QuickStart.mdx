@@ -15,8 +15,9 @@ npm run dev
 ```
 
 That scaffolds a Vite + React app already wired to `this.gui` and `this.me` —
-`mountApp()`, a `ThemeLauncher` in the rail, and a session surface, all out
-of the box. `npm run dev` also starts (or reuses) a real `this.me` monad for
+`AppShell` (left rail with navigation and the Theme, `.me` and Dev Tools
+launchers, plus a top bar that says where you are), and a session surface, all
+out of the box. `npm run dev` also starts (or reuses) a real `this.me` monad for
 the app's own namespace via `npx monads start <app-id> --namespace
 <app-id>.local` — nothing to provision by hand.
 
@@ -31,9 +32,10 @@ my-app/
   src/
     app.ts        # declareApp(): id, namespace, title, theme, views
     main.tsx       # creates the public `me`, the runtime, mounts <Root/>
-    Root.tsx       # <AppShell app={app} me={me} runtime={runtime} .../>
+    Root.tsx       # <AppShell app={app} me={me} runtime={runtime} position brand .../>
     views/
-      Home.tsx     # your first view
+      Home.tsx     # your first view: .GUI / Powered by .me / Get started
+      Spaces.tsx   # Admin: the Spaces explorer, gated on a session
 ```
 
 `app.ts` declares the shape; `main.tsx` wires it to a live `.me` connection;
@@ -77,8 +79,10 @@ import 'this.gui/style.css';
 ## 4. See it live
 
 The story below is a literal render of exactly what `npx this.gui my-app`
-produces — same `declareApp()` call, same `Home` spec, same footer
-launchers. Use it as the working reference for what "wired correctly" looks
+produces — same `AppShell` (top-bar position, brand, rail launchers), same
+`Home` view, same app declaration. The kernel runs in memory here instead of
+connecting to a monad, and the lightning-bolt bubble is a netget demo, not part
+of the scaffold. Use it as the working reference for what "wired correctly" looks
 like.
 
 <Canvas of={QuickStartStories.Default} />

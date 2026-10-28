@@ -15,9 +15,10 @@
   "dependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "this.gui": "^2.3.0",
-    "this.me": "^3.5.7",
-    "monad.ai": "^2.2.4"
+    "react-router-dom": "^7.18.3",
+    "this.gui": "^4.2.1",
+    "this.me": "^4.2.1",
+    "monad.ai": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

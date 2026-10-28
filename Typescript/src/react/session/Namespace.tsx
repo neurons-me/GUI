@@ -506,6 +506,22 @@ const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'dat
   );
 };
 
+// The address is drawn in a monospace face, where each of the two spaces around the `@` is a full character wide and the `@`
+// floats apart from both names. The spaces stay in the text (what is copied or read out is still `a @ b`) but are drawn
+// at a fraction of the size, which pulls the `@` in without changing the characters.
+const AT_SPACE_SX = { fontSize: '0.4em' } as const;
+const CompactAt: React.FC<{ text: string }> = ({ text }) => {
+  const at = text.indexOf(' @ ');
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <Box component="span" sx={AT_SPACE_SX}>{' '}</Box>@<Box component="span" sx={AT_SPACE_SX}>{' '}</Box>
+      {text.slice(at + 3)}
+    </>
+  );
+};
+
 // The other half of "Keychain" above — real signing keys for the real
 // authenticated identity, not a mock. Reuses keychainClient.ts exactly as
 // demo/main.tsx (packages/GUI/Typescript/demo/) does, except the signer
@@ -1831,7 +1847,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     '&:hover': { textDecoration: 'underline' },
                   }}
                 >
-                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
+                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : <CompactAt text={positionExpression} />}
                 </Box>
                 </UnlessLeftBarExpanded>
               </Box>

@@ -248,7 +248,7 @@ export const parameters = {
       order: [
         'Docs',
         'Getting Started',
-        ['Namespace', 'Quick Start', 'GUI Overview', 'Using This Docs'],
+        ['Namespace', 'Quick Start', 'Using This Docs'],
         'Router',
         ['Router', 'Examples & Recipes'],
         'Users',

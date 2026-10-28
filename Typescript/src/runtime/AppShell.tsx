@@ -4,6 +4,7 @@ import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from './DevToolsLauncher';
 import MeLauncher from '@/react/session/MeLauncher';
+import Box from '@/gui/Atoms/Box/Box';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
@@ -42,6 +43,13 @@ export interface AppShellProps {
   devtools?: boolean;
   /** Extra LeftBar footer actions rendered after Theme/DevTools defaults. */
   footerElements?: React.ReactNode[];
+  /**
+   * Where you are, written once at the top-left of every view (e.g. `my-app.local @ localhost:5173`). Opt-in: with
+   * no `position` the shell draws no top bar, as before.
+   */
+  position?: string;
+  /** The app's mark leading the LeftBar header (a logo, an initial). Opt-in; the bar's own arrow still expands it. */
+  brand?: React.ReactNode;
 }
 
 /**
@@ -82,7 +90,7 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
-function AppShellNav({ app, navItems, footerElements }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements'>) {
+function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
 
@@ -98,8 +106,39 @@ function AppShellNav({ app, navItems, footerElements }: Pick<AppShellProps, 'app
 
   return (
     <Layout
+      TopBar={position ? {
+        hideBrand: true,
+        noBorder: true,
+        toolbarSx: { pl: 0.25 },
+        elementsLeftSx: { pl: 1 },
+        elementsLeft: [{
+          type: 'action' as const,
+          props: {
+            element: (
+              <Box
+                data-gui-node-id="GUI.window.layout.bars.top.namespace"
+                title={position}
+                sx={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'monospace',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  color: 'text.primary',
+                }}
+              >
+                {position}
+              </Box>
+            ),
+          },
+        }],
+      } : undefined}
       LeftBar={{
         initialView: 'expanded',
+        brand,
         elements,
         footerElements: [
           // tooltip: false — each of these already opens its own hover
@@ -129,7 +168,7 @@ function AppShellNav({ app, navItems, footerElements }: Pick<AppShellProps, 'app
  * had reimplemented this exact composition — nothing below is
  * FullTrailer-specific; `navItems` is the one thing every app supplies.
  */
-export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements }: AppShellProps) {
+export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand }: AppShellProps) {
   useEffect(() => {
     declareApp(me, app);
     const initialPath = window.location.pathname.replace(/^\/+/, '') || 'home';
@@ -141,7 +180,7 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
 
   const body = (
     <Me me={me} runtime={runtime}>
-      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} />
+      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} />
     </Me>
   );
 

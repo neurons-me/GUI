@@ -15,7 +15,7 @@ import './index.css';
 // manage it directly. NOT the same thing as app.namespace (that's a `.me`
 // path prefix like "apps.__APP_ID__"); this is the claim/routing identity.
 const MONAD_ROOT_NAMESPACE = '__APP_ID__.local';
-const monadOrigin = import.meta.env.VITE_MONAD_ORIGIN || `http://local.netget/apps/__APP_ID__`;
+const monadOrigin = import.meta.env.VITE_MONAD_ORIGIN || `http://localhost/apps/__APP_ID__`;
 const SEED_STORAGE_KEY = `${app.id}.operator.seed:v1`;
 
 // One shared "public" runtime — no seed, no claim, just a live connection to

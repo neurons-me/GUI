@@ -1,88 +1,50 @@
 // src/stories/QuickStart.stories.tsx
 //
-// This story is a *literal* render of what `npx this.gui <AppName>` produces.
-// It mirrors npx/template/src/{app.ts,views/Home.ts} content/shape exactly
-// (same declareApp, same Home spec tree). If the template changes, update
-// this story to match — it exists so "what you see here" === "what you get
-// from the CLI". One deliberate bootstrap difference: the real template
-// calls mount() (which owns its own DOM root + SelectionProvider); this
-// story instead calls renderNode() directly against the same spec and
-// bridges resolved nodes into Storybook's own ambient SelectionProvider
-// (see .storybook/preview.tsx) — mount() can't be used here because it
-// would create a second SelectionProvider that fights the toolbar's
-// Inspector toggle and double-mounts the inspector panel.
+// This story renders what `npx this.gui <AppName>` produces: the same
+// shell (AppShell with the top-bar position and the brand mark, as
+// npx/template/src/Root.tsx passes them), the same Home view
+// (npx/template/src/views/Home.tsx) and the same app declaration
+// (npx/template/src/app.ts). If the template changes, update this story to
+// match — it exists so "what you see here" === "what you get from the CLI".
+// Two deliberate differences: the template imports from the published
+// `this.gui/*` entries and this story from `@/`; and the template connects
+// to its monad through createWsMeRuntime, while this story runs the kernel
+// in memory (RunMe) so it needs no server. The FrontendModeLauncherDemo
+// bubble in the rail is extra: it is netget's, not part of the scaffold.
 import React, { useMemo } from 'react';
 import ME from 'this.me';
 import type { Meta, StoryObj } from '@storybook/react';
 
-import Theme from '@/gui/Theme/Theme';
-import Layout from '@/gui/Layout/Layout';
-import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
-import DevToolsLauncher from '@/runtime/DevToolsLauncher';
-import { LauncherPopoverProvider, useLauncherPopover } from '@/runtime/launcherPopover';
+import { useLauncherPopover } from '@/runtime/launcherPopover';
 import { useRegisterGuiNode } from '@/runtime/selection';
-import MeLauncher from '@/react/session/MeLauncher';
+import { AppShell } from '@/runtime/AppShell';
+import { useMeAction } from '@/react/useMeAction';
 import Box from '@/gui/Atoms/Box/Box';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import Popper from '@mui/material/Popper';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import { SeedSessionProvider } from '@/react/session/SeedSessionProvider';
 import { SessionSurface } from '@/react/session/SessionSurface';
-import { Me } from '@/react/Me';
-import { declareApp } from '@/runtime/mountApp';
 import type { AppDeclaration } from '@/runtime/mountApp';
-import { SpecBoundary } from '@/runtime/SpecBoundary';
-import type { GuiSpecNode } from '@/runtime/renderer';
 import { RunMe } from '@/runtime/run-me';
 import { Typography, Button } from '@/gui/Atoms';
 import { Hero, Stack } from '@/gui/Molecules';
 
-const TITLE_PATH = 'me/apps.my-app.manifest.title';
-
-// ── Mirrors npx/template/src/views/Home.ts ─────────────────────────────────
-function createTemplateHomeSpec(): GuiSpecNode {
-  return {
-    type: 'Hero',
-    props: { height: '100vh', mode: 'left', padding: { xs: 3, md: 8 }, contentMaxWidth: 680 },
-    provenance: {
-      source: 'views/Home.ts',
-      note: 'Template landing view.',
-    },
-    children: {
-      type: 'Stack',
-      props: { spacing: 2, alignItems: 'flex-start' },
-      children: [
-        {
-          type: 'Typography',
-          props: { variant: 'h1', children: { read: TITLE_PATH } },
-          provenance: {
-            source: 'views/Home.ts#title',
-            semanticPath: TITLE_PATH,
-            note: 'App title, read live from the kernel manifest written by declareApp().',
-          },
-        },
-        {
-          type: 'Typography',
-          props: { variant: 'h5', children: 'Powered by .me' },
-          provenance: {
-            source: 'views/Home.ts#subtitle',
-            note: 'Static template copy — no kernel binding.',
-          },
-        },
-        {
-          type: 'Button',
-          props: { variant: 'contained', size: 'large', children: 'Get started' },
-          provenance: {
-            source: 'views/Home.ts#cta',
-            note: 'Template placeholder CTA — wire an onClick: { write: ... } action here.',
-          },
-        },
-      ],
-    },
-  };
+// ── Mirrors npx/template/src/views/Home.tsx ────────────────────────────────
+function Home() {
+  const setRoute = useMeAction('apps.my-app.route');
+  return (
+    <Hero height="100vh" mode="left" padding={{ xs: 3, md: 8 }} contentMaxWidth={680}>
+      <Stack spacing={2} alignItems="flex-start">
+        <Typography variant="h1">.GUI</Typography>
+        <Typography variant="h5">Powered by .me</Typography>
+        <Button variant="contained" size="large" onClick={() => setRoute('admin')}>
+          Get started
+        </Button>
+      </Stack>
+    </Hero>
+  );
 }
-
-const SPEC_REGISTRY = { Typography, Button, Hero, Stack };
 
 // ── Demo stand-in for netget's FrontendModeLauncher ────────────────────────
 // netget's own LeftBar footer rail has a 4th bubble between Theme and .me
@@ -197,68 +159,57 @@ function FrontendModeLauncherDemo() {
 }
 
 // ── Mirrors npx/template/src/app.ts ────────────────────────────────────────
+// `admin` (the Spaces explorer) is not drawn here: "Get started" would open it.
 const templateApp: AppDeclaration = {
   id: 'my-app',
   namespace: 'apps.my-app',
   title: '.GUI',
   theme: 'neurons.me',
-  views: { home: createTemplateHomeSpec },
+  views: { home: Home, admin: Home },
 };
 
-// ── Mirrors npx/template/src/runtime.tsx's mountApp() shell, as a React tree
-// instead of a mount()/createRoot() call (Storybook already owns the root) ─
+// ── Mirrors npx/template/src/Root.tsx ──────────────────────────────────────
+const NAV_ITEMS = [
+  { route: 'home', label: 'Home', icon: 'home' },
+  { route: 'admin', label: 'Admin', icon: 'admin_panel_settings' },
+];
+
+const BRAND_SX = {
+  width: '100%',
+  height: '100%',
+  minWidth: 56,
+  minHeight: 48,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontWeight: 700,
+  fontSize: '1.25rem',
+  color: 'primary.main',
+} as const;
+
 function QuickStartPreview() {
-  // Both created once, not per-render: a fresh `me` every render defeats
-  // `runtime`'s own useMemo below (its dep would never match across
-  // renders) and re-seeds+re-declares the kernel on every render for no
-  // reason — declareApp() only needs to run once per mounted instance.
-  const me = useMemo(() => {
-    const instance = new ME() as any;
-    declareApp(instance, templateApp);
-    return instance;
-  }, []);
-  const homeSpec = useMemo(() => (templateApp.views.home as () => GuiSpecNode)(), []);
+  // Created once, not per render: a fresh `me` every render would re-declare
+  // the kernel (AppShell's declareApp) on every render for no reason.
+  const me = useMemo(() => new ME() as any, []);
   const runtime = useMemo(() => RunMe(me), [me]);
 
   return (
-    <Theme initialThemeId={templateApp.theme}>
-      <Me me={me}>
-        {/* SeedSessionProvider + SessionSurface: the one-click anonymous
-            session (client-generated seed, no credentials form) — the
-            default shape for a bare `npx this.gui <AppName>` scaffold with
-            no identity backend of its own yet. MeLauncher auto-detects this
-            provider and renders its own bubble+popover from it, same as
-            DevToolsLauncher/ThemeLauncher render from ambient context. */}
-        <SeedSessionProvider>
-          <SessionSurface claimRootNamespace="my-app.demo.local" seedStorageKey="this-gui-quickstart-demo-seed:v1">
-            {/* LauncherPopoverProvider: without it, each footer launcher's
-                useLauncherPopover() falls back to independent local state
-                (its own documented no-provider fallback) — nothing then
-                stops two of their poppers from being open at once. This
-                story never had it, for either of the two launchers it
-                already carried before MeLauncher was added — confirmed
-                live (DevTools + .me both open simultaneously) before this
-                was added. A real app built from this template needs this
-                too, the same way it needs Theme/Me. */}
-            <LauncherPopoverProvider>
-              <Layout
-                LeftBar={{
-                  initialView: 'expanded',
-                  footerElements: [
-                    { type: 'action', props: { element: <DevToolsLauncher /> } },
-                    { type: 'action', props: { element: <ThemeLauncher /> } },
-                    { type: 'action', props: { element: <FrontendModeLauncherDemo /> } },
-                    { type: 'action', props: { element: <MeLauncher /> } },
-                  ],
-                }}
-              >
-                <SpecBoundary spec={homeSpec} registry={SPEC_REGISTRY} runtime={runtime} />
-              </Layout>
-            </LauncherPopoverProvider>
-          </SessionSurface>
-        </SeedSessionProvider>
-      </Me>
-    </Theme>
+    // SeedSessionProvider + SessionSurface: the one-click anonymous session
+    // (client-generated seed, no credentials form). MeLauncher, which AppShell
+    // puts in the rail, detects this provider and renders its bubble from it.
+    <SeedSessionProvider>
+      <SessionSurface claimRootNamespace="my-app.demo.local" seedStorageKey="this-gui-quickstart-demo-seed:v1">
+        <AppShell
+          app={templateApp}
+          me={me}
+          runtime={runtime}
+          navItems={NAV_ITEMS}
+          position={`${templateApp.namespace} @ ${window.location.host}`}
+          brand={<Box sx={BRAND_SX}>{templateApp.title.replace(/[^\p{L}\p{N}]/gu, '').charAt(0).toUpperCase()}</Box>}
+          footerElements={[<FrontendModeLauncherDemo key="frontend-mode" />]}
+        />
+      </SessionSurface>
+    </SeedSessionProvider>
   );
 }
 
