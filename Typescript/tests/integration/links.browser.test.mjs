@@ -226,6 +226,15 @@ async function main() {
       const pathAfter = await page.evaluate(() => window.location.pathname);
       check('5.2 changing the semantic path leaves the surface where it was', pathAfter === '/users', `pathname: ${pathAfter} (was ${pathBefore} before navigating)`);
       check('5.3 ...and the semantic path is the new one', /a\.test\/ideas/.test(await bodyText(page)), '');
+
+      // the search sits in the top bar, so the /users page reserves no band under the bar for it (it used to: 72px of padding on top)
+      const usersGap = await page.evaluate(() => {
+        const bar = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top"]');
+        const title = document.querySelector('[data-gui-node-id="GUI.window.layout.content.users"] h6');
+        if (!bar || !title) return null;
+        return Math.round(title.getBoundingClientRect().top - bar.getBoundingClientRect().bottom);
+      });
+      check('5.4 /users: the title starts right under the top bar (no band reserved for the search)', usersGap !== null && usersGap >= 0 && usersGap <= 48, `gap: ${usersGap}px (measured 87px with the reserved band: 72 + the table's 16, less the line's own offset)`);
       await context.close();
     }
     // ── 6. The corner: a stable, whole-cell control that names the selected link and keeps the facts apart ──────────

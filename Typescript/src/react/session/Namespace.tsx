@@ -371,8 +371,9 @@ const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, ne
     <Box
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
-      // pt: clear the search, fixed at the top-right of every route.
-      sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box', ...sx }}
+      // The search lives in the top bar now (bars.top.search), not over the content: nothing to clear, so the top
+      // padding is the same p: 3 as the sides.
+      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <UsersTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
