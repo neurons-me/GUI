@@ -359,7 +359,7 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
 // deliberately separate from endpoint (the API to fetch FROM, netget's own
 // monad) — reusing endpoint as the display root was exactly the bug this
 // session already found and fixed in UsersTable's own Storybook story.
-const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.users', 'data-gui-component': nodeComponent = 'Users' }) => {
+const UsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.users', 'data-gui-component': nodeComponent = 'Users' }) => {
   // Declared by the GUI document (GUI.window.layout.content.users), not registered by a hook.
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
   const namespaceRootLabel = useMemo(
@@ -385,7 +385,7 @@ const CleakerUsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, ne
   );
 };
 
-// The other half of the /blockchain route — same shell as CleakerUsersView
+// The other half of the /blockchain route — same shell as UsersView
 // above (this route is its sibling, not its child: the claims directory
 // lists WHO claimed this namespace, the blockchain shows EVERYTHING ever
 // written to it — claim events, content, host self-report, all still shown
@@ -422,7 +422,7 @@ const URL_VIEW_STATE_COLOR: Record<string, string> = {
   connected: '#66bb6a', streaming: '#4fc3f7', error: '#666', invalid: '#e57373', disconnected: '#555e66',
 };
 
-// The /url route — same minimal shell as CleakerUsersView/CleakerBlockchainView
+// The /url route — same minimal shell as UsersView/CleakerBlockchainView
 // above (sibling route, not a child), but NOT a static page: entering a URL
 // here is a real NRP invocation, not client-side navigation. It composes the
 // `@` overlay expression (`<namespace> @ "<url>"`) and opens it through the
@@ -1378,7 +1378,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
   const authenticated = ctx?.authenticated ?? false;
-  // Same derivation QRConnect/CleakerUsersView already use for
+  // Same derivation QRConnect/UsersView already use for
   // "which namespace is this page" -- the explicit `cleakerEndpoint` prop,
   // never the session's own namespace, so signing in or out can't move it,
   // and never window.location either (see requireCleakerEndpoint's own
@@ -2008,7 +2008,7 @@ const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string;
 const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   Landing: QRConnect,
   Welcome: WelcomePage,
-  Users: CleakerUsersView,
+  Users: UsersView,
   Blockchain: CleakerBlockchainView,
   Url: CleakerUrlView,
   Keychain: CleakerKeychainView,

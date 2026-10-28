@@ -1,5 +1,5 @@
 // Small, dependency-free (at runtime) home for the handful of things every
-// GUI-document page component (CleakerUsersView, CleakerBlockchainView,
+// GUI-document page component (UsersView, CleakerBlockchainView,
 // CleakerUrlView, the extracted identity/landing card, GUI itself) needs in
 // common: the shared page-props shape, the one page id the shell has to
 // recognize by name, and the two endpoint-derivation helpers every page
