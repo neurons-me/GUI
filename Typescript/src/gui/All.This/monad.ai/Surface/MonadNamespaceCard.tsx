@@ -14,6 +14,7 @@ import * as React from 'react';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import Monad from '../monad.ai';
+import type { Monad0Reading } from '@/react/session/monad0';
 import MonadMesh, { MonadMeshAppEntry, MonadMeshSleepingEntry, MonadMeshRestartStatus } from './MonadMesh';
 
 export type MonadNamespaceAppEntry = MonadMeshAppEntry;
@@ -41,6 +42,11 @@ export interface MonadNamespaceCardProps {
   orbScale?: number;
   /** Show the mesh list expanded (default: collapsed, as in a compact card). */
   meshDefaultOpen?: boolean;
+  /**
+   * Whether the monad answering here is the one the signed-in session runs on (`readMonad0`). Shown as one line under
+   * the orb; the evidence and what it does not establish are its title. Omit it where the page cannot say.
+   */
+  detection?: Monad0Reading;
 }
 
 const cardSx = {
@@ -65,6 +71,7 @@ export default function MonadNamespaceCard({
   onRestartAll,
   orbScale = 1,
   meshDefaultOpen = false,
+  detection,
 }: MonadNamespaceCardProps) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -81,6 +88,24 @@ export default function MonadNamespaceCard({
             <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} core="flat" ring={1.25} scale={orbScale} />
           </Box>
         </Box>
+
+        {detection ? (
+          <Box
+            data-gui-node-id="GUI.monad.detection"
+            data-monad-kind={detection.kind}
+            title={[...detection.evidence, ...detection.caveats.map((c) => `Limit: ${c}`)].join('\n')}
+            sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1 }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 600, color: detection.kind === 'monad0' ? 'primary.main' : 'text.primary' }}>
+              {detection.headline}
+            </Typography>
+            {detection.caveats[0] ? (
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                {detection.caveats[0]}
+              </Typography>
+            ) : null}
+          </Box>
+        ) : null}
 
         <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: 2, py: 1.5 }}>
           <MonadMesh

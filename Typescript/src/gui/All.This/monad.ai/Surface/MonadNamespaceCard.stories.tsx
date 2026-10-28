@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import MonadNamespaceCard from './MonadNamespaceCard';
+import { readMonad0 } from '@/react/session/monad0';
 
 const meta: Meta<typeof MonadNamespaceCard> = {
   title: 'Pieces/Monad',
@@ -74,5 +75,28 @@ export const RestartFailed: Story = {
     waking: {},
     restartStatus: 'error',
     restartError: 'apps/restart-all failed: 502',
+  },
+};
+
+// The card says whether the monad answering here is the one the signed-in session runs on. The reading is computed
+// from what the transport answered and what the session is (readMonad0), never from a name.
+const T = 'http://localhost/apps/netget';
+const answered = { monadId: 'monad:abc', monadName: 'netget', namespace: 'netget.local', signature: 'valid' as const };
+
+export const YourMonad0: Story = {
+  args: {
+    namespace: 'netget.local',
+    healthy: true,
+    apps,
+    detection: readMonad0({ transport: T, answered, session: { transportOrigin: T, namespace: 'ana.netget.local' } }),
+  },
+};
+
+export const AMonadNotKnownToBeYours: Story = {
+  args: {
+    namespace: 'netget.local',
+    healthy: true,
+    apps,
+    detection: readMonad0({ transport: T, answered, session: null }),
   },
 };
