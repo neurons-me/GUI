@@ -84,7 +84,8 @@ export default function UsersTable({
   const [rows, setRows] = useState<UserEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showTech, setShowTech] = useState(false);
+  // The advanced columns have no toggle (the gear was removed): they stay off until something asks for them.
+  const [showTech] = useState(false);
   // QR modal state removed. Only 'copied' remains.
   const [copied, setCopied] = useState(false);
   const parentNodeId = String(dataGuiNodeId || "UsersTable");
@@ -173,19 +174,10 @@ export default function UsersTable({
     });
     registerNode(nodeId("header"), nodePath("header"), `${parentNodeType}.Header`, {
       title: "Users",
-      hasNamespaceLabel: Boolean(namespaceLabel),
       showTech,
     });
     registerNode(nodeId("header.title"), nodePath("header.title"), `${parentNodeType}.Title`, {
       text: "Users",
-    });
-    registerNode(nodeId("header.advanced"), nodePath("header.advanced"), `${parentNodeType}.AdvancedToggle`, {
-      active: showTech,
-      label: showTech ? "Hide advanced columns" : "Show advanced columns",
-    });
-    registerNode(nodeId("header.namespace"), nodePath("header.namespace"), `${parentNodeType}.NamespaceCaption`, {
-      visible: Boolean(namespaceLabel),
-      namespaceLabel,
     });
     registerNode(nodeId("loading"), nodePath("loading"), `${parentNodeType}.LoadingState`, {
       visible: loading,
@@ -348,42 +340,12 @@ export default function UsersTable({
         {...nodeAttrs("header", `${parentNodeType}.Header`)}
         sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}
       >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
-          <Typography
-            {...nodeAttrs("header.title", `${parentNodeType}.Title`)}
-            variant="h6"
-          >
-            Users
-          </Typography>
-          {namespaceLabel ? (
-            <Typography
-              {...nodeAttrs("header.namespace", `${parentNodeType}.NamespaceCaption`)}
-              variant="caption"
-              sx={{ color: 'text.secondary' }}
-            >
-              Viewing node users for <Box component="span" sx={{ fontFamily: 'monospace', color: 'text.primary' }}>{namespaceLabel}</Box>
-            </Typography>
-          ) : null}
-        </Box>
-        <Tooltip title={showTech ? 'Hide advanced columns' : 'Show advanced columns'}>
-          <IconButton
-            {...nodeAttrs("header.advanced", `${parentNodeType}.AdvancedToggle`)}
-            size="small"
-            onClick={() => setShowTech((v) => !v)}
-            aria-label={showTech ? 'Hide advanced columns' : 'Show advanced columns'}
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              bgcolor: 'background.paper',
-              width: 32,
-              height: 32,
-              '& .material-symbols-rounded': { fontSize: 18 },
-            }}
-          >
-            <Icon name="settings" fontSize={18 as any} />
-          </IconButton>
-        </Tooltip>
+        <Typography
+          {...nodeAttrs("header.title", `${parentNodeType}.Title`)}
+          variant="h6"
+        >
+          Users
+        </Typography>
       </Box>
 
       {loading && (
