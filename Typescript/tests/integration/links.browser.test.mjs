@@ -271,6 +271,8 @@ async function main() {
       // three facts, kept apart
       check('6.4 service answered, no session, authority not verified are stated separately',
         /Service answered/.test(c0.title) && /No session/.test(c0.title) && /Authority not verified/.test(c0.title), c0.title);
+      const kindOf = () => page.evaluate((brandSelector) => document.querySelector(brandSelector)?.getAttribute('data-monad-kind') ?? null, BRAND);
+      check('6.4b without a session the monad is not called yours', !/monad0/.test(c0.title) && (await kindOf()) === 'monad', `kind: ${await kindOf()} — ${c0.title}`);
       const v0 = await qrValues();
       check('6.5 the corner QR and the card QR name the same link', !!v0.badge && v0.badge === v0.card, `corner: ${v0.badge} card: ${v0.card}`);
 
@@ -280,6 +282,8 @@ async function main() {
       const v1 = await qrValues();
       check('6.6 selecting B moves both codes to B, together', selected && !!v1.badge && v1.badge === v1.card && v1.badge !== v0.badge && /b\.test/.test(v1.badge || ''), `corner: ${v1.badge} card: ${v1.card}`);
 
+      check('6.6b another link with no session is not monad0', !/monad0/.test((await corner()).title) && (await kindOf()) !== 'monad0', `kind: ${await kindOf()}`);
+
       // signing in through A is a fact about A: the session mark and the sentence appear, the answer statement does not change
       const backA = await selectLink(page, 'a.test');
       await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
@@ -288,6 +292,14 @@ async function main() {
       const c2 = await corner();
       const mark = await page.locator('[data-gui-node-id="GUI.window.layout.bars.left.session"]').count();
       check('6.7 a session is its own mark and sentence, apart from the answer', backA && inA && mark === 1 && /Signed in as ana\.a\.test/.test(c2.title) && /Service answered/.test(c2.title), c2 ? c2.title : '');
+      check('6.7b signed in on the monad that answers for this namespace: it says so, as its own fact', /Signed in as ana\.a\.test · Your monad0 · Authority not verified/.test(c2.title) && (await kindOf()) === 'monad0', `kind: ${await kindOf()} — ${c2.title}`);
+      // A's session is A's: selecting B, which has none, does not make B monad0; coming back to A finds it again
+      await selectLink(page, 'b.test');
+      await page.waitForTimeout(600);
+      check('6.7c with A signed in, B (no session of its own) is still not monad0', (await kindOf()) === 'monad' && !/monad0/.test((await corner()).title), `kind: ${await kindOf()}`);
+      await selectLink(page, 'a.test');
+      await page.waitForTimeout(600);
+      check('6.7d back on A: monad0 again', (await kindOf()) === 'monad0', `kind: ${await kindOf()}`);
       // each control does one thing: the brand goes to the identity page and never expands the bar; the arrow expands it and never navigates
       const arrowBeforeNav = await page.evaluate(() => {
         const arrow = document.querySelector('button[aria-label="Expand sidebar"], button[aria-label="Collapse sidebar"]');

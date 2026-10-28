@@ -52,6 +52,7 @@ import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
 import { useVerifiedCleakerRoot, pickRootTransport, type CleakerRootSeed, probeNetgetGateway } from './verifiedCleakerRoot';
 import { useDoorLayers, probeDoorLayers, type DoorLayers } from './doorLayers';
+import { readMonad0 } from './monad0';
 import { ConnectionSeamsContext } from '@/gui/All.This/Cleaker/useQRConnect';
 import DoorLayersPanel, { doorBlocks, doorPending } from '@/gui/All.This/netget/Door/DoorLayersPanel';
 import { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
@@ -1556,9 +1557,20 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Three different facts, never one: the service at this link answered; a session is open through it; and its authority
   // was checked. The client can establish the first two. The third has no source here yet, so it is always stated as not
   // verified, and nothing drawn on the badge stands for it.
+  // A fourth fact, only when the facts line up: the monad answering at this link is the one this session runs on. It is
+  // read from what the transport answered and what the session is (readMonad0), and a probe that failed after an earlier
+  // confirmation is not an answer.
+  const monadReading = useMemo(() => readMonad0({
+    transport: verifiedRoot.transportOrigin,
+    answered: verifiedRoot.status === 'confirmed' && verifiedRoot.monad && !monadOff && !verifiedRoot.lastAttemptFailed
+      ? { monadId: verifiedRoot.monad.id, monadName: verifiedRoot.monad.name, namespace: verifiedRoot.answeredNamespace, signature: verifiedRoot.signature }
+      : null,
+    session: authenticated && session ? { transportOrigin: session.transportOrigin, namespace: session.semanticNamespace } : null,
+  }), [verifiedRoot.transportOrigin, verifiedRoot.status, verifiedRoot.monad, verifiedRoot.answeredNamespace, verifiedRoot.signature, verifiedRoot.lastAttemptFailed, monadOff, authenticated, session]);
   const linkFacts = [
     positionStatusLabel || 'Not checked',
     authenticated && session?.semanticNamespace ? `Signed in as ${session.semanticNamespace}` : 'No session',
+    ...(monadReading.kind === 'monad0' ? ['Your monad0'] : []),
     'Authority not verified',
   ].join(' · ');
 
@@ -1747,6 +1759,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       aria-description={`${positionExpressionFull} — ${linkFacts}`}
       title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
+      data-monad-kind={monadReading.kind}
       data-gui-node-id="GUI.window.layout.bars.left.identity"
       sx={{
         // The whole cell is the link, flush with the corner: a corner is a target that cannot be overshot.
