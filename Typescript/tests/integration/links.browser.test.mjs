@@ -234,7 +234,7 @@ async function main() {
         if (!bar || !title) return null;
         return Math.round(title.getBoundingClientRect().top - bar.getBoundingClientRect().bottom);
       });
-      check('5.4 /users: the title starts right under the top bar (no band reserved for the search)', usersGap !== null && usersGap >= 0 && usersGap <= 48, `gap: ${usersGap}px (measured 87px with the reserved band: 72 + the table's 16, less the line's own offset)`);
+      check('5.4 /users: the title starts right under the top bar (no band reserved for the search)', usersGap !== null && usersGap >= 0 && usersGap <= 28,`gap: ${usersGap}px (measured 87px with the reserved band: 72 + the table's 16, less the line's own offset)`);
       await context.close();
     }
     // ── 6. The corner: a stable, whole-cell control that names the selected link and keeps the facts apart ──────────

@@ -371,9 +371,9 @@ const UsersView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, netgetMon
     <Box
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
-      // The search lives in the top bar now (bars.top.search), not over the content: nothing to clear, so the top
-      // padding is the same p: 3 as the sides.
-      sx={{ p: 3, width: '100%', boxSizing: 'border-box', ...sx }}
+      // The search lives in the top bar now (bars.top.search), not over the content: nothing to clear. The table brings
+      // its own 16px and the content starts 2px under the bar, so 3px here puts the title 21px under the bar.
+      sx={{ p: 3, pt: '3px', width: '100%', boxSizing: 'border-box', ...sx }}
     >
       <UsersTable
         endpoint={getNetgetMonadOrigin(netgetMonadOrigin)}
