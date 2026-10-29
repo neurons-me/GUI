@@ -1,3 +1,7 @@
-export { default as TwitchChat } from './TwitchChat';
+export { Channel } from './Channel';
 export { default as StreamStage } from './StreamStage';
-export type { TwitchChatProps, TwitchChatMessage, StreamStageProps } from './Twitch.types';
+export type { StreamStageProps } from './Twitch.types';
+export type {
+  ChannelProps, ChannelChatMessage, ChannelProfile, ChannelStream, ChannelSettings, ChannelFollowers,
+  ChannelSection, ChannelPanel, ChannelWindowMode, ChannelSectionState,
+} from './Channel/Channel.types';

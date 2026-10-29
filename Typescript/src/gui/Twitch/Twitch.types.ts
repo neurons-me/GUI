@@ -1,33 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-export interface TwitchChatMessage {
-  id: string;
-  user: string;
-  text: string;
-  /** Optional username color; defaults to theme text.primary. */
-  color?: string;
-  /** Short text badges, e.g. ['MOD'], ['SUB', '12']. */
-  badges?: string[];
-  /** Display time, e.g. '13:04'. */
-  time?: string;
-}
-
-export interface TwitchChatProps {
-  messages: TwitchChatMessage[];
-  title?: string;
-  /** Small caption under the title (e.g. 'Sample data'). */
-  caption?: string;
-  placeholder?: string;
-  onSend?: (text: string) => void;
-  /** Hide the input row (read-only chat, e.g. for an OBS source). */
-  readOnly?: boolean;
-  width?: number | string;
-  height?: number | string;
-  className?: string;
-  style?: CSSProperties;
-  'data-testid'?: string;
-}
-
 export interface StreamStageProps {
   /** Camera layer: video URL (placeholder when omitted). */
   videoSrc?: string;
