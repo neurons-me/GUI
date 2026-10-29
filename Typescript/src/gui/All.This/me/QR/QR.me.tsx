@@ -1,11 +1,11 @@
 import React from 'react';
-import { getContrastRatio } from '@mui/material/styles';
 import { Avatar, Box, Tooltip, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import { useGuiTheme } from '@/gui-internals/Hooks';
 import QR, { getQrModuleCount, snapQrCellSize } from '../QR';
 import PixelWordmark from './PixelWordmark';
 import { ME_WORDMARK_EMBED_BITMAP } from './meMark';
+import { firstContrasting, resolveQrMeColors, withHexAlpha } from './qrContrast';
 
 // Must match the ecc/quietZone actually passed to <QR> below — this is
 // what decides how many modules a given value needs, which is exactly
@@ -385,16 +385,12 @@ export default function QRme({
   // 'off' is grey: nothing answers here (no .me behind this address). Distinct from 'error' (red), where
   // something answered and refused -- the same ring colour for both would say "broken" about a thing that is
   // simply not running.
-  const statusColor = status === 'checking'
-    ? theme.palette.warning.main
-    : status === 'error'
-      ? theme.palette.error.main
-      : status === 'off'
-        ? theme.palette.text.disabled
-        : undefined;
-  const qrBg = bg ?? theme.palette.background.paper;
-  const qrFg = fg ?? statusColor ?? theme.palette.primary.main;
-  const ringAccent = statusColor ?? theme.palette.primary.main;
+  // The ink and the ring are contrast-checked (qrContrast.ts): Seafoam dark's primary #244C4E over its paper #182423
+  // is ~1.7:1, a QR that was barely visible and unreliable to scan ("en seafoam el qr.me color no se ve bonito"). The
+  // ink needs 4.5:1 against the QR background, the ring 3:1 against the page; a colour that already reaches it is kept
+  // as is, otherwise the theme's own lighter (dark mode) / darker (light mode) variant, then its text colour.
+  // A caller's explicit `fg` / `bg` are never touched.
+  const { qrBg, qrFg, ringAccent } = resolveQrMeColors(theme.palette, { status, fg, bg });
   // A plain online/offline dot at the very start of the perimeter label,
   // replacing the scarab glyph a caller used to prepend to the text
   // itself -- flagged live as no longer needed once Beatle's own visible
@@ -415,16 +411,10 @@ export default function QRme({
   // and otherwise steps through lighter fallbacks, ending at the theme's
   // own text color, so the label always shows.
   const pageBg = theme.palette.background.default ?? theme.palette.background.paper;
-  const readable = (color: string, ...fallbacks: string[]): string => {
-    for (const candidate of [color, ...fallbacks]) {
-      try {
-        if (getContrastRatio(candidate, pageBg) >= 3) return candidate;
-      } catch {
-        return candidate;
-      }
-    }
-    return theme.palette.text.primary;
-  };
+  // Same helper as the QR's own ink/ring above. Alpha-blind here (as it always was), so the labels keep exactly the
+  // colours they had; the ink/ring check lays translucent colours over their background first.
+  const readable = (color: string, ...fallbacks: string[]): string =>
+    firstContrasting(pageBg, 3, [color, ...fallbacks], theme.palette.text.primary, false);
   const statusDotColor = readable(
     status === 'checking'
       ? theme.palette.warning.main
@@ -808,12 +798,12 @@ export default function QRme({
             justifyContent: 'center',
             background: rimBackground,
             border: '1px solid',
-            borderColor: `${ringAccent}55`,
+            borderColor: withHexAlpha(ringAccent, '55'),
             boxShadow: isTopbar
               // One thin ring in the status color, nothing else. It used to carry the default face's blur glow and
               // drop shadow too, which on the left rail's dark ground read as a pale halo around a tiny QR. The ring
               // is quieter while the state is fine and full strength while it needs looking at (checking / error).
-              ? `0 0 0 1px ${ringAccent}${status === 'error' || status === 'checking' ? '' : '8c'}`
+              ? `0 0 0 1px ${status === 'error' || status === 'checking' ? ringAccent : withHexAlpha(ringAccent, '8c')}`
               : showingAvatar
                 ? `0 0 0 1px ${theme.palette.primary.main}22, 0 12px 22px rgba(0,0,0,0.18)`
                 // Dialed way back from the earlier "stronger" pass, which
@@ -827,7 +817,7 @@ export default function QRme({
                 // ringAccent (warning/error while `status` says so, the
                 // theme's own primary color otherwise) so this glow doubles
                 // as the QR's connection-status signal.
-                : `0 0 0 2px ${ringAccent}, 0 0 14px 3px ${ringAccent}40, 0 8px 18px rgba(0,0,0,0.14)`,
+                : `0 0 0 2px ${ringAccent}, 0 0 14px 3px ${withHexAlpha(ringAccent, '40')}, 0 8px 18px rgba(0,0,0,0.14)`,
             overflow: 'hidden',
           }}
         >
