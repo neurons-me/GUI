@@ -8,7 +8,8 @@ const FAKE_CAMERA =
 /**
  * StreamStage — layered stream canvas (bottom → top):
  * camera (video / placeholder) → tint overlay (hue/opacity) → .GUI children.
- * Renders at a logical resolution (default 1920x1080) scaled to fit its container.
+ * fit='fill' (default): covers container width+height. fit='contain' (default when transparent):
+ * logical resolution (1920x1080) scaled to the container width — the OBS browser-source case.
  */
 const StreamStage: React.FC<StreamStageProps> = ({
   videoSrc,
@@ -21,6 +22,7 @@ const StreamStage: React.FC<StreamStageProps> = ({
   controls = false,
   storageKey = 'twitch:stage-overlay',
   transparent = false,
+  fit: fitProp,
   baseWidth = 1920,
   baseHeight = 1080,
   children,
@@ -32,14 +34,16 @@ const StreamStage: React.FC<StreamStageProps> = ({
   const overlayRef = useRef<HTMLDivElement>(null);
   const [overlayEl, setOverlayEl] = useState<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(1);
+  const fit = fitProp ?? (transparent ? 'contain' : 'fill');
+  const fill = fit === 'fill';
 
   useEffect(() => {
     const el = wrapRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (fill || !el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(([entry]) => setScale(entry.contentRect.width / baseWidth));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [baseWidth]);
+  }, [baseWidth, fill]);
   useEffect(() => { setOverlayEl(overlayRef.current); }, []);
 
   const a = Math.max(0, Math.min(100, opacity)) / 100;
@@ -50,13 +54,18 @@ const StreamStage: React.FC<StreamStageProps> = ({
       ref={wrapRef}
       className={['gui-stream-stage', className].filter(Boolean).join(' ')}
       data-testid={dataTestId}
-      style={{ position: 'relative', width: '100%', aspectRatio: `${baseWidth} / ${baseHeight}`, overflow: 'hidden', ...style }}
+      data-fit={fit}
+      style={fill
+        ? { position: 'relative', width: '100%', height: '100%', minHeight: 0, overflow: 'hidden', ...style }
+        : { position: 'relative', width: '100%', aspectRatio: `${baseWidth} / ${baseHeight}`, overflow: 'hidden', ...style }}
     >
-      <div style={{ position: 'absolute', top: 0, left: 0, width: baseWidth, height: baseHeight, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
+      <div style={fill
+        ? { position: 'absolute', inset: 0 }
+        : { position: 'absolute', top: 0, left: 0, width: baseWidth, height: baseHeight, transform: `scale(${scale})`, transformOrigin: '0 0' }}>
         {!transparent && (
           <div data-layer="camera" style={{ position: 'absolute', inset: 0, background: cameraBackground }}>
             {videoSrc && (
-              <video src={videoSrc} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <video src={videoSrc} autoPlay muted loop playsInline style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />
             )}
             {placeholderLabel && (
               <div style={{ position: 'absolute', left: 32, bottom: 28, padding: '6px 14px', border: '2px dashed rgba(255,255,255,0.6)', color: 'rgba(255,255,255,0.8)', font: '600 22px/1.2 monospace', letterSpacing: 2 }}>

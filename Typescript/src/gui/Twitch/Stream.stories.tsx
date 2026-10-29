@@ -9,11 +9,12 @@ import { SampleGuiLayer } from './SampleGuiLayer.story';
 function StreamView({ mode, controls }: { mode: 'light' | 'dark'; controls: boolean }) {
   return (
     <WithTheme mode={mode}>
-      <Box sx={{ bgcolor: 'background.default', height: '100vh', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
-        <Box sx={{ p: 3, minWidth: 0 }}>
+      <Box sx={{ bgcolor: 'background.default', height: '100vh', overflow: 'hidden', boxSizing: 'border-box', display: 'grid',
+        gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'minmax(0,1fr) 360px' }, gridTemplateRows: { xs: '45vh 55vh', md: '100vh' } }}>
+        <Box sx={{ minWidth: 0, minHeight: 0 }}>
           <StreamStage controls={controls} opacity={40} storageKey="storybook:twitch-stream"><SampleGuiLayer /></StreamStage>
         </Box>
-        <ExampleChannel height="100vh" hideWindowControls />
+        <ExampleChannel width="100%" height="100%" hideWindowControls />
       </Box>
     </WithTheme>
   );

@@ -10,16 +10,17 @@ const meta: Meta<typeof StreamStage> = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
-    docs: { description: { component: 'Stream layer, bottom to top: camera (PLACEHOLDER gradient/sample video) → tint overlay (opacity 0 = clean camera, 100 = full cover) → .GUI components. 1920x1080 scaled to fit.' } },
+    docs: { description: { component: 'Stream layer, bottom to top: camera (PLACEHOLDER gradient/sample video) → tint overlay (opacity 0 = clean camera, 100 = full cover) → .GUI components. fit="fill" (default) covers the container width+height; fit="contain" / transparent = fixed 1920x1080 scaled (OBS).' } },
   },
   argTypes: {
     hue: { control: { type: 'range', min: 0, max: 360 } },
     opacity: { control: { type: 'range', min: 0, max: 100 } },
+    fit: { control: 'inline-radio', options: ['fill', 'contain'] },
   },
   args: { hue: 210, opacity: 50 },
   render: (args) => (
     <WithTheme mode="dark">
-      <div style={{ padding: 24, background: '#111', minHeight: '100vh', boxSizing: 'border-box' }}>
+      <div style={{ background: '#111', height: '100vh', boxSizing: 'border-box' }}>
         <StreamStage {...args}><SampleGuiLayer /></StreamStage>
       </div>
     </WithTheme>
@@ -33,6 +34,9 @@ export const Stage: Story = {};
 export const Opacity0: Story = { args: { opacity: 0 } };
 export const Opacity50: Story = { args: { opacity: 50 } };
 export const Opacity100: Story = { args: { opacity: 100 } };
+
+/** Fixed 1920x1080 scaled to width (letterboxed by the container). */
+export const Contain: Story = { args: { fit: 'contain' } };
 
 /** What OBS loads as a browser source: transparent, no camera, no controls; args drive hue/opacity. */
 export const OBSSource: Story = {
