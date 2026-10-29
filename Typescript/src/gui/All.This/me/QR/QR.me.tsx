@@ -388,7 +388,8 @@ export default function QRme({
   // The ink and the ring are contrast-checked (qrContrast.ts): Seafoam dark's primary #244C4E over its paper #182423
   // is ~1.7:1, a QR that was barely visible and unreliable to scan ("en seafoam el qr.me color no se ve bonito"). The
   // ink needs 4.5:1 against the QR background, the ring 3:1 against the page; a colour that already reaches it is kept
-  // as is, otherwise the theme's own lighter (dark mode) / darker (light mode) variant, then its text colour.
+  // as is, otherwise the theme's own lighter (dark mode) / darker (light mode) variant, then the same colour mixed
+  // toward white / black 10% at a time (so it keeps its hue), and only then the text colour.
   // A caller's explicit `fg` / `bg` are never touched.
   const { qrBg, qrFg, ringAccent } = resolveQrMeColors(theme.palette, { status, fg, bg });
   // A plain online/offline dot at the very start of the perimeter label,

@@ -7,6 +7,7 @@ import {
   QR_INK_MIN_CONTRAST,
   QR_RING_MIN_CONTRAST,
   resolveQrMeColors,
+  tintsOf,
   withHexAlpha,
   type QrMeStatus,
 } from '../src/gui/All.This/me/QR/qrContrast';
@@ -76,6 +77,22 @@ function seafoamDarkNoLongerDrawsInkItCannotSee() {
   const c = resolveQrMeColors(palette, {});
   assert.notEqual(c.qrFg, palette.primary.main);
   assert.ok(contrastOn(c.qrFg, c.qrBg) >= QR_INK_MIN_CONTRAST);
+  // Keeps the teal: the first 10% step toward white of #244C4E that reaches 4.5:1 (40%), not near-white text.
+  assert.equal(c.qrFg, 'rgb(123, 147, 148)');
+  assert.notEqual(c.qrFg, palette.text.primary);
+}
+
+function tintsKeepTheHueBeforeTextColour() {
+  for (const { name, mode, palette } of palettes) {
+    const c = resolveQrMeColors(palette, {});
+    const tints = tintsOf(palette.primary.main, mode);
+    assert.equal(tints.length, 9);
+    if (contrastOn(palette.primary.main, c.qrBg) < QR_INK_MIN_CONTRAST && tints.some((t) => contrastOn(t, c.qrBg) >= QR_INK_MIN_CONTRAST)) {
+      assert.notEqual(c.qrFg, palette.text.primary, `${name} ${mode}: a tinted primary passes, so the ink keeps colour`);
+    }
+  }
+  assert.equal(tintsOf('#000000', 'dark')[0], 'rgb(25, 25, 25)', '10% toward white');
+  assert.equal(tintsOf('#ffffff', 'light')[0], 'rgb(229, 229, 229)', '10% toward black');
 }
 
 function callerColorsAreUntouched() {
@@ -106,6 +123,7 @@ everyThemeAndStatusIsLegible();
 aContrastingPrimaryIsKeptExactly();
 seafoamDarkNoLongerDrawsInkItCannotSee();
 callerColorsAreUntouched();
+tintsKeepTheHueBeforeTextColour();
 hexAlphaSuffix();
 alphaIsLaidOverTheBackground();
 

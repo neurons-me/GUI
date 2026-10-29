@@ -1,4 +1,4 @@
-import { alpha, decomposeColor, getContrastRatio, hslToRgb, recomposeColor } from '@mui/material/styles';
+import { alpha, darken, decomposeColor, getContrastRatio, hslToRgb, lighten, recomposeColor } from '@mui/material/styles';
 import type { Palette } from '@mui/material/styles';
 
 /**
@@ -72,6 +72,15 @@ export function withHexAlpha(color: string, hexAlpha: string): string {
   }
 }
 
+/** `color` mixed toward white (dark mode) or black (light mode) by 10%, 20%, ... 90%. Unparsable colours give none. */
+export function tintsOf(color: string, mode: 'light' | 'dark'): string[] {
+  try {
+    return Array.from({ length: 9 }, (_, i) => (mode === 'dark' ? lighten : darken)(color, (i + 1) / 10));
+  } catch {
+    return [];
+  }
+}
+
 export type QrMeStatus = 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
 
 type QrPalette = Pick<Palette, 'mode' | 'primary' | 'warning' | 'error' | 'text' | 'background'>;
@@ -89,8 +98,8 @@ export type QrMeColors = {
  *
  * - `bg` / `fg` given by the caller are used exactly as given.
  * - The ink, when no `fg` is given, is the status colour (or primary) if it reaches 4.5:1 against the QR background;
- *   otherwise the same colour's lighter variant in dark mode (its darker one in light mode), and finally the theme's
- *   own text colour.
+ *   otherwise the same colour's lighter variant in dark mode (its darker one in light mode), then that colour mixed
+ *   toward white (dark) / black (light) in 10% steps, and only then the theme's own text colour.
  * - The ring follows the same steps at 3:1 against the page (`background.default`) it is drawn on.
  *
  * A theme whose primary already contrasts gets exactly the colour it had before.
@@ -111,7 +120,9 @@ export function resolveQrMeColors(
           : undefined;
   const statusColor = family?.[0];
   const [base, stepped] = family ?? [palette.primary.main, palette.primary[step]];
-  const candidates = [base, stepped, palette.text.primary];
+  // Before giving up on colour, the base itself is mixed toward white (dark mode) / black (light mode) 10% at a time,
+  // so the ink keeps the theme's hue (Seafoam dark stays teal instead of turning near-white). text.primary is last.
+  const candidates = [base, stepped, ...tintsOf(base, palette.mode), palette.text.primary];
 
   const qrBg = bg ?? palette.background.paper;
   const qrFg = fg ?? firstContrasting(qrBg, QR_INK_MIN_CONTRAST, candidates, palette.text.primary);
