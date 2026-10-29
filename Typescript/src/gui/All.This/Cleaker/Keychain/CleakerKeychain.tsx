@@ -79,6 +79,8 @@ export interface CleakerKeychainProps {
   serviceKeysNamespace?: string | null;
   /** Highlights one service card, e.g. from '/keychain#twitch'. */
   focusedService?: ServiceId | null;
+  /** Scroll to the Service keys section ('/keychain#services'). */
+  focusServiceKeys?: boolean;
   sx?: any;
 }
 
@@ -232,6 +234,7 @@ export default function CleakerKeychain({
   onRecoverKeychain = () => {},
   serviceKeysNamespace = null,
   focusedService = null,
+  focusServiceKeys = false,
   sx,
 }: CleakerKeychainProps) {
   // Necessary, not sufficient by itself: the server independently
@@ -285,7 +288,7 @@ export default function CleakerKeychain({
       {view === 'no-local-key' && <NoLocalKeyView onNavigate={onNavigate} />}
 
       {view === 'list' && serviceKeysNamespace && (
-        <ServiceKeysSection namespace={serviceKeysNamespace} focusedService={focusedService} />
+        <ServiceKeysSection namespace={serviceKeysNamespace} focusedService={focusedService} focusSection={focusServiceKeys} />
       )}
     </Box>
   );

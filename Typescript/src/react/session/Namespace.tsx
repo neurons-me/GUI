@@ -604,6 +604,7 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
           focusedKeyId={focusedKeyId}
           serviceKeysNamespace={semanticNamespace}
           focusedService={focusedService}
+          focusServiceKeys={hashService === 'services'}
           onNavigate={(next, targetId) => {
             setView(next);
             if (targetId !== undefined) setFocusedKeyId(targetId ?? null);

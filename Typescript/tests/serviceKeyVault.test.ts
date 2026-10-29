@@ -102,13 +102,46 @@ await test('S11 OpenAI (ChatGPT / Codex): single API key, labelled and listed', 
   assert.deepEqual(listSavedServices(NS), ['openai']);
 });
 
-await test('S12 LinkedIn: client id + secret round-trip, six services defined', async () => {
+await test('S12 LinkedIn: client id + secret round-trip, eleven services defined', async () => {
   const { SERVICE_IDS } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
-  assert.deepEqual([...SERVICE_IDS], ['twitch', 'paypal', 'meta', 'google', 'openai', 'linkedin']);
+  assert.deepEqual([...SERVICE_IDS], ['twitch', 'paypal', 'meta', 'google', 'openai', 'linkedin', 'grok', 'github', 'facebook', 'whatsapp', 'sms']);
   await saveServiceKeys(NS, 'linkedin', { clientId: 'li-id', clientSecret: SECRET }, PW);
   lockServiceKeys();
   assert.deepEqual(await getServiceKeys(NS, 'linkedin', PW), { clientId: 'li-id', clientSecret: SECRET });
   assert.ok(!JSON.stringify([...vaultStore.entries()]).includes(SECRET));
+});
+
+await test('S13 xAI Grok, GitHub, Facebook (page token optional): labels, fields, round-trip, no plaintext', async () => {
+  const { SERVICE_DEFINITIONS } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
+  const f = (id: string) => SERVICE_DEFINITIONS.find((d) => d.id === id)!;
+  assert.equal(f('grok').name, 'xAI · Grok');
+  assert.deepEqual(f('grok').fields.map((x) => x.id), ['apiKey']);
+  assert.deepEqual(f('github').fields.map((x) => x.label), ['Personal access token']);
+  assert.deepEqual(f('facebook').fields.map((x) => x.id), ['appId', 'appSecret', 'pageAccessToken']);
+  await saveServiceKeys(NS, 'grok', { apiKey: SECRET }, PW);
+  await saveServiceKeys(NS, 'github', { token: SECRET + 'gh' }, PW);
+  await saveServiceKeys(NS, 'facebook', { appId: 'app1', appSecret: SECRET + 'fb' }, PW);
+  lockServiceKeys();
+  assert.deepEqual(await getServiceKeys(NS, 'grok', PW), { apiKey: SECRET });
+  assert.deepEqual(await getServiceKeys(NS, 'github', PW), { token: SECRET + 'gh' });
+  assert.deepEqual(await getServiceKeys(NS, 'facebook', PW), { appId: 'app1', appSecret: SECRET + 'fb' });
+  assert.ok(!JSON.stringify([...vaultStore.entries()]).includes('SUPERSECRET'));
+  assert.deepEqual(listSavedServices(NS), ['grok', 'github', 'facebook']);
+});
+
+await test('S14 WhatsApp Cloud API (business id optional) and SMS · Twilio round-trip', async () => {
+  const { SERVICE_DEFINITIONS } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
+  const f = (id: string) => SERVICE_DEFINITIONS.find((d) => d.id === id)!;
+  assert.deepEqual(f('whatsapp').fields.map((x) => x.id), ['accessToken', 'phoneNumberId', 'businessAccountId']);
+  assert.equal(f('sms').name, 'SMS · Twilio');
+  assert.deepEqual(f('sms').fields.map((x) => x.label), ['Account SID', 'Auth token', 'From number']);
+  await saveServiceKeys(NS, 'whatsapp', { accessToken: SECRET, phoneNumberId: '123' }, PW);
+  await saveServiceKeys(NS, 'sms', { accountSid: 'AC1', authToken: SECRET + 'tw', fromNumber: '+15550000' }, PW);
+  lockServiceKeys();
+  assert.deepEqual(await getServiceKeys(NS, 'whatsapp', PW), { accessToken: SECRET, phoneNumberId: '123' });
+  assert.deepEqual(await getServiceKeys(NS, 'sms', PW), { accountSid: 'AC1', authToken: SECRET + 'tw', fromNumber: '+15550000' });
+  assert.ok(!JSON.stringify([...vaultStore.entries()]).includes('SUPERSECRET'));
+  assert.deepEqual(listSavedServices(NS), ['whatsapp', 'sms']);
 });
 
 console.log(`${n} passed`);

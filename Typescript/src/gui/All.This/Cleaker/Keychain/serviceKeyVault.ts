@@ -18,7 +18,7 @@ import {
   clearLocalIdentityVault,
 } from '@/core/identity/localIdentityVault';
 
-export type ServiceId = 'twitch' | 'paypal' | 'meta' | 'google' | 'openai' | 'linkedin';
+export type ServiceId = 'twitch' | 'paypal' | 'meta' | 'google' | 'openai' | 'linkedin' | 'grok' | 'github' | 'facebook' | 'whatsapp' | 'sms';
 
 export interface ServiceFieldDef { id: string; label: string; secret: boolean }
 export interface ServiceDef { id: ServiceId; name: string; fields: ServiceFieldDef[]; /** Icon tooltip; defaults to name. */ tooltip?: string }
@@ -48,6 +48,27 @@ export const SERVICE_DEFINITIONS: readonly ServiceDef[] = [
   { id: 'linkedin', name: 'LinkedIn', fields: [
     { id: 'clientId', label: 'Client ID', secret: true },
     { id: 'clientSecret', label: 'Client Secret', secret: true },
+  ] },
+  { id: 'grok', name: 'xAI · Grok', fields: [
+    { id: 'apiKey', label: 'API key', secret: true },
+  ] },
+  { id: 'github', name: 'GitHub', fields: [
+    { id: 'token', label: 'Personal access token', secret: true },
+  ] },
+  { id: 'facebook', name: 'Facebook', fields: [
+    { id: 'appId', label: 'App ID', secret: true },
+    { id: 'appSecret', label: 'App Secret', secret: true },
+    { id: 'pageAccessToken', label: 'Page access token (optional)', secret: true },
+  ] },
+  { id: 'whatsapp', name: 'WhatsApp', tooltip: 'WhatsApp (Cloud API)', fields: [
+    { id: 'accessToken', label: 'Access token', secret: true },
+    { id: 'phoneNumberId', label: 'Phone number ID', secret: true },
+    { id: 'businessAccountId', label: 'Business account ID (optional)', secret: true },
+  ] },
+  { id: 'sms', name: 'SMS · Twilio', tooltip: 'SMS (Twilio)', fields: [
+    { id: 'accountSid', label: 'Account SID', secret: true },
+    { id: 'authToken', label: 'Auth token', secret: true },
+    { id: 'fromNumber', label: 'From number', secret: false },
   ] },
 ];
 

@@ -18,15 +18,24 @@ export interface ServiceKeysSectionProps {
   namespace: string;
   /** Scrolls to and highlights one card (from '/keychain#twitch'). */
   focusedService?: ServiceId | null;
+  /** Scrolls the whole section into view (from '/keychain#services', the QR row's "+N" button). */
+  focusSection?: boolean;
 }
 
 function notifyChanged(namespace: string) {
   try { window.dispatchEvent(new CustomEvent(SERVICE_KEYS_CHANGED_EVENT, { detail: { namespace } })); } catch { /* non-browser */ }
 }
 
-export default function ServiceKeysSection({ namespace, focusedService = null }: ServiceKeysSectionProps) {
+export default function ServiceKeysSection({ namespace, focusedService = null, focusSection = false }: ServiceKeysSectionProps) {
+  const sectionRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!focusSection) return;
+    // After layout: the keychain list above loads asynchronously and would push the section down.
+    const t = setTimeout(() => sectionRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }), 150);
+    return () => clearTimeout(t);
+  }, [focusSection]);
   return (
-    <Box id="services" data-gui-component="ServiceKeys" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+    <Box ref={sectionRef} id="services" data-gui-component="ServiceKeys" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
       <Box>
         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Service keys</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>

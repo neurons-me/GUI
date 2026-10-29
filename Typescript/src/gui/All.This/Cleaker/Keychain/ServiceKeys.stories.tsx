@@ -25,7 +25,7 @@ function Seeded({ saved, children }: { saved: ServiceId[]; children: () => React
     (async () => {
       for (const s of SERVICE_IDS) removeServiceKeys(NS, s);
       for (const s of saved) {
-        await saveServiceKeys(NS, s, s === 'meta' || s === 'openai' ? { apiKey: 'demo-not-a-real-key' } : s === 'google' ? { clientId: 'demo-id.apps.example', clientSecret: 'demo-secret' } : { clientId: 'demo-id', clientSecret: 'demo-secret', channel: 'demo' }, DEMO_PASS);
+        await saveServiceKeys(NS, s, s === 'meta' || s === 'openai' || s === 'grok' ? { apiKey: 'demo-not-a-real-key' } : s === 'github' ? { token: 'demo-token' } : s === 'facebook' ? { appId: 'demo-app', appSecret: 'demo-secret' } : s === 'whatsapp' ? { accessToken: 'demo-token', phoneNumberId: '000' } : s === 'sms' ? { accountSid: 'ACdemo', authToken: 'demo', fromNumber: '+10000000000' } : s === 'google' ? { clientId: 'demo-id.apps.example', clientSecret: 'demo-secret' } : { clientId: 'demo-id', clientSecret: 'demo-secret', channel: 'demo' }, DEMO_PASS);
       }
       if (live) setReady(true);
     })();
@@ -50,8 +50,23 @@ export const GoogleFocused = () => (
   <Seeded saved={['google']}>{() => <Box440><ServiceKeysSection namespace={NS} focusedService="google" /></Box440>}</Seeded>
 );
 
+export const ScrolledToSection = () => (
+  <Seeded saved={['github']}>
+    {() => (
+      <div style={{ height: 600, overflow: 'auto' }}>
+        <CleakerKeychain
+          handle="jabellae"
+          keys={[{ keyId: 'key-laptop', label: 'This laptop', admin: true, authorization: 'active', localAvailability: 'available-unlocked', addedAt: Date.now() - 864e5 }]}
+          serviceKeysNamespace={NS}
+          focusServiceKeys
+        />
+      </div>
+    )}
+  </Seeded>
+);
+
 export const InKeychainList = () => (
-  <Seeded saved={['twitch', 'meta', 'google', 'openai', 'linkedin']}>
+  <Seeded saved={['twitch', 'meta', 'google', 'openai', 'linkedin', 'grok', 'github', 'facebook', 'whatsapp', 'sms']}>
     {() => (
       <CleakerKeychain
         handle="jabellae"
@@ -76,7 +91,7 @@ export const QrIconRow = () => (
 export const QrIconRowAllVisible = () => (
   <Box440>
     <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
-      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'google', 'linkedin']} maxServiceIcons={99} onNavigate={() => {}} />
+      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'google', 'linkedin', 'grok', 'github', 'whatsapp']} maxServiceIcons={99} onNavigate={() => {}} />
     </div>
   </Box440>
 );
