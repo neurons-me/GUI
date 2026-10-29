@@ -226,6 +226,8 @@ export { GuiThemes } from '@/gui/Theme/utils/catalog';
 export { default as ThemeLauncher } from '@/gui/Theme/Launcher/ThemeLauncher';
 export { default as OverlaySwatch } from '@/gui/Theme/OverlaySwatch/OverlaySwatch';
 export type { OverlaySwatchProps, OverlaySwatchChange, OverlaySwatchPosition } from '@/gui/Theme/OverlaySwatch/OverlaySwatch.types';
+export { TwitchChat, StreamStage } from '@/gui/Twitch';
+export type { TwitchChatProps, TwitchChatMessage, StreamStageProps } from '@/gui/Twitch';
 export {
   default as GUITools,
   guiToolsElements,
