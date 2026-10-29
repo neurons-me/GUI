@@ -44,6 +44,9 @@ import { useMeLauncherView } from '@/react/session/MeLauncher';
 import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { hasIdentityVault } from '@/core/identity/localIdentityVault';
+import { listSavedServices, type ServiceId } from '@/gui/All.This/Cleaker/Keychain/serviceKeyVault';
+import IdentityIconRow from './IdentityIconRow';
+import { SERVICE_KEYS_CHANGED_EVENT } from '@/gui/All.This/Cleaker/Keychain/ServiceKeysSection';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -343,6 +346,15 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   if (!view) return null;
 
   const { authenticated, label, pending, error, onEnter, onLogout, credentialsForm, semanticNamespace } = view;
+  // Which third-party services have keys in this identity's keychain (presence only -- no secret is read).
+  const [savedServices, setSavedServices] = useState<ServiceId[]>([]);
+  useEffect(() => {
+    const read = () => setSavedServices(semanticNamespace ? listSavedServices(semanticNamespace) : []);
+    read();
+    window.addEventListener(SERVICE_KEYS_CHANGED_EVENT, read);
+    window.addEventListener('storage', read);
+    return () => { window.removeEventListener(SERVICE_KEYS_CHANGED_EVENT, read); window.removeEventListener('storage', read); };
+  }, [semanticNamespace]);
 
   // Me no longer remounts this tree when a session
   // completes (see its own doc comment), so `mode`/`registrationComplete`
@@ -652,30 +664,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               package with no link to `.me` -- so it opens nothing rather than a page that does not exist. */}
           {/* mt: the container's own gap puts 20px under the QR; the icons sit closer to it than that so the
               air above them matches the air below (icons to fingerprint). */}
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mt: -1.25, mb: 0.5 }}>
-            <Box
-              component="button"
-              type="button"
-              aria-label="Keychain"
-              title="Keychain"
-              onClick={() => navigate('/keychain')}
-              data-gui-node-id={`${nodeId}.keys`}
-              sx={{ display: 'flex', p: 0.75, border: '1px solid', borderColor: 'divider', borderRadius: 1, background: 'transparent', color: 'inherit', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-            >
-              <Icon name="key" fontSize="1.25rem" />
-            </Box>
-            <Box
-              component="button"
-              type="button"
-              disabled
-              aria-label="Wallet (not available yet)"
-              title="Wallet — not available yet"
-              data-gui-node-id={`${nodeId}.wallet`}
-              sx={{ display: 'flex', p: 0.75, border: '1px solid', borderColor: 'divider', borderRadius: 1, background: 'transparent', color: 'text.disabled', cursor: 'not-allowed', opacity: 0.6 }}
-            >
-              <Icon name="account_balance_wallet" fontSize="1.25rem" />
-            </Box>
-          </Box>
+          <IdentityIconRow nodeId={nodeId} savedServices={savedServices} onNavigate={navigate} />
           <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
             {label}
           </Typography>

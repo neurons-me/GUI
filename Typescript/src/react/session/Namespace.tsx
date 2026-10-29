@@ -47,6 +47,7 @@ import { targetKey } from '@/react/link';
 import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
 import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
 import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
+import { isServiceId } from '@/gui/All.This/Cleaker/Keychain/serviceKeyVault';
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
@@ -538,6 +539,9 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
   const [view, setView] = useState<KeychainScreen>('list');
   const [focusedKeyId, setFocusedKeyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // '/keychain#twitch' (from QRConnect's service icons) focuses that service's card.
+  const hashService = useLocation().hash.replace(/^#/, '').toLowerCase();
+  const focusedService = isServiceId(hashService) ? hashService : null;
 
   const identityHash = ctx?.identityHash ?? null;
   const semanticNamespace = ctx?.semanticNamespace ?? null;
@@ -598,6 +602,8 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
           pendingLocalRegistrations={pendingLocalRegistrations}
           view={view}
           focusedKeyId={focusedKeyId}
+          serviceKeysNamespace={semanticNamespace}
+          focusedService={focusedService}
           onNavigate={(next, targetId) => {
             setView(next);
             if (targetId !== undefined) setFocusedKeyId(targetId ?? null);

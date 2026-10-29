@@ -43,6 +43,8 @@
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import type { KeyLocalAvailability, KeychainKey, KeychainView } from './keychainState';
+import ServiceKeysSection from './ServiceKeysSection';
+import type { ServiceId } from './serviceKeyVault';
 
 export interface PendingLocalRegistration {
   publicKeyRaw: string;
@@ -73,6 +75,10 @@ export interface CleakerKeychainProps {
   onRetryRegistration?: (publicKeyRaw: string) => void;
   onConfirmRevoke?: (keyId: string) => void;
   onRecoverKeychain?: (label: string, passphrase: string) => void;
+  /** When set, the list view also shows "Service keys" (third-party API keys) stored under this namespace. */
+  serviceKeysNamespace?: string | null;
+  /** Highlights one service card, e.g. from '/keychain#twitch'. */
+  focusedService?: ServiceId | null;
   sx?: any;
 }
 
@@ -224,6 +230,8 @@ export default function CleakerKeychain({
   onRetryRegistration = () => {},
   onConfirmRevoke = () => {},
   onRecoverKeychain = () => {},
+  serviceKeysNamespace = null,
+  focusedService = null,
   sx,
 }: CleakerKeychainProps) {
   // Necessary, not sufficient by itself: the server independently
@@ -275,6 +283,10 @@ export default function CleakerKeychain({
       )}
 
       {view === 'no-local-key' && <NoLocalKeyView onNavigate={onNavigate} />}
+
+      {view === 'list' && serviceKeysNamespace && (
+        <ServiceKeysSection namespace={serviceKeysNamespace} focusedService={focusedService} />
+      )}
     </Box>
   );
 }

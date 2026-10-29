@@ -1,0 +1,80 @@
+// Service keys (Twitch / PayPal / Meta): encrypted per namespace, never plaintext at rest, status without the passphrase.
+import assert from 'node:assert/strict';
+import { vaultStore } from './port-namespace/shim';
+import {
+  saveServiceKeys, getServiceKeys, hasServiceKeys, removeServiceKeys, listSavedServices,
+  getUnlockedServiceKeys, lockServiceKeys, maskSecret,
+} from '../src/gui/All.This/Cleaker/Keychain/serviceKeyVault';
+
+const PW = 'a-long-secret-1';
+const NS = 'ana.name.space';
+const SECRET = 'sk_live_SUPERSECRET_9f1a2b';
+let n = 0;
+async function test(name: string, fn: () => Promise<void> | void) {
+  vaultStore.clear(); lockServiceKeys();
+  try { await fn(); console.log(`PASS ${name}`); n += 1; } catch (e: any) { console.log(`FAIL ${name}\n       ${String(e.message).split('\n')[0]}`); process.exitCode = 1; }
+}
+
+await test('S1 not set by default', () => {
+  assert.equal(hasServiceKeys(NS, 'twitch'), false);
+  assert.deepEqual(listSavedServices(NS), []);
+});
+
+await test('S2 save -> has -> get round-trips', async () => {
+  await saveServiceKeys(NS, 'twitch', { clientId: 'cid123', clientSecret: SECRET, channel: 'suign' }, PW);
+  assert.equal(hasServiceKeys(NS, 'twitch'), true);
+  assert.equal(hasServiceKeys(NS, 'paypal'), false);
+  lockServiceKeys();
+  assert.equal(getUnlockedServiceKeys(NS, 'twitch'), null);
+  assert.deepEqual(await getServiceKeys(NS, 'twitch', PW), { clientId: 'cid123', clientSecret: SECRET, channel: 'suign' });
+  assert.deepEqual(listSavedServices(NS), ['twitch']);
+});
+
+await test('S3 nothing in storage contains the secret in plaintext', async () => {
+  await saveServiceKeys(NS, 'meta', { apiKey: SECRET }, PW);
+  const all = JSON.stringify([...vaultStore.entries()]);
+  assert.ok(!all.includes(SECRET));
+  assert.ok(!all.includes('SUPERSECRET'));
+});
+
+await test('S4 wrong passphrase throws WRONG_PASSPHRASE', async () => {
+  await saveServiceKeys(NS, 'paypal', { clientId: 'a', clientSecret: 'b' }, PW);
+  await assert.rejects(getServiceKeys(NS, 'paypal', 'nope-wrong-pw'), /WRONG_PASSPHRASE/);
+});
+
+await test('S5 per namespace: another namespace sees nothing', async () => {
+  await saveServiceKeys(NS, 'meta', { apiKey: SECRET }, PW);
+  assert.equal(hasServiceKeys('bob.name.space', 'meta'), false);
+  assert.equal(await getServiceKeys('bob.name.space', 'meta', PW), null);
+  assert.equal(hasServiceKeys('ANA.name.space', 'meta'), true, 'namespace is case-insensitive');
+});
+
+await test('S6 remove clears storage and memory', async () => {
+  await saveServiceKeys(NS, 'meta', { apiKey: SECRET }, PW);
+  removeServiceKeys(NS, 'meta');
+  assert.equal(hasServiceKeys(NS, 'meta'), false);
+  assert.equal(getUnlockedServiceKeys(NS, 'meta'), null);
+  assert.equal(vaultStore.size, 0);
+});
+
+await test('S7 rejects empty fields, unknown services, unknown field names are dropped', async () => {
+  await assert.rejects(saveServiceKeys(NS, 'meta', { apiKey: '  ' }, PW), /NO_FIELDS/);
+  await assert.rejects(saveServiceKeys(NS, 'nope' as any, { apiKey: 'x' }, PW), /Unknown service/);
+  await saveServiceKeys(NS, 'meta', { apiKey: 'k', extra: 'zzz' }, PW);
+  assert.deepEqual(await getServiceKeys(NS, 'meta', PW), { apiKey: 'k' });
+});
+
+await test('S8 swapping payloads between services fails (AAD binds namespace+service)', async () => {
+  await saveServiceKeys(NS, 'meta', { apiKey: SECRET }, PW);
+  await saveServiceKeys(NS, 'paypal', { clientId: 'a', clientSecret: 'b' }, PW);
+  const meta = vaultStore.get(`this.me.service-keys:v1:${NS}:meta`)!;
+  vaultStore.set(`this.me.service-keys:v1:${NS}:paypal`, meta);
+  await assert.rejects(getServiceKeys(NS, 'paypal', PW), /CORRUPTED/);
+});
+
+await test('S9 mask shows at most last 4', () => {
+  assert.equal(maskSecret('abcdef1a2b'), '••••1a2b');
+  assert.equal(maskSecret('abc'), '••••');
+});
+
+console.log(`${n} passed`);
