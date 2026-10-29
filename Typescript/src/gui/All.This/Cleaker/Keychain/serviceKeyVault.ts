@@ -18,10 +18,10 @@ import {
   clearLocalIdentityVault,
 } from '@/core/identity/localIdentityVault';
 
-export type ServiceId = 'twitch' | 'paypal' | 'meta';
+export type ServiceId = 'twitch' | 'paypal' | 'meta' | 'google' | 'openai' | 'linkedin';
 
 export interface ServiceFieldDef { id: string; label: string; secret: boolean }
-export interface ServiceDef { id: ServiceId; name: string; fields: ServiceFieldDef[] }
+export interface ServiceDef { id: ServiceId; name: string; fields: ServiceFieldDef[]; /** Icon tooltip; defaults to name. */ tooltip?: string }
 
 export const SERVICE_DEFINITIONS: readonly ServiceDef[] = [
   { id: 'twitch', name: 'Twitch', fields: [
@@ -35,6 +35,19 @@ export const SERVICE_DEFINITIONS: readonly ServiceDef[] = [
   ] },
   { id: 'meta', name: 'Meta', fields: [
     { id: 'apiKey', label: 'API key', secret: true },
+  ] },
+  { id: 'google', name: 'Google Workspace', fields: [
+    { id: 'clientId', label: 'OAuth Client ID', secret: true },
+    { id: 'clientSecret', label: 'OAuth Client Secret', secret: true },
+    { id: 'apiKey', label: 'API key (optional)', secret: true },
+  ] },
+  // One key covers ChatGPT API use and Codex (Codex uses the OpenAI key).
+  { id: 'openai', name: 'OpenAI · ChatGPT / Codex', tooltip: 'OpenAI (ChatGPT, Codex)', fields: [
+    { id: 'apiKey', label: 'API key', secret: true },
+  ] },
+  { id: 'linkedin', name: 'LinkedIn', fields: [
+    { id: 'clientId', label: 'Client ID', secret: true },
+    { id: 'clientSecret', label: 'Client Secret', secret: true },
   ] },
 ];
 

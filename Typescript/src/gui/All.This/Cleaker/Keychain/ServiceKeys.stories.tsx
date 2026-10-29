@@ -25,7 +25,7 @@ function Seeded({ saved, children }: { saved: ServiceId[]; children: () => React
     (async () => {
       for (const s of SERVICE_IDS) removeServiceKeys(NS, s);
       for (const s of saved) {
-        await saveServiceKeys(NS, s, s === 'meta' ? { apiKey: 'demo-not-a-real-key' } : { clientId: 'demo-id', clientSecret: 'demo-secret', channel: 'demo' }, DEMO_PASS);
+        await saveServiceKeys(NS, s, s === 'meta' || s === 'openai' ? { apiKey: 'demo-not-a-real-key' } : s === 'google' ? { clientId: 'demo-id.apps.example', clientSecret: 'demo-secret' } : { clientId: 'demo-id', clientSecret: 'demo-secret', channel: 'demo' }, DEMO_PASS);
       }
       if (live) setReady(true);
     })();
@@ -46,8 +46,12 @@ export const FocusedFromQrIcon = () => (
   <Seeded saved={['paypal']}>{() => <Box440><ServiceKeysSection namespace={NS} focusedService="paypal" /></Box440>}</Seeded>
 );
 
+export const GoogleFocused = () => (
+  <Seeded saved={['google']}>{() => <Box440><ServiceKeysSection namespace={NS} focusedService="google" /></Box440>}</Seeded>
+);
+
 export const InKeychainList = () => (
-  <Seeded saved={['twitch', 'meta']}>
+  <Seeded saved={['twitch', 'meta', 'google', 'openai', 'linkedin']}>
     {() => (
       <CleakerKeychain
         handle="jabellae"
@@ -63,7 +67,16 @@ export const QrIconRow = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center', paddingTop: 16 }}>
       <IdentityIconRow nodeId="story.qr" savedServices={[]} onNavigate={() => {}} />
       <IdentityIconRow nodeId="story.qr" savedServices={['twitch']} onNavigate={() => {}} />
-      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'paypal', 'meta']} onNavigate={() => {}} />
+      <IdentityIconRow nodeId="story.qr" savedServices={['openai', 'linkedin']} onNavigate={() => {}} />
+      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'paypal', 'meta', 'google', 'openai', 'linkedin']} onNavigate={() => {}} />
+    </div>
+  </Box440>
+);
+
+export const QrIconRowAllVisible = () => (
+  <Box440>
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
+      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'google', 'linkedin']} maxServiceIcons={99} onNavigate={() => {}} />
     </div>
   </Box440>
 );

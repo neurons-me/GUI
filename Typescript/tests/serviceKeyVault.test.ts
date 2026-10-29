@@ -77,4 +77,38 @@ await test('S9 mask shows at most last 4', () => {
   assert.equal(maskSecret('abc'), '••••');
 });
 
+await test('S10 Google Workspace: API key optional, all four services listed', async () => {
+  await saveServiceKeys(NS, 'google', { clientId: 'cid.apps', clientSecret: SECRET, apiKey: '' }, PW);
+  assert.equal(hasServiceKeys(NS, 'google'), true);
+  lockServiceKeys();
+  assert.deepEqual(await getServiceKeys(NS, 'google', PW), { clientId: 'cid.apps', clientSecret: SECRET });
+  assert.ok(!JSON.stringify([...vaultStore.entries()]).includes(SECRET));
+  await saveServiceKeys(NS, 'twitch', { clientId: 'a' }, PW);
+  await saveServiceKeys(NS, 'paypal', { clientId: 'a' }, PW);
+  await saveServiceKeys(NS, 'meta', { apiKey: 'a' }, PW);
+  assert.deepEqual(listSavedServices(NS), ['twitch', 'paypal', 'meta', 'google']);
+});
+
+await test('S11 OpenAI (ChatGPT / Codex): single API key, labelled and listed', async () => {
+  const { SERVICE_DEFINITIONS } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
+  const def = SERVICE_DEFINITIONS.find((d) => d.id === 'openai')!;
+  assert.equal(def.name, 'OpenAI · ChatGPT / Codex');
+  assert.equal(def.tooltip, 'OpenAI (ChatGPT, Codex)');
+  assert.deepEqual(def.fields.map((f) => f.id), ['apiKey']);
+  await saveServiceKeys(NS, 'openai', { apiKey: SECRET }, PW);
+  lockServiceKeys();
+  assert.deepEqual(await getServiceKeys(NS, 'openai', PW), { apiKey: SECRET });
+  assert.ok(!JSON.stringify([...vaultStore.entries()]).includes(SECRET));
+  assert.deepEqual(listSavedServices(NS), ['openai']);
+});
+
+await test('S12 LinkedIn: client id + secret round-trip, six services defined', async () => {
+  const { SERVICE_IDS } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
+  assert.deepEqual([...SERVICE_IDS], ['twitch', 'paypal', 'meta', 'google', 'openai', 'linkedin']);
+  await saveServiceKeys(NS, 'linkedin', { clientId: 'li-id', clientSecret: SECRET }, PW);
+  lockServiceKeys();
+  assert.deepEqual(await getServiceKeys(NS, 'linkedin', PW), { clientId: 'li-id', clientSecret: SECRET });
+  assert.ok(!JSON.stringify([...vaultStore.entries()]).includes(SECRET));
+});
+
 console.log(`${n} passed`);

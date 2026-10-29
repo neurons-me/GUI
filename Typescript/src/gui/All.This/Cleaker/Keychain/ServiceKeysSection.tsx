@@ -26,7 +26,7 @@ function notifyChanged(namespace: string) {
 
 export default function ServiceKeysSection({ namespace, focusedService = null }: ServiceKeysSectionProps) {
   return (
-    <Box data-gui-component="ServiceKeys" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+    <Box id="services" data-gui-component="ServiceKeys" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
       <Box>
         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Service keys</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
