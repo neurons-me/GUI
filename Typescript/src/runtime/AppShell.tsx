@@ -8,6 +8,7 @@ import Box from '@/gui/Atoms/Box/Box';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
+import { useLeftSidebar } from '@/gui-internals/Hooks';
 import type { MeLike } from '@/react/types';
 import { SelectionProvider } from './selection';
 import { LauncherPopoverProvider } from './launcherPopover';
@@ -44,8 +45,9 @@ export interface AppShellProps {
   /** Extra LeftBar footer actions rendered after Theme/DevTools defaults. */
   footerElements?: React.ReactNode[];
   /**
-   * Where you are, written once at the top-left of every view (e.g. `my-app.local @ localhost:5173`). Opt-in: with
-   * no `position` the shell draws no top bar, as before.
+   * Where you are, written once at the top-left of every view (e.g. `my-app.local @ localhost:5173`): in the top bar
+   * while the left bar is closed, in the left bar's header (beside the brand) while it is open, so opening the bar moves
+   * it instead of pushing it. Opt-in: with no `position` the shell draws no top bar, as before.
    */
   position?: string;
   /** The app's mark leading the LeftBar header (a logo, an initial). Opt-in; the bar's own arrow still expands it. */
@@ -90,6 +92,16 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
+/**
+ * Shows its children unless the left bar is expanded. The position is written once: in the bar's header when the bar is
+ * open, in the top bar otherwise (the bar's `view` is only known inside the Layout, hence a component). Same rule as
+ * Namespace's.
+ */
+function UnlessLeftBarExpanded({ children }: { children: React.ReactNode }) {
+  const { view } = useLeftSidebar();
+  return view === 'expanded' ? null : <>{children}</>;
+}
+
 function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
@@ -115,23 +127,25 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
           type: 'action' as const,
           props: {
             element: (
-              <Box
-                data-gui-node-id="GUI.window.layout.bars.top.namespace"
-                title={position}
-                sx={{
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontFamily: 'monospace',
-                  fontSize: '0.82rem',
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  color: 'text.primary',
-                }}
-              >
-                {position}
-              </Box>
+              <UnlessLeftBarExpanded>
+                <Box
+                  data-gui-node-id="GUI.window.layout.bars.top.namespace"
+                  title={position}
+                  sx={{
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    color: 'text.primary',
+                  }}
+                >
+                  {position}
+                </Box>
+              </UnlessLeftBarExpanded>
             ),
           },
         }],
@@ -139,6 +153,29 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
       LeftBar={{
         initialView: 'expanded',
         brand,
+        // Shown while the bar is open: where you are, written out (the top bar shows it only while the bar is closed).
+        header: position ? (
+          <Box
+            data-gui-node-id="GUI.window.layout.bars.left.position"
+            title={position}
+            sx={{
+              display: 'block',
+              minWidth: 0,
+              // Pulled in over the brand cell's empty right margin so it hangs close to the mark.
+              ml: '-10px',
+              position: 'relative',
+              zIndex: 1,
+              fontFamily: 'monospace',
+              fontSize: '0.74rem',
+              fontWeight: 600,
+              lineHeight: 1.25,
+              color: 'text.primary',
+              wordBreak: 'break-word',
+            }}
+          >
+            {position}
+          </Box>
+        ) : undefined,
         elements,
         footerElements: [
           // tooltip: false — each of these already opens its own hover
