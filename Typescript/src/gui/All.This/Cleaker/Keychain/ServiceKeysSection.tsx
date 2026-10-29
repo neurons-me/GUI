@@ -112,12 +112,15 @@ function ServiceCard({ namespace, def, focused }: { namespace: string; def: Serv
         </Typography>
       </Box>
 
-      {def.fields.map((f) => (
+      {def.fields.map((f, i) => (
         <Box key={f.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          {f.group && f.group !== def.fields[i - 1]?.group && (
+            <Typography variant="caption" data-field-group={f.group} sx={{ fontWeight: 700, mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>{f.group}</Typography>
+          )}
           <Typography component="label" htmlFor={`${uid}-${f.id}`} variant="caption" sx={{ color: 'text.secondary' }}>{f.label}</Typography>
           <Box
             component="input" id={`${uid}-${f.id}`} type={f.secret ? 'password' : 'text'} autoComplete="off" spellCheck={false}
-            placeholder={saved ? 'Saved — type to replace' : ''}
+            placeholder={saved ? 'Saved — type to replace' : (f.defaultValue ?? '')}
             value={values[f.id] ?? ''}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
             sx={inputSx}

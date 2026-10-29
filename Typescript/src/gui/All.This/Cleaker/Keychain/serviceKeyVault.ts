@@ -20,7 +20,16 @@ import {
 
 export type ServiceId = 'twitch' | 'paypal' | 'meta' | 'google' | 'openai' | 'linkedin' | 'grok' | 'github' | 'facebook' | 'whatsapp' | 'sms';
 
-export interface ServiceFieldDef { id: string; label: string; secret: boolean }
+export interface ServiceFieldDef {
+  id: string; label: string; secret: boolean;
+  /** Optional subsection heading (fields sharing a group render together). */
+  group?: string;
+  /** Default used when the field is left empty (shown as placeholder, never stored implicitly). */
+  defaultValue?: string;
+}
+
+/** Defaults for the optional OBS WebSocket subsection of the Twitch card. */
+export const OBS_DEFAULTS = { host: 'localhost', port: '4455' } as const;
 export interface ServiceDef { id: ServiceId; name: string; fields: ServiceFieldDef[]; /** Icon tooltip; defaults to name. */ tooltip?: string }
 
 export const SERVICE_DEFINITIONS: readonly ServiceDef[] = [
@@ -28,6 +37,9 @@ export const SERVICE_DEFINITIONS: readonly ServiceDef[] = [
     { id: 'clientId', label: 'Client ID', secret: true },
     { id: 'clientSecret', label: 'Client Secret', secret: true },
     { id: 'channel', label: 'Channel', secret: false },
+    { id: 'obsHost', label: 'Host', secret: false, group: 'OBS WebSocket (optional)', defaultValue: OBS_DEFAULTS.host },
+    { id: 'obsPort', label: 'Port', secret: false, group: 'OBS WebSocket (optional)', defaultValue: OBS_DEFAULTS.port },
+    { id: 'obsPassword', label: 'Password', secret: true, group: 'OBS WebSocket (optional)' },
   ] },
   { id: 'paypal', name: 'PayPal Sandbox', fields: [
     { id: 'clientId', label: 'Client ID', secret: true },
@@ -211,4 +223,18 @@ export function lockServiceKeys(namespace?: string): void {
 export function maskSecret(value: string): string {
   const v = String(value || '');
   return v.length <= 4 ? '••••' : `••••${v.slice(-4)}`;
+}
+
+/**
+ * OBS WebSocket connection settings from decrypted Twitch fields, applying
+ * host/port defaults. Returns null when no OBS field was saved.
+ */
+export function obsConnectionFromTwitch(fields: ServiceFields | null | undefined): { host: string; port: number; password?: string } | null {
+  if (!fields || !(fields.obsHost || fields.obsPort || fields.obsPassword)) return null;
+  const port = Number.parseInt(fields.obsPort || OBS_DEFAULTS.port, 10);
+  return {
+    host: fields.obsHost || OBS_DEFAULTS.host,
+    port: Number.isFinite(port) ? port : Number(OBS_DEFAULTS.port),
+    ...(fields.obsPassword ? { password: fields.obsPassword } : {}),
+  };
 }

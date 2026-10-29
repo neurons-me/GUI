@@ -42,6 +42,11 @@ export const TwitchSaved = () => (
   <Seeded saved={['twitch']}>{() => <Box440><ServiceKeysSection namespace={NS} /></Box440>}</Seeded>
 );
 
+/** Twitch card with the optional OBS WebSocket subsection focused (#twitch). */
+export const TwitchObsWebSocket = () => (
+  <Seeded saved={[]}>{() => <Box440><ServiceKeysSection namespace={NS} focusedService="twitch" /></Box440>}</Seeded>
+);
+
 export const FocusedFromQrIcon = () => (
   <Seeded saved={['paypal']}>{() => <Box440><ServiceKeysSection namespace={NS} focusedService="paypal" /></Box440>}</Seeded>
 );

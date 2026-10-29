@@ -144,4 +144,37 @@ await test('S14 WhatsApp Cloud API (business id optional) and SMS · Twilio roun
   assert.deepEqual(listSavedServices(NS), ['whatsapp', 'sms']);
 });
 
+await test('S15 Twitch with/without optional OBS WebSocket; OBS password never plaintext', async () => {
+  const { SERVICE_DEFINITIONS, SERVICE_IDS, OBS_DEFAULTS, obsConnectionFromTwitch } = await import('../src/gui/All.This/Cleaker/Keychain/serviceKeyVault');
+  const tw = SERVICE_DEFINITIONS.find((d) => d.id === 'twitch')!;
+  const obs = tw.fields.filter((f) => f.group);
+  assert.deepEqual(obs.map((f) => [f.id, f.secret, f.defaultValue]), [['obsHost', false, 'localhost'], ['obsPort', false, '4455'], ['obsPassword', true, undefined]]);
+  assert.deepEqual(OBS_DEFAULTS, { host: 'localhost', port: '4455' });
+  for (const s of SERVICE_IDS) removeServiceKeys(NS, s);
+  // Without OBS fields.
+  await saveServiceKeys(NS, 'twitch', { clientId: 'cid', clientSecret: SECRET }, PW);
+  lockServiceKeys();
+  const plain = await getServiceKeys(NS, 'twitch', PW);
+  assert.deepEqual(plain, { clientId: 'cid', clientSecret: SECRET });
+  assert.equal(obsConnectionFromTwitch(plain), null);
+  // With OBS password only: host/port defaults apply.
+  const OBS_PW = 'OBSPASSWORD_x7q9';
+  await saveServiceKeys(NS, 'twitch', { clientId: 'cid', clientSecret: SECRET, obsPassword: OBS_PW }, PW);
+  lockServiceKeys();
+  const withObs = await getServiceKeys(NS, 'twitch', PW);
+  assert.equal(withObs!.obsPassword, OBS_PW);
+  assert.deepEqual(obsConnectionFromTwitch(withObs), { host: 'localhost', port: 4455, password: OBS_PW });
+  const dump = JSON.stringify([...vaultStore.entries()]) + JSON.stringify({ ...(globalThis as any).localStorage });
+  for (let i = 0; i < (globalThis as any).localStorage.length; i++) {
+    const k = (globalThis as any).localStorage.key(i);
+    assert.ok(!String((globalThis as any).localStorage.getItem(k)).includes(OBS_PW), 'OBS password in localStorage');
+  }
+  assert.ok(!dump.includes(OBS_PW) && !dump.includes('SUPERSECRET'));
+  // Full OBS round-trip.
+  await saveServiceKeys(NS, 'twitch', { clientId: 'cid', obsHost: '192.168.1.5', obsPort: '4460', obsPassword: OBS_PW }, PW);
+  lockServiceKeys();
+  assert.deepEqual(obsConnectionFromTwitch(await getServiceKeys(NS, 'twitch', PW)), { host: '192.168.1.5', port: 4460, password: OBS_PW });
+  await assert.rejects(getServiceKeys(NS, 'twitch', 'wrong-pass'));
+});
+
 console.log(`${n} passed`);
