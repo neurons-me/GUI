@@ -180,6 +180,8 @@ export type { RubiksCubeProps } from '@/gui/widgets/RubiksCube/RubiksCube.types'
 export { default as Monad } from '@/gui/All.This/monad.ai/monad.ai';
 export type { MonadProps } from '@/gui/All.This/monad.ai/monad.ai';
 export { default as QRme } from '@/gui/All.This/me/QR/QR.me';
+export { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
+export { linkQrValue, namespaceOfQrValue } from '@/react/linkQr';
 export type { QRmeProps } from '@/gui/All.This/me/QR/QR.me';
 export { default as MonadMesh } from '@/gui/All.This/monad.ai/Surface/MonadMesh';
 export type {
