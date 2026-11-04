@@ -9,7 +9,7 @@ assert.deepEqual(toks.map((t) => [t.text, t.k]), [['pan', 'menu.pan'], ['25', 'm
 assert.equal(linkPhrase('panadería', es).filter((t) => t.k).length, 0);
 assert.deepEqual(linkPhrase('[bread|menu.pan.precio] x', es)[0], { text: 'bread', k: 'menu.pan.precio' });
 const def = opTokens({ op: 'define', path: 'menu', name: 'total', expr: 'cafe.precio + pan.precio' }, es).filter((t) => t.k).map((t) => t.k);
-assert.deepEqual(def, ['menu', 'menu.total', 'menu.cafe.precio', 'menu.pan.precio']);
+assert.deepEqual(def, ['menu', 'menu.total', 'menu.cafe.precio', 'menu.pan.precio', 'menu.total']);
 assert.equal(relOf(es, 'menu.pan.precio', ['menu.total']), 1);
 assert.equal(relOf(es, 'menu.cafe', ['menu.cafe.precio']), 1);
 assert.equal(relOf(es, 'menu.total', ['menu.total']), 2);

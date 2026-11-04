@@ -11,7 +11,7 @@ export const MENU_EN: LLMSProps = {
   graph: {
     nodes: [
       { path: 'menu.coffee.price', value: 45 },
-      { path: 'menu.bread.price', value: 25 },
+      { path: 'menu.bread.price', value: 25, before: 20 },
       { path: 'menu.total', value: 70, derived: true },
     ],
     edges: [{ from: 'menu.coffee.price', to: 'menu.total' }, { from: 'menu.bread.price', to: 'menu.total' }],
@@ -38,7 +38,7 @@ export const MENU_ES: LLMSProps = {
   graph: {
     nodes: [
       { path: 'menu.cafe.precio', value: 45 },
-      { path: 'menu.pan.precio', value: 25 },
+      { path: 'menu.pan.precio', value: 25, before: 20 },
       { path: 'menu.total', value: 70, derived: true },
     ],
     edges: [{ from: 'menu.cafe.precio', to: 'menu.total' }, { from: 'menu.pan.precio', to: 'menu.total' }],

@@ -21,10 +21,17 @@ const meta: Meta<typeof LLMS> = {
   parameters: { layout: 'fullscreen', docs: { description: { component:
     'How a sentence becomes .me: the phrase, the ops as .me code, the state graph and me.explain(), sharing one active path. ' +
     'Hover (or tap) a word, a code token, a graph node or an explain row; everything that names the same path lights up. ' +
-    'Graph: wheel / pinch to zoom, drag to pan, ⟲ resets, ⤢ expands.' } } },
+    'Changes show inline in the code (faint old value →) and derived results at the end of their ["="] line. ' +
+    'graphMode="static" + explainOnSelect: the per-message snapshot (no zoom; explain() opens on tap). ' +
+    'Interactive graph: wheel / pinch to zoom, drag to pan, ⟲ resets, ⤢ expands.' } } },
 };
 export default meta;
 type S = StoryObj<typeof LLMS>;
+
+const MSG = { graphMode: 'static' as const, explainOnSelect: true, graphHeight: 150 };
+/** how a chat message shows it: static snapshot of the touched nodes; explain() appears when a node / token is tapped */
+export const Message: S = { name: 'Message (static snapshot)', render: () => <Frame mode="dark" title="tap a node or token to open explain()"><LLMS {...MENU_ES} {...MSG} /></Frame> };
+export const MessageMobile: S = { name: 'Message · mobile', render: () => <Frame mode="dark" width={360}><LLMS {...MENU_EN} {...MSG} /></Frame> };
 
 export const MenuDark: S = { name: 'Menu (e24) · dark', render: () => <Frame mode="dark" title="menu · bread 20 → 25"><LLMS {...MENU_EN} expandedGraph={MENU_FULL} /></Frame> };
 export const MenuLight: S = { name: 'Menu (e24) · light', render: () => <Frame mode="light"><LLMS {...MENU_EN} expandedGraph={MENU_FULL} /></Frame> };

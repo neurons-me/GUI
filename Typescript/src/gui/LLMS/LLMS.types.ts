@@ -23,6 +23,8 @@ export interface LLMSNode {
   derived?: boolean;
   /** secret / noise: the value is shown as ●●● */
   masked?: boolean;
+  /** the value before this change: Syntax shows it faint, as `before →` ahead of the new value */
+  before?: unknown;
 }
 
 /** A dependency edge: `from` is an input of the derived path `to`. */
@@ -88,8 +90,14 @@ export interface LLMSProps {
   onNodeClick?: (path: string, node?: LLMSNode) => void;
   /** which parts the default layout shows (default: all four) */
   parts?: LLMSPart[];
-  /** graph viewport height in px (default 180; expanded: 1.9x) */
+  /** graph viewport height in px (default 180; expanded: 1.9x). A static graph shrinks to fit its nodes. */
   graphHeight?: number;
+  /** 'interactive' (default): zoom / pan / pinch / reset / expand. 'static': a fixed snapshot fit to view (hover / tap linking still works). */
+  graphMode?: 'interactive' | 'static';
+  /** hide Explain until a path is pinned (tapped / clicked) */
+  explainOnSelect?: boolean;
+  /** controlled mode: the pinned path (used by explainOnSelect) */
+  pinnedPath?: string | null;
   /** 'theme' uses the MUI theme in context; 'css' reads the page's --mui-palette-* / --me-syn-* variables.
    *  Default: 'theme' inside a .GUI <Theme>, else 'css'. */
   colors?: 'theme' | 'css';

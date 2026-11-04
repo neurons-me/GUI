@@ -14,6 +14,7 @@ const DEFAULT_LABELS: Required<LLMSLabels> = {
 interface Ctx {
   m: Model; props: LLMSProps; active: string[]; labels: Required<LLMSLabels>;
   rel: (k?: string) => '' | 'on' | 'rel';
+  pinned: string | null;
   enter: (k: string, e: React.PointerEvent) => void; leave: (e: React.PointerEvent) => void; tap: (k: string) => void;
 }
 const LLMSContext = createContext<Ctx | null>(null);
@@ -42,9 +43,9 @@ const CSS = `
 .llms-w.on{background:color-mix(in srgb,var(--llms-acc) 24%,transparent);text-decoration-color:var(--llms-acc)}.llms-w.rel{background:color-mix(in srgb,var(--llms-acc) 10%,transparent)}
 .llms-syn{margin:0;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--llms-fg2) 9%,transparent);font:12.5px/1.65 ${MONO};white-space:pre-wrap;word-break:break-word;overflow-x:auto}
 .llms-t[data-llms-k]{cursor:pointer;border-radius:3px;transition:background .12s,box-shadow .12s}.llms-t.on{background:color-mix(in srgb,var(--llms-acc) 26%,transparent);box-shadow:0 0 0 1px var(--llms-acc)}.llms-t.rel{background:color-mix(in srgb,var(--llms-acc) 10%,transparent)}
-.llms-root{color:var(--llms-acc);font-weight:600}.llms-key{color:var(--llms-path)}.llms-op,.llms-def{color:var(--llms-der)}.llms-str{color:var(--llms-str)}.llms-num{color:var(--llms-num)}.llms-punc{color:var(--llms-fg2)}.llms-cm{color:var(--llms-fg2);font-style:italic}
+.llms-root{color:var(--llms-acc);font-weight:600}.llms-key{color:var(--llms-path)}.llms-op,.llms-def{color:var(--llms-der)}.llms-str{color:var(--llms-str)}.llms-num{color:var(--llms-num)}.llms-punc{color:var(--llms-fg2)}.llms-cm{color:var(--llms-fg2);font-style:italic}.llms-old{color:var(--llms-fg2);opacity:.55}.llms-res{color:var(--llms-der);font-weight:600}
 .llms-gw{border-radius:10px;border:1px solid var(--llms-grid);position:relative;overflow:hidden}
-.llms-gv{overflow:hidden;touch-action:none;cursor:grab;transition:height .2s}.llms-gv.drag{cursor:grabbing}
+.llms-gv{overflow:hidden;touch-action:none;cursor:grab;transition:height .2s}.llms-gv.drag{cursor:grabbing}.llms-gv.static{cursor:default;touch-action:manipulation}
 .llms-gv svg{display:block;width:100%;height:100%;user-select:none;-webkit-user-select:none}.llms-gv text{font-family:${MONO};font-size:10.5px;fill:var(--llms-fg)}
 .llms-gb{position:absolute;top:4px;right:4px;display:flex;gap:4px}
 .llms-gbt{font:13px/1 ${MONO};width:26px;height:26px;padding:0;border-radius:8px;border:1px solid var(--llms-grid);background:var(--llms-paper);color:var(--llms-fg2);cursor:pointer;display:grid;place-items:center}.llms-gbt:hover,.llms-gbt.on{color:var(--llms-acc);border-color:var(--llms-acc)}
@@ -99,7 +100,7 @@ function Graph({ height, className }: { height?: number; className?: string }) {
   const c = useLLMS(), { props } = c, [big, setBig] = useState(false);
   const model: LLMSGraphModel | undefined = big && props.expandedGraph ? props.expandedGraph : props.graph;
   const L = useMemo(() => layout(model?.nodes ?? []), [model]);
-  const h0 = height ?? props.graphHeight ?? 180, h = big ? Math.round(h0 * 1.9) : h0;
+  const stat = props.graphMode === 'static', g0 = height ?? props.graphHeight ?? 180, h0 = stat ? Math.min(g0, Math.round(L.H + 40)) : g0, h = big ? Math.round(h0 * 1.9) : h0;
   const box = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState<[number, number]>([320, h0]);
   useLayoutEffect(() => { const el = box.current; if (!el) return; const f = () => setSize([el.clientWidth || 320, el.clientHeight || h]); f();
@@ -107,7 +108,7 @@ function Graph({ height, className }: { height?: number; className?: string }) {
   // start zoomed out: fit with padding; when that leaves labels at full size, center the .me root instead
   const fit = useMemo<VB>(() => { const [cw, ch] = size, px = 18, py = 12, bx = 0, by = 0, bw = L.W, bh = L.H;
     const hx = Math.max(L.rx - bx, bx + bw - L.rx) + px, hy = Math.max(L.ry - by, by + bh - L.ry) + py, sc = Math.min(cw / (2 * hx), ch / (2 * hy));
-    return sc >= 1 ? [L.rx - hx, L.ry - hy, 2 * hx, 2 * hy] : [bx - px, by - py, bw + 2 * px, bh + 2 * py]; }, [L, size]);
+    return sc >= 1 && !stat ? [L.rx - hx, L.ry - hy, 2 * hx, 2 * hy] : [bx - px, by - py, bw + 2 * px, bh + 2 * py]; }, [L, size, stat]);
   const [vb, setVb] = useState<VB>(fit); const vbR = useRef(vb); vbR.current = vb;
   useEffect(() => { setVb(fit); }, [fit]);
   const zoom = useCallback((f: number, cx?: number, cy?: number) => { const s = svg.current; if (!s) return; const r = s.getBoundingClientRect(), v = vbR.current;
@@ -117,8 +118,8 @@ function Graph({ height, className }: { height?: number; className?: string }) {
     const w = Math.max(fit[2] / 8, Math.min(fit[2] * 4, v[2] * f)), k = w / v[2];
     setVb([px - (px - v[0]) * k, py - (py - v[1]) * k, w, v[3] * k]); }, [fit]);
   // wheel needs a non-passive listener
-  useEffect(() => { const el = box.current; if (!el) return; const w = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY); };
-    el.addEventListener('wheel', w, { passive: false }); return () => el.removeEventListener('wheel', w); }, [zoom]);
+  useEffect(() => { const el = box.current; if (!el || stat) return; const w = (e: WheelEvent) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY); };
+    el.addEventListener('wheel', w, { passive: false }); return () => el.removeEventListener('wheel', w); }, [zoom, stat]);
   const pts = useRef<Record<number, [number, number]>>({}), moved = useRef(0), dist = useRef(0), [drag, setDrag] = useState(false);
   const down = (e: React.PointerEvent) => { pts.current[e.pointerId] = [e.clientX, e.clientY]; moved.current = 0; dist.current = 0; };
   const move = (e: React.PointerEvent) => { const P = pts.current, prev = P[e.pointerId]; if (!prev) return; P[e.pointerId] = [e.clientX, e.clientY]; const ids = Object.keys(P);
@@ -138,7 +139,7 @@ function Graph({ height, className }: { height?: number; className?: string }) {
     return <path key={`d${i}`} d={`M${ax} ${Y(a)} C${cx} ${Y(a)} ${cx} ${Y(b)} ${bx} ${Y(b)}`} fill="none" stroke="var(--llms-der)" strokeDasharray="3 3" strokeWidth={1.2} opacity={0.8} />; });
   return (
     <div className={`llms-gw ${className ?? ''}`}>
-      <div ref={box} className={`llms-gv${drag ? ' drag' : ''}`} style={{ height: h }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div ref={box} className={`llms-gv${drag ? ' drag' : ''}${stat ? ' static' : ''}`} style={{ height: h }} {...(stat ? {} : { onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up })}>
         <svg ref={svg} viewBox={vb.map((n) => n.toFixed(1)).join(' ')} role="img" aria-label={c.labels.graph}>
           {L.rows.map((r) => { if (r.p === '' ) return null; const par = P.get(parentOf(r.p) ?? '') ?? P.get('')!;
             return <path key={`e${r.p}`} d={`M${X(par.d) + 5} ${Y(par)} C${X(r.d) - 22} ${Y(par)} ${X(r.d) - 22} ${Y(r)} ${X(r.d) - 4} ${Y(r)}`} fill="none" stroke="var(--llms-grid)" strokeWidth={1.3} />; })}
@@ -146,12 +147,12 @@ function Graph({ height, className }: { height?: number; className?: string }) {
           {L.rows.map((r) => <GNode key={`n${r.p}`} r={r} x={X(r.d)} y={Y(r)} der={derived(r)} ch={c.m.changed.has(r.p)} val={L.val(r)} onTap={() => tapNode(r)} />)}
         </svg>
       </div>
-      <div className="llms-gb">
+      {!stat && <div className="llms-gb">
         <button type="button" className="llms-gbt" title={c.labels.zoomIn} aria-label={c.labels.zoomIn} onClick={() => zoom(1 / 1.35)}>+</button>
         <button type="button" className="llms-gbt" title={c.labels.zoomOut} aria-label={c.labels.zoomOut} onClick={() => zoom(1.35)}>−</button>
         <button type="button" className="llms-gbt" title={c.labels.reset} aria-label={c.labels.reset} onClick={() => setVb(fit)}>⟲</button>
         <button type="button" className={`llms-gbt${big ? ' on' : ''}`} title={c.labels.expand} aria-label={c.labels.expand} aria-pressed={big} onClick={() => setBig(!big)}>⤢</button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -182,6 +183,7 @@ function Explain({ className }: { className?: string }) {
     }
     return { x: m.explainList[0] };
   }, [c.active, m]);
+  if (c.props.explainOnSelect && !c.pinned) return null;
   if (!pick.x && !pick.p) return null;
   if (!pick.x || !pick.x.expr) { const p = canon(pick.x?.path ?? pick.p!), n = m.nodes.get(p), v = pick.x ? pick.x.value : n?.value;
     return <div className={`llms-xp llms-fade ${className ?? ''}`} key={p}><pre><Linked k={p} cls="llms-xr"><span className="llms-xp-p">{p}</span> = <span className="llms-xp-v">{n?.masked ? '●●●' : J(v)}</span></Linked></pre></div>; }
@@ -222,7 +224,8 @@ function Provider(props: LLMSProps) {
   const rel = useCallback((k?: string) => { const r = relOf(m, k, active); return r === 2 ? 'on' : r === 1 ? 'rel' : ''; }, [m, active]) as Ctx['rel'];
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(props.labels ?? {}) }), [props.labels]);
   const vars = useVars(props.colors);
-  const ctx = useMemo<Ctx>(() => ({ m, props, active, labels, rel, enter, leave, tap }), [m, props, active, labels, rel, enter, leave, tap]);
+  const pinned = controlled ? props.pinnedPath ?? null : pin;
+  const ctx = useMemo<Ctx>(() => ({ m, props, active, pinned, labels, rel, enter, leave, tap }), [m, props, active, pinned, labels, rel, enter, leave, tap]);
   return (
     <LLMSContext.Provider value={ctx}>
       <div ref={rootEl} className={`llms ${props.className ?? ''}`} style={{ ...vars, ...props.style }}>

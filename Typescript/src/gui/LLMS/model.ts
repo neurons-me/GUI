@@ -109,7 +109,7 @@ export function linkPhrase(text: string, m: Model): PhraseToken[] {
   return out;
 }
 
-export type SynRole = 'root' | 'key' | 'op' | 'str' | 'num' | 'def' | 'punc' | 'cm' | 'id';
+export type SynRole = 'root' | 'key' | 'op' | 'str' | 'num' | 'def' | 'punc' | 'cm' | 'id' | 'old' | 'res';
 export interface SynToken { t: string; r: SynRole; k?: string }
 
 /** one .me code line per op, tokenized with the path each token stands for */
@@ -122,7 +122,9 @@ export function opTokens(o: LLMSOp, m: Model): SynToken[] {
   const op = (s: string) => T.push({ t: '[', r: 'punc' }, { t: JSON.stringify(s), r: 'op' }, { t: '](', r: 'punc' });
   const path = canon(o.path ?? '');
   switch (o.op) {
-    case 'set': P(path); T.push({ t: '(', r: 'punc' }); Q(o.value, path); T.push({ t: ')', r: 'punc' }); break;
+    case 'set': { P(path); T.push({ t: '(', r: 'punc' }); const n = m.nodes.get(path);
+      if (n && n.before !== undefined && J(n.before) !== J(o.value)) T.push({ t: `${J(n.before)} → `, r: 'old', k: path });
+      Q(o.value, path); T.push({ t: ')', r: 'punc' }); break; }
     case 'define': {
       const tgt = canon(`${path}.${o.name}`); P(path); op('='); Q(o.name, tgt); T.push({ t: ', ', r: 'punc' }, { t: '"', r: 'def' });
       const known = (q: string) => m.nodes.has(q) || Array.from(m.nodes.keys()).some((n) => under(n, q)) || (m.deps.get(tgt) ?? []).includes(q);
@@ -132,7 +134,8 @@ export function opTokens(o: LLMSOp, m: Model): SynToken[] {
         else if (/^[\p{L}_]/u.test(piece)) { const c = [canon(`${path}.${piece}`), canon(piece)].find(known); T.push({ t: piece, r: 'def', k: c }); }
         else T.push({ t: piece, r: 'def' });
       });
-      T.push({ t: '"', r: 'def' }, { t: ')', r: 'punc' }); break; }
+      T.push({ t: '"', r: 'def' }, { t: ')', r: 'punc' });
+      const tn = m.nodes.get(tgt); if (tn && tn.value !== undefined) T.push({ t: '  → ', r: 'punc' }, { t: tn.masked ? '●●●' : J(tn.value), r: 'res', k: tgt }); break; }
     case 'pointer': P(path); op('->'); Q(canon(o.target ?? ''), canon(o.target ?? '')); T.push({ t: ')', r: 'punc' }); break;
     case 'remove': P(path); op('-'); Q(String(o.key), canon(`${path}.${o.key}`)); T.push({ t: ')', r: 'punc' }); break;
     case 'secret': case 'noise': P(path); op(o.op === 'secret' ? '_' : '~'); T.push({ t: '/* your key */', r: 'cm' }, { t: ')', r: 'punc' }); break;
