@@ -1,0 +1,9 @@
+import{j as e}from"./iframe-9xs7r-yC.js";import{C as t}from"./CardHeader-DWSck0li.js";import{I as c}from"./Icon-Coo2vCLK.js";import{I as p}from"./IconButton-2EQKHUpt.js";import{A as l}from"./Avatar-CHOZ5ucK.js";import"./preload-helper-Dp1pzeXC.js";import"./useSlot-Pi2X4fgs.js";import"./resolveComponentProps-Cy9ikCBM.js";import"./useForkRef-CY5C0zUu.js";import"./ButtonBase-CmaSafY6.js";import"./TransitionGroupContext-Ddsw9Vt9.js";import"./CircularProgress-Cc9H9qAL.js";import"./createSvgIcon-ApOObPh6.js";const g={title:"Molecules/Cards/Card/CardHeader",component:t,tags:["autodocs"]},r={render:()=>e.jsx(t,{title:"Card Title",subheader:"September 20, 2025"}),name:"Basic Header"},a={render:()=>e.jsx(t,{avatar:e.jsx(l,{"aria-label":"recipe",children:"R"}),action:e.jsx(p,{"aria-label":"settings",children:e.jsx(c,{name:"more_vert"})}),title:"Shrimp and Chorizo Paella",subheader:"September 20, 2025"}),name:"Header with Avatar and Action"};var o,i,s;r.parameters={...r.parameters,docs:{...(o=r.parameters)==null?void 0:o.docs,source:{originalSource:`{
+  render: () => <CardHeader title="Card Title" subheader="September 20, 2025" />,
+  name: 'Basic Header'
+}`,...(s=(i=r.parameters)==null?void 0:i.docs)==null?void 0:s.source}}};var d,m,n;a.parameters={...a.parameters,docs:{...(d=a.parameters)==null?void 0:d.docs,source:{originalSource:`{
+  render: () => <CardHeader avatar={<Avatar aria-label="recipe">R</Avatar>} action={<IconButton aria-label="settings">
+          <Icon name="more_vert" />
+        </IconButton>} title="Shrimp and Chorizo Paella" subheader="September 20, 2025" />,
+  name: 'Header with Avatar and Action'
+}`,...(n=(m=a.parameters)==null?void 0:m.docs)==null?void 0:n.source}}};const _=["BasicHeader","WithAvatarAndAction"];export{r as BasicHeader,a as WithAvatarAndAction,_ as __namedExportsOrder,g as default};

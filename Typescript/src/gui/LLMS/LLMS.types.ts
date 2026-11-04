@@ -62,6 +62,8 @@ export interface LLMSLabels {
   zoomOut?: string;
   reset?: string;
   expand?: string;
+  /** the collapsed summary line after Confirm (default: `${n} ops applied`) */
+  applied?: (n: number) => React.ReactNode;
 }
 
 export interface LLMSProps {
@@ -98,6 +100,18 @@ export interface LLMSProps {
   explainOnSelect?: boolean;
   /** controlled mode: the pinned path (used by explainOnSelect) */
   pinnedPath?: string | null;
+  /** applied (confirmed) proposal: LLMS.Syntax collapses the code and `output` into one clickable summary line (▸ ✓ n ops applied) that expands on click / tap. Graph and explain are unaffected. */
+  collapsed?: boolean;
+  /** proposal not confirmed yet: graph nodes / edges dashed and muted with no values, no inline old → new or → result in the code, no explain */
+  pending?: boolean;
+  /** controlled: force the collapsed code open (e.g. a graph node click scrolled to this message) */
+  expanded?: boolean;
+  /** highlight the op line that writes this path (set path, define target, pointer, remove …) */
+  focusPath?: string | null;
+  /** with focusPath: the focused set line's value becomes an inline input; Enter / blur calls this with the op index and the parsed new value */
+  onEditValue?: (opIndex: number, value: unknown) => void;
+  /** the result shown under the code (e.g. "Applied."); folds away with the code when `collapsed` */
+  output?: React.ReactNode;
   /** 'theme' uses the MUI theme in context; 'css' reads the page's --mui-palette-* / --me-syn-* variables.
    *  Default: 'theme' inside a .GUI <Theme>, else 'css'. */
   colors?: 'theme' | 'css';

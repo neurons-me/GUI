@@ -1,1 +1,0 @@
-import{p}from"./iframe-jME6TRyu.js";function s(t){const{theme:o,name:e,props:n}=t;return!o||!o.components||!o.components[e]||!o.components[e].defaultProps?n:p(o.components[e].defaultProps,n)}export{s as g};

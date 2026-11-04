@@ -22,6 +22,7 @@ const meta: Meta<typeof LLMS> = {
     'How a sentence becomes .me: the phrase, the ops as .me code, the state graph and me.explain(), sharing one active path. ' +
     'Hover (or tap) a word, a code token, a graph node or an explain row; everything that names the same path lights up. ' +
     'Changes show inline in the code (faint old value →) and derived results at the end of their ["="] line. ' +
+    'pending (before Confirm): dashed graph, no values. collapsed (after Confirm): code + output fold into a clickable ▸ ✓ n ops applied line. ' +
     'graphMode="static" + explainOnSelect: the per-message snapshot (no zoom; explain() opens on tap). ' +
     'Interactive graph: wheel / pinch to zoom, drag to pan, ⟲ resets, ⤢ expands.' } } },
 };
@@ -32,6 +33,36 @@ const MSG = { graphMode: 'static' as const, explainOnSelect: true, graphHeight: 
 /** how a chat message shows it: static snapshot of the touched nodes; explain() appears when a node / token is tapped */
 export const Message: S = { name: 'Message (static snapshot)', render: () => <Frame mode="dark" title="tap a node or token to open explain()"><LLMS {...MENU_ES} {...MSG} /></Frame> };
 export const MessageMobile: S = { name: 'Message · mobile', render: () => <Frame mode="dark" width={360}><LLMS {...MENU_EN} {...MSG} /></Frame> };
+
+/** after Confirm: code + output fold into one muted summary line (▸ ✓ n ops applied); the static snapshot stays. Tap the line to expand. */
+export const MessageApplied: S = { name: 'Message · applied (collapsed)', render: () => <Frame mode="dark" title="hover a graph node: the summary lights up"><LLMS {...MENU_EN} {...MSG} collapsed output="Applied." /></Frame> };
+export const MessageConfirm: S = {
+  name: 'Message · confirm → collapse',
+  render: function MessageConfirm() {
+    const [ok, setOk] = useState(false);
+    return (
+      <Frame mode="dark" width={420}>
+        <LLMS {...MENU_EN} {...MSG} pending={!ok} collapsed={ok} output={ok ? 'Applied.' : undefined} />
+        {!ok && <Box sx={{ mt: 1 }}><button type="button" onClick={() => setOk(true)}>Confirm</button></Box>}
+      </Frame>
+    );
+  },
+};
+export const MessagePending: S = { name: 'Message · pending (before Confirm)', render: () => <Frame mode="dark" title="dashed, no values, no result until Confirm"><LLMS {...MENU_EN} {...MSG} pending /></Frame> };
+/** a graph node click focuses the op line that wrote it; its value edits inline (Enter) and becomes a new local proposal */
+export const MessageEdit: S = {
+  name: 'Message · focus + inline edit',
+  render: function MessageEdit() {
+    const [ed, setEd] = useState<string | null>(null);
+    return (
+      <Frame mode="dark" width={460} title="bread.price focused: edit 25 and press Enter">
+        <LLMS {...MENU_EN} {...MSG} collapsed output="Applied." focusPath="menu.bread.price" onEditValue={(i, v) => setEd(`op ${i} → ${JSON.stringify(v)} (new proposal)`)} />
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>{ed ?? '—'}</Typography>
+      </Frame>
+    );
+  },
+};
+export const MessageAppliedMobile: S = { name: 'Message · applied · mobile', render: () => <Frame mode="dark" width={360}><LLMS {...MENU_ES} {...MSG} collapsed output="Aplicado." labels={{ applied: (n) => `${n} ops aplicadas` }} /></Frame> };
 
 export const MenuDark: S = { name: 'Menu (e24) · dark', render: () => <Frame mode="dark" title="menu · bread 20 → 25"><LLMS {...MENU_EN} expandedGraph={MENU_FULL} /></Frame> };
 export const MenuLight: S = { name: 'Menu (e24) · light', render: () => <Frame mode="light"><LLMS {...MENU_EN} expandedGraph={MENU_FULL} /></Frame> };

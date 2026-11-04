@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { ThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import type { LLMSExplain, LLMSExplainInput, LLMSGraphModel, LLMSLabels, LLMSNode, LLMSPart, LLMSProps } from './LLMS.types';
+import type { LLMSOp, LLMSExplain, LLMSExplainInput, LLMSGraphModel, LLMSLabels, LLMSNode, LLMSPart, LLMSProps } from './LLMS.types';
 import { buildModel, canon, J, layout, linkPhrase, opTokens, parentOf, relOf, under, type GRow, type Model } from './model';
 
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
@@ -9,6 +9,7 @@ const DEFAULT_LABELS: Required<LLMSLabels> = {
   changed: '← you just changed this',
   recomputed: (i, t) => <>You changed <code>{i}</code>, so <code>{t}</code> recomputed on its own.</>,
   graph: 'state graph', zoomIn: 'Zoom in', zoomOut: 'Zoom out', reset: 'Reset view', expand: 'Expand',
+  applied: (n) => `${n} op${n === 1 ? '' : 's'} applied`,
 };
 
 interface Ctx {
@@ -44,6 +45,13 @@ const CSS = `
 .llms-syn{margin:0;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--llms-fg2) 9%,transparent);font:12.5px/1.65 ${MONO};white-space:pre-wrap;word-break:break-word;overflow-x:auto}
 .llms-t[data-llms-k]{cursor:pointer;border-radius:3px;transition:background .12s,box-shadow .12s}.llms-t.on{background:color-mix(in srgb,var(--llms-acc) 26%,transparent);box-shadow:0 0 0 1px var(--llms-acc)}.llms-t.rel{background:color-mix(in srgb,var(--llms-acc) 10%,transparent)}
 .llms-root{color:var(--llms-acc);font-weight:600}.llms-key{color:var(--llms-path)}.llms-op,.llms-def{color:var(--llms-der)}.llms-str{color:var(--llms-str)}.llms-num{color:var(--llms-num)}.llms-punc{color:var(--llms-fg2)}.llms-cm{color:var(--llms-fg2);font-style:italic}.llms-old{color:var(--llms-fg2);opacity:.55}.llms-res{color:var(--llms-der);font-weight:600}
+.llms-sum{display:flex;align-items:center;gap:6px;width:100%;margin:0;padding:3px 8px;border:0;border-radius:8px;background:none;color:var(--llms-fg2);font:12px/1.5 ${MONO};cursor:pointer;text-align:left;transition:background .12s,color .12s}.llms-sum:hover,.llms-sum:focus-visible{background:color-mix(in srgb,var(--llms-fg2) 9%,transparent);color:var(--llms-fg)}
+.llms-sum .llms-ar{display:inline-block;width:10px;transition:transform .15s}.llms-sum[aria-expanded=true] .llms-ar{transform:rotate(90deg)}.llms-sum .llms-ck{color:var(--llms-ok)}
+.llms-sum.on{background:color-mix(in srgb,var(--llms-acc) 18%,transparent);color:var(--llms-fg)}.llms-sum.rel{background:color-mix(in srgb,var(--llms-acc) 8%,transparent)}
+.llms-gw.pending path{stroke-dasharray:3 3;opacity:.55}.llms-gw.pending .llms-c{stroke-dasharray:2 1.5;fill:none}.llms-gw.pending .llms-gn text{opacity:.6;font-weight:500}.llms-gw.pending{border-style:dashed}
+.llms-ln.focus{background:color-mix(in srgb,var(--llms-acc) 16%,transparent);box-shadow:-3px 0 0 var(--llms-acc);border-radius:2px}
+.llms-in{font:inherit;color:var(--llms-num);background:var(--llms-paper);border:1px solid var(--llms-acc);border-radius:4px;padding:0 3px;margin:0 1px;width:7ch;min-width:3ch}
+.llms-outp{margin:6px 0 0;font-size:12.5px;color:var(--llms-fg2)}.llms-fold{margin-top:4px}
 .llms-gw{border-radius:10px;border:1px solid var(--llms-grid);position:relative;overflow:hidden}
 .llms-gv{overflow:hidden;touch-action:none;cursor:grab;transition:height .2s}.llms-gv.drag{cursor:grabbing}.llms-gv.static{cursor:default;touch-action:manipulation}
 .llms-gv svg{display:block;width:100%;height:100%;user-select:none;-webkit-user-select:none}.llms-gv text{font-family:${MONO};font-size:10.5px;fill:var(--llms-fg)}
@@ -82,15 +90,51 @@ function Phrase({ text, className }: { text?: string; className?: string }) {
   return <div className={`llms-phrase ${className ?? ''}`}>{toks.map((x, i) => (x.k ? <Linked key={i} k={x.k} cls="llms-w">{x.text}</Linked> : <React.Fragment key={i}>{x.text}</React.Fragment>))}</div>;
 }
 
-/** The ops as .me code, every path token linked. */
+/** The ops as .me code, every path token linked. With `collapsed` (applied), code + output fold into one summary line. */
+function writes(o: LLMSOp): string | null {
+  const p = canon(o.path ?? '');
+  if (o.op === 'define') return canon(`${p}.${o.name}`);
+  if (o.op === 'remove') return canon(`${p}.${o.key}`);
+  return o.op === 'query' || o.op === 'identity' ? null : p;
+}
+function EditVal({ v, onDone }: { v: unknown; onDone: (x: unknown) => void }) {
+  const [t, setT] = useState(typeof v === 'string' ? v : JSON.stringify(v)), done = useRef(false);
+  const commit = () => { if (done.current) return; done.current = true; const s = t.trim(); let x: unknown = s;
+    if (typeof v !== 'string') { try { x = JSON.parse(s); } catch { x = s; } }
+    if (JSON.stringify(x) !== JSON.stringify(v)) onDone(x); else done.current = false; };
+  return <input className="llms-in" aria-label="edit value" value={t} size={Math.max(3, t.length + 1)} autoFocus
+    onChange={(e) => setT(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') setT(typeof v === 'string' ? v : JSON.stringify(v)); }} onBlur={commit} />;
+}
 function Syntax({ className }: { className?: string }) {
-  const c = useLLMS(), ops = c.props.ops ?? [];
-  const lines = useMemo(() => ops.map((o) => opTokens(o, c.m)), [ops, c.m]);
+  const c = useLLMS(), { props } = c, ops = props.ops ?? [], col = !!props.collapsed, pend = !!props.pending, [open, setOpen] = useState(false);
+  const lines = useMemo(() => ops.map((o) => { const t = opTokens(o, c.m); if (!pend) return t;
+    return t.filter((x, i) => x.r !== 'old' && x.r !== 'res' && !(x.r === 'punc' && x.t === '  → ' && t[i + 1]?.r === 'res')); }), [ops, c.m, pend]);
+  const fp = props.focusPath ? canon(props.focusPath) : null;
+  const fi = fp ? ops.findIndex((o) => writes(o) === fp) : -1;
+  useEffect(() => { if (!col) setOpen(false); }, [col]);
+  useEffect(() => { if (fi >= 0) setOpen(true); }, [fi, fp]);
   if (!lines.length) return null;
-  return (
-    <pre className={`llms-syn ${className ?? ''}`} aria-label=".me code">
-      {lines.map((l, i) => <React.Fragment key={i}>{i ? '\n' : ''}{l.map((t, j) => <Linked key={j} k={t.k} cls={`llms-t llms-${t.r}`}>{t.t}</Linked>)}</React.Fragment>)}
+  const isOpen = open || !!props.expanded;
+  const out = props.output != null && props.output !== false ? <div className="llms-outp">{props.output}</div> : null;
+  const code = (
+    <pre className={`llms-syn ${col ? '' : className ?? ''}`} aria-label=".me code">
+      {lines.map((l, i) => { const foc = i === fi, ed = foc && ops[i].op === 'set' && props.onEditValue;
+        return <React.Fragment key={i}>{i ? '\n' : ''}<span className={`llms-ln${foc ? ' focus' : ''}`} data-llms-op={i}>{l.map((t, j) => {
+          if (ed && t.k === fp && (t.r === 'num' || t.r === 'str') && l[j - 1]?.t !== '[') return <EditVal key={`${j}-${J(ops[i].value)}`} v={ops[i].value} onDone={(x) => props.onEditValue!(i, x)} />;
+          return <Linked key={j} k={t.k} cls={`llms-t llms-${t.r}`}>{t.t}</Linked>; })}</span></React.Fragment>; })}
     </pre>
+  );
+  if (!col) return out ? <>{code}{out}</> : code;
+  // a highlighted token hidden inside the fold lights the summary instead
+  let hl: '' | 'on' | 'rel' = '';
+  if (!isOpen) for (const l of lines) for (const t of l) { const r = t.k ? c.rel(t.k) : ''; if (r === 'on') hl = 'on'; else if (r && !hl) hl = r; }
+  return (
+    <div className={`llms-col ${className ?? ''}`}>
+      <button type="button" className={`llms-sum${hl ? ' ' + hl : ''}`} aria-expanded={isOpen} onClick={() => setOpen(!isOpen)}>
+        <span className="llms-ar" aria-hidden>▸</span><span className="llms-ck" aria-hidden>✓</span><span>{c.labels.applied(ops.length)}</span>
+      </button>
+      {isOpen && <div className="llms-fold llms-fade">{code}{out}</div>}
+    </div>
   );
 }
 
@@ -138,13 +182,13 @@ function Graph({ height, className }: { height?: number; className?: string }) {
   const depPaths = edges.map((e, i) => { const a = P.get(canon(e.from)), b = P.get(canon(e.to)); if (!a || !b) return null; const ax = L.tx(a), bx = L.tx(b), cx = Math.max(ax, bx) + 22; Wx = Math.max(Wx, cx + 6);
     return <path key={`d${i}`} d={`M${ax} ${Y(a)} C${cx} ${Y(a)} ${cx} ${Y(b)} ${bx} ${Y(b)}`} fill="none" stroke="var(--llms-der)" strokeDasharray="3 3" strokeWidth={1.2} opacity={0.8} />; });
   return (
-    <div className={`llms-gw ${className ?? ''}`}>
+    <div className={`llms-gw${props.pending ? ' pending' : ''} ${className ?? ''}`}>
       <div ref={box} className={`llms-gv${drag ? ' drag' : ''}${stat ? ' static' : ''}`} style={{ height: h }} {...(stat ? {} : { onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up })}>
         <svg ref={svg} viewBox={vb.map((n) => n.toFixed(1)).join(' ')} role="img" aria-label={c.labels.graph}>
           {L.rows.map((r) => { if (r.p === '' ) return null; const par = P.get(parentOf(r.p) ?? '') ?? P.get('')!;
             return <path key={`e${r.p}`} d={`M${X(par.d) + 5} ${Y(par)} C${X(r.d) - 22} ${Y(par)} ${X(r.d) - 22} ${Y(r)} ${X(r.d) - 4} ${Y(r)}`} fill="none" stroke="var(--llms-grid)" strokeWidth={1.3} />; })}
           {depPaths}
-          {L.rows.map((r) => <GNode key={`n${r.p}`} r={r} x={X(r.d)} y={Y(r)} der={derived(r)} ch={c.m.changed.has(r.p)} val={L.val(r)} onTap={() => tapNode(r)} />)}
+          {L.rows.map((r) => <GNode key={`n${r.p}`} r={r} x={X(r.d)} y={Y(r)} der={derived(r)} ch={!props.pending && c.m.changed.has(r.p)} val={props.pending ? '' : L.val(r)} onTap={() => tapNode(r)} />)}
         </svg>
       </div>
       {!stat && <div className="llms-gb">
@@ -166,7 +210,7 @@ function GNode({ r, x, y, der, ch, val, onTap }: { r: GRow; x: number; y: number
       {ch && <circle className="llms-pulse" cx={x} cy={y} r={6.5} />}
       <circle className="llms-ring" cx={x} cy={y} r={7.5} />
       <circle className="llms-c" cx={x} cy={y} r={root ? 5 : 3.5} stroke={col} />
-      <text x={x + 9} y={y + 3.6} style={root ? { fill: 'var(--llms-acc)' } : undefined}>{r.k}{r.node ? <tspan fill={col}>{' ' + val}</tspan> : null}</text>
+      <text x={x + 9} y={y + 3.6} style={root ? { fill: 'var(--llms-acc)' } : undefined}>{r.k}{r.node && val ? <tspan fill={col}>{' ' + val}</tspan> : null}</text>
     </g>
   );
 }
@@ -183,7 +227,7 @@ function Explain({ className }: { className?: string }) {
     }
     return { x: m.explainList[0] };
   }, [c.active, m]);
-  if (c.props.explainOnSelect && !c.pinned) return null;
+  if (c.props.pending || (c.props.explainOnSelect && !c.pinned)) return null;
   if (!pick.x && !pick.p) return null;
   if (!pick.x || !pick.x.expr) { const p = canon(pick.x?.path ?? pick.p!), n = m.nodes.get(p), v = pick.x ? pick.x.value : n?.value;
     return <div className={`llms-xp llms-fade ${className ?? ''}`} key={p}><pre><Linked k={p} cls="llms-xr"><span className="llms-xp-p">{p}</span> = <span className="llms-xp-v">{n?.masked ? '●●●' : J(v)}</span></Linked></pre></div>; }
