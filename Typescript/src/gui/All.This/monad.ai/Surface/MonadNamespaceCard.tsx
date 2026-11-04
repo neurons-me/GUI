@@ -24,6 +24,11 @@ export type MonadNamespaceRestartStatus = MonadMeshRestartStatus;
 export interface MonadNamespaceCardProps {
   /** The hostname/namespace this card represents, e.g. "suis-macbook-air.local". Omit it where the page already says so. */
   namespace?: string;
+  /**
+   * The monad's own name (e.g. "Haiku"), not an app's. The orb's hover label says it with the status; it also seeds the
+   * orb's pattern, so each monad keeps its own. Omitted: "monad.ai".
+   */
+  name?: string;
   /** Drives the orb glow: true = green/online, false = red/offline, null/undefined = default blue. */
   healthy?: boolean | null;
   /** Currently live/registered monads. */
@@ -49,6 +54,13 @@ export interface MonadNamespaceCardProps {
   detection?: Monad0Reading;
 }
 
+// what the hover label says after the name: the same three states the glow shows
+function statusText(healthy: boolean | null): string {
+  if (healthy === true) return 'online';
+  if (healthy === false) return 'offline';
+  return 'checking';
+}
+
 const cardSx = {
   position: 'relative' as const,
   width: '100%',
@@ -61,6 +73,7 @@ const cardSx = {
 
 export default function MonadNamespaceCard({
   namespace,
+  name,
   healthy = null,
   apps,
   sleepingEntries = [],
@@ -73,6 +86,7 @@ export default function MonadNamespaceCard({
   meshDefaultOpen = false,
   detection,
 }: MonadNamespaceCardProps) {
+  const orbName = name || 'monad.ai';
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       {namespace ? (
@@ -85,7 +99,7 @@ export default function MonadNamespaceCard({
         {/* monad.ai orb */}
         <Box sx={{ height: 130 * orbScale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Box sx={{ width: 120, height: 130, flexShrink: 0, transform: orbScale === 1 ? undefined : `scale(${orbScale})`, transformOrigin: 'center' }}>
-            <Monad mode="contained" kind="monad" label="monad.ai" healthy={healthy} core="flat" ring={1.25} scale={orbScale} />
+            <Monad mode="contained" kind="monad" seed={orbName} label={`${orbName} · ${statusText(healthy)}`} healthy={healthy} core="flat" ring={1.25} scale={orbScale} />
           </Box>
         </Box>
 

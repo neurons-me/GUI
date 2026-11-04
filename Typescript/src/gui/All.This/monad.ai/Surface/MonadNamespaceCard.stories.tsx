@@ -23,6 +23,7 @@ const apps = [
 export const Default: Story = {
   args: {
     namespace: 'suis-macbook-air.local',
+    name: 'Haiku',
     healthy: true,
     apps,
     sleepingEntries: [{ name: 'Freddie' }],
@@ -45,6 +46,7 @@ export const NoMonadsRegistered: Story = {
 export const RestartingMesh: Story = {
   args: {
     namespace: 'suis-macbook-air.local',
+    name: 'Haiku',
     healthy: true,
     apps,
     sleepingEntries: [{ name: 'Freddie' }],
@@ -60,6 +62,7 @@ export const RestartingMesh: Story = {
 export const Checking: Story = {
   args: {
     namespace: 'suis-macbook-air.local',
+    name: 'Haiku',
     healthy: null,
     apps,
     sleepingEntries: [],
@@ -71,6 +74,7 @@ export const Checking: Story = {
 export const RestartFailed: Story = {
   args: {
     namespace: 'suis-macbook-air.local',
+    name: 'Haiku',
     healthy: true,
     apps,
     sleepingEntries: [],
@@ -88,6 +92,7 @@ const answered = { monadId: 'monad:abc', monadName: 'Haiku', namespace: 'netget.
 export const YourMonad0: Story = {
   args: {
     namespace: 'netget.local',
+    name: 'Haiku',
     healthy: true,
     apps,
     detection: readMonad0({ transport: T, answered, session: { transportOrigin: T, namespace: 'ana.netget.local' } }),
@@ -97,6 +102,7 @@ export const YourMonad0: Story = {
 export const AMonadNotKnownToBeYours: Story = {
   args: {
     namespace: 'netget.local',
+    name: 'Haiku',
     healthy: true,
     apps,
     detection: readMonad0({ transport: T, answered, session: null }),
@@ -133,6 +139,7 @@ function LocalhostMonads() {
   return (
     <MonadNamespaceCard
       namespace="localhost"
+      name={discovery.monads.map((monad) => monad.name || monad.id).join(', ') || undefined}
       healthy={localhostHealth(discovery)}
       apps={discovery.monads.map(toMeshEntry)}
       sleepingEntries={[]}
