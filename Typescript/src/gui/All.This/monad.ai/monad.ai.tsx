@@ -200,6 +200,9 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
     error: healthy === false,
   };
   const theme = useTheme() as any;
+  // unhealthy is the theme's error colour, not a fixed red: it follows the palette in light and dark
+  const danger: string = theme.palette?.error?.main || "#ff1a1a";
+  const dangerGlow = `0 0 0 3px ${danger}, 0 0 20px 6px color-mix(in srgb, ${danger} 55%, transparent)`;
   const hasContent = Boolean(children);
   const [meContext, setMeContext] = useState<MonadContextValue>(() => resolveMeContext());
   const visualKind = kind || (meContext.hasMe ? "me" : "monad");
@@ -575,19 +578,19 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ? "none"
                 : flatCore
                 ? (!status.active || status.error
-                    ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
+                    ? dangerGlow
                     : `0 0 0 3px ${primary}, 0 0 22px 6px color-mix(in srgb, ${primary} 55%, transparent)`)
                 : (!status.active || status.error
-                    ? "0 0 0 3px #ff4d4d, 0 0 20px 6px rgba(255,0,0,0.6)"
+                    ? dangerGlow
                     : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
               border: isIdentity
                 ? "none"
                 : hairline !== null
-                ? `${hairline}px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
+                ? `${hairline}px solid ${!status.active || status.error ? danger : primary}`
                 : flatCore
-                ? `2.5px solid ${!status.active || status.error ? "#ff1a1a" : primary}`
+                ? `2.5px solid ${!status.active || status.error ? danger : primary}`
                 : (!status.active || status.error
-                    ? "2.5px solid #ff1a1a"
+                    ? `2.5px solid ${danger}`
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
               display: "flex",
               alignItems: "center",
@@ -666,7 +669,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                       inset: 5,
                       borderRadius: "50%",
                       // solid: the theme's primary tinted into the surface colour. No gradients, no texture, no inset shading.
-                      background: `color-mix(in srgb, ${!status.active || status.error ? "#ff1a1a" : theme.palette.primary.main} 14%, ${theme.palette.background?.paper ?? "#1e1e1e"})`,
+                      background: `color-mix(in srgb, ${!status.active || status.error ? danger : theme.palette.primary.main} 14%, ${theme.palette.background?.paper ?? "#1e1e1e"})`,
                       pointerEvents: "none",
                     }}
                   />
@@ -738,7 +741,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                           ? themed
                             // icon mode / flat core: the code is drawn in the theme's own primary (red when the monad is not healthy),
                             // the same colour as the circumference around it; the primary cells strong, the secondary softer
-                            ? `color-mix(in srgb, ${!status.active || status.error ? "#ff1a1a" : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
+                            ? `color-mix(in srgb, ${!status.active || status.error ? danger : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
                             : cell.secondary
                               ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
                               : (theme.palette.mode === "light" ? "rgba(10,120,148,0.9)" : "rgba(225,239,236,0.95)")

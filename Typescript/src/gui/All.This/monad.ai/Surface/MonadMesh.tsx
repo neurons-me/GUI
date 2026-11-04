@@ -70,7 +70,7 @@ export default function MonadMesh({
             <>
               {apps.map(app => (
                 <Box key={app.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.4 }}>
-                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: app.healthy ? '#22c55e' : 'rgba(255,255,255,0.18)' }} />
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, bgcolor: app.healthy ? 'success.main' : 'action.disabled' }} />
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.7, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {app.name}
                   </Typography>
@@ -81,7 +81,7 @@ export default function MonadMesh({
               ))}
               {sleepingEntries.map(entry => (
                 <Box key={entry.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.4 }}>
-                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: 'rgba(255,255,255,0.08)', border: '1px dashed rgba(255,255,255,0.2)' }} />
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, bgcolor: 'action.hover', border: '1px dashed', borderColor: 'divider' }} />
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.35, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.name}
                   </Typography>
