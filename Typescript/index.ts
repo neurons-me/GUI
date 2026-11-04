@@ -227,6 +227,8 @@ export { default as ThemeLauncher } from '@/gui/Theme/Launcher/ThemeLauncher';
 export { default as OverlaySwatch } from '@/gui/Theme/OverlaySwatch/OverlaySwatch';
 export type { OverlaySwatchProps, OverlaySwatchChange, OverlaySwatchPosition } from '@/gui/Theme/OverlaySwatch/OverlaySwatch.types';
 export { Channel, StreamStage } from '@/gui/Twitch';
+export { LLMS } from '@/gui/LLMS';
+export type { LLMSProps, LLMSOp, LLMSNode, LLMSEdge, LLMSGraphModel, LLMSExplain, LLMSExplainInput, LLMSPart, LLMSLabels } from '@/gui/LLMS';
 export type {
   ChannelProps, ChannelChatMessage, ChannelProfile, ChannelStream, ChannelSettings, ChannelFollowers,
   ChannelSection, ChannelPanel, ChannelWindowMode, ChannelSectionState, StreamStageProps,
