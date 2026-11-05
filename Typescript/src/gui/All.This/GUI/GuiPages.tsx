@@ -27,7 +27,8 @@ type GuiPageProps = {
 declare const __GUI_VERSION__: string | undefined;
 const GUI_VERSION = typeof __GUI_VERSION__ === 'string' ? __GUI_VERSION__ : '';
 
-const pageSx = { px: { xs: 3, sm: 6 }, py: { xs: 5, sm: 8 }, maxWidth: 820, mx: 'auto', boxSizing: 'border-box', width: '100%' } as const;
+// The same air under the top bar as /users (~21px to the first line), not a hero's.
+const pageSx = { px: { xs: 3, sm: 6 }, pt: 2.5, pb: { xs: 5, sm: 8 }, maxWidth: 820, mx: 'auto', boxSizing: 'border-box', width: '100%' } as const;
 const monoSx = { fontFamily: 'monospace' } as const;
 
 /** `GUI / Themes`: where this page sits under `/GUI`, each step a link but the last. */
