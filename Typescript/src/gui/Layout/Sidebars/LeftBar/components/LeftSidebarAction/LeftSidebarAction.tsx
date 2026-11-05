@@ -114,19 +114,9 @@ const LeftSidebarAction: React.FC<LeftSidebarActionProps> = ({
         >
           {element}
         </Box>
-        {view !== 'rail' && label ? (
-          <Typography
-            variant="body2"
-            sx={{
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              color: active ? 'primary.main' : 'text.primary',
-            }}
-          >
-            {label}
-          </Typography>
-        ) : null}
+        {/* No `label` next to a custom element: the element names itself (the theme launcher says the theme, the dev
+            tools launcher says "Dev Tools"); printing the label too squeezed a second, truncated name beside it
+            ("neurons.me  Th…"). The label stays the item's name for the Inspector (data-gui-label, LeftBar.tsx). */}
       </Box>
     );
 

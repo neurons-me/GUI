@@ -1561,9 +1561,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // real disconnect). verifiedRoot.status is already the one signal both the sidebar and /netget treat as
   // authoritative — reusing it here, rather than adding a second source, is what keeps the ring and the
   // label unable to disagree by construction.
-  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' = monadOff ? 'off' : verifiedRoot.status;
+  // A check that answers within CHECKING_SHOWN_AFTER_MS is not drawn as "checking": on load the badge went yellow and
+  // the text "resolviendo…" for ~50ms before settling, which read as a flicker. Only a check that takes longer is shown.
+  const positionStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off' = useSettledChecking(monadOff ? 'off' : verifiedRoot.status);
   const positionStatusLabel = monadOff ? 'No .me here'
-    : verifiedRoot.status === 'checking' ? 'Checking…'
+    : positionStatus === 'checking' ? 'Checking…'
     : verifiedRoot.status === 'error' ? 'Could not connect'
     : verifiedRoot.status === 'confirmed' ? 'Service answered'
     : '';
@@ -1876,7 +1878,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     '&:hover': { textDecoration: 'underline' },
                   }}
                 >
-                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? positionUnresolved : 'resolviendo…') : <CompactAt text={positionExpression} />}
+                  {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : <CompactAt text={positionExpression} />}
                 </Box>
                 </UnlessLeftBarExpanded>
               </Box>
@@ -1938,7 +1940,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 '&:hover': { textDecoration: 'underline' },
               }}
             >
-              {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? positionUnresolved : 'resolviendo…') : positionExpression}
+              {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : positionExpression}
             </Box>
           ),
           // `active` applied ONCE, HERE, uniformly across every element
@@ -2072,6 +2074,24 @@ function isGuiPage(entry: { id: string }): boolean {
 function isShellPage(entry: { id: string; parentId?: string; component?: string; route?: string }): boolean {
   if (!entry.component || !entry.route) return false;
   return entry.parentId === 'GUI.window.layout.content' || isGuiPage(entry);
+}
+
+const CHECKING_SHOWN_AFTER_MS = 400;
+/**
+ * `checking` only once it has lasted CHECKING_SHOWN_AFTER_MS; until then the last other status is kept. Before any
+ * answer the badge is `off` (grey): nothing has answered yet, which is what grey says. `idle` would draw the QR's normal
+ * color for the instant before the first reading (a blue flash on load).
+ */
+function useSettledChecking<T extends string>(status: T): T | 'off' {
+  const [shown, setShown] = useState<T | 'off'>(status === 'checking' || status === 'idle' ? 'off' : status);
+  useEffect(() => {
+    // `idle` (not checked yet) says nothing new: the last status stays (grey before any answer).
+    if (status === 'idle') return undefined;
+    if (status !== 'checking') { setShown(status); return undefined; }
+    const timer = setTimeout(() => setShown(status), CHECKING_SHOWN_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [status]);
+  return shown;
 }
 
 function documentRoute(route?: string): { index?: true; path?: string } {
