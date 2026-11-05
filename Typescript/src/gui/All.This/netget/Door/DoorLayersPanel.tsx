@@ -1,4 +1,4 @@
-// What is and is not behind this door, layer by layer, and where "here" is. Shown wherever a page needs a layer that
+// What is and is not behind this door, layer by layer. Shown wherever a page needs a layer that
 // is not up, in place of each page's own error text: one message for "off", the same on every route, that says
 // WHICH layer is missing instead of just "not available".
 //
@@ -21,16 +21,17 @@ export type DoorNeeds = 'backend' | 'monad' | 'both';
 
 export type DoorLayersPanelProps = {
   layers: DoorLayers;
-  /** The namespace being looked at (a name, never an address). */
-  namespace?: string;
-  /** The location this page was served from (read-only: a place, not a namespace). */
+  /**
+   * The origin this page was served from: only to write the start command for it. "Where you are" is not said here:
+   * the top bar already says it, in the same syntax, so the panel does not repeat it.
+   */
   location?: string;
   /** The path that was asked for, when this panel stands where that path would have been (an entry point). */
   asked?: string;
   /**
    * `compact`: a title, the three layers on one line and the action (the Home when nothing answers: the grey QR is
    * the way in and this is all that sits under it). `full` (default): each layer with why it is in that state, and
-   * where you are (the page that stands in for a route).
+   * the path that was asked for (the page that stands in for a route).
    */
   variant?: 'compact' | 'full';
   sx?: any;
@@ -180,7 +181,7 @@ function NetgetSummary({ netget, open, onToggle, nodeId, align }: { netget: Netg
   );
 }
 
-export default function DoorLayersPanel({ layers, namespace, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.off' }: DoorLayersPanelProps) {
+export default function DoorLayersPanel({ layers, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.off' }: DoorLayersPanelProps) {
   const [open, setOpen] = React.useState(false);
   // The page's one `.me`: each new reading is written under GUI.door and asked again.
   const { me } = useMe();
@@ -224,15 +225,8 @@ export default function DoorLayersPanel({ layers, namespace, location, asked, va
         </Box>
       )}
 
-      {(namespace || location || asked) && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Where you are
-          </Typography>
-          {namespace && <Typography variant="body2">namespace: <strong>{namespace}</strong></Typography>}
-          {location && <Typography variant="body2">location: <strong>{location}</strong></Typography>}
-          {asked && asked !== '/' && <Typography variant="body2">you asked for: <strong>{asked}</strong></Typography>}
-        </Box>
+      {asked && asked !== '/' && (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>you asked for: <strong>{asked}</strong></Typography>
       )}
 
       {command && <BootstrapAction command={command} origin={location} />}

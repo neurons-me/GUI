@@ -125,7 +125,7 @@ export default function ConnectFailure({ expression, layers, trace = [], locatio
       {view === 'diagnosis' && (
         <Box data-gui-node-id={`${nodeId}.diagnosis.body`} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {layers ? (
-            <DoorLayersPanel layers={layers} namespace={expression} location={location} sx={{ p: 0, maxWidth: 'none' }} />
+            <DoorLayersPanel layers={layers} location={location} sx={{ p: 0, maxWidth: 'none' }} />
           ) : (
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {expression} was asked directly; there is no local environment to inspect for it.

@@ -1704,13 +1704,13 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>Not available through the selected link.</Typography>
           </Box>
         ) : (
-          <UnknownPath layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} />
+          <UnknownPath layers={doorLayers} location={pageOrigin} />
         )
       ) : waiting ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }} />
       ) : blocked ? (
         <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
-          <DoorLayersPanel layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} data-gui-node-id={`${entry.id}.off`} />
+          <DoorLayersPanel layers={doorLayers} location={pageOrigin} data-gui-node-id={`${entry.id}.off`} />
         </Box>
       ) : renderGuiDocumentPage(entry.id, {
         React,
@@ -1986,7 +1986,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               up there is nothing at this path, so it goes to the way in. */}
           <Route
             path="*"
-            element={<UnknownPath layers={doorLayers} namespace={rootSeed.label} location={pageOrigin} />}
+            element={<UnknownPath layers={doorLayers} location={pageOrigin} />}
           />
         </Routes>
       </Layout>
@@ -1996,13 +1996,13 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 };
 
 // What a path that is none of the document's pages shows. See the catch-all route in the shell.
-const UnknownPath: React.FC<{ layers: DoorLayers; namespace: string; location: string }> = ({ layers, namespace, location }) => {
+const UnknownPath: React.FC<{ layers: DoorLayers; location: string }> = ({ layers, location }) => {
   const asked = useLocation().pathname;
   const reading = layers.backend === 'checking' || layers.monad === 'checking';
   if (!reading && !doorBlocks(layers, 'both')) return <Navigate to="/" replace />;
   return (
     <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
-      <DoorLayersPanel layers={layers} namespace={namespace} location={location} asked={asked} data-gui-node-id="GUI.window.layout.content.unknown" />
+      <DoorLayersPanel layers={layers} location={location} asked={asked} data-gui-node-id="GUI.window.layout.content.unknown" />
     </Box>
   );
 };
