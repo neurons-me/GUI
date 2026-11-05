@@ -22,16 +22,14 @@ export type DoorNeeds = 'backend' | 'monad' | 'both';
 export type DoorLayersPanelProps = {
   layers: DoorLayers;
   /**
-   * The origin this page was served from: only to write the start command for it. "Where you are" is not said here:
-   * the top bar already says it, in the same syntax, so the panel does not repeat it.
+   * The origin this page was served from: only to write the start command for it. "Where you are" (namespace, path)
+   * is not said here: the top bar already says it, in the same syntax, so the panel does not repeat it.
    */
   location?: string;
-  /** The path that was asked for, when this panel stands where that path would have been (an entry point). */
-  asked?: string;
   /**
    * `compact`: a title, the three layers on one line and the action (the Home when nothing answers: the grey QR is
-   * the way in and this is all that sits under it). `full` (default): each layer with why it is in that state, and
-   * the path that was asked for (the page that stands in for a route).
+   * the way in and this is all that sits under it). `full` (default): each layer with why it is in that state (the page
+   * that stands in for a route).
    */
   variant?: 'compact' | 'full';
   sx?: any;
@@ -181,7 +179,7 @@ function NetgetSummary({ netget, open, onToggle, nodeId, align }: { netget: Netg
   );
 }
 
-export default function DoorLayersPanel({ layers, location, asked, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.off' }: DoorLayersPanelProps) {
+export default function DoorLayersPanel({ layers, location, variant = 'full', sx, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.off' }: DoorLayersPanelProps) {
   const [open, setOpen] = React.useState(false);
   // The page's one `.me`: each new reading is written under GUI.door and asked again.
   const { me } = useMe();
@@ -223,10 +221,6 @@ export default function DoorLayersPanel({ layers, location, asked, variant = 'fu
             <Row key={entry.layer} name={entry.layer} detail={LAYER_DETAIL[entry.layer]} state={entry.state} reason={entry.layer === 'nginx' ? undefined : entry.reason} />
           ))}
         </Box>
-      )}
-
-      {asked && asked !== '/' && (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>you asked for: <strong>{asked}</strong></Typography>
       )}
 
       {command && <BootstrapAction command={command} origin={location} />}

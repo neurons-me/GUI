@@ -3,8 +3,8 @@ import { Me } from '@/react/Me';
 import DoorLayersPanel from './DoorLayersPanel';
 import type { DoorLayers } from '@/react/session/doorLayers';
 
-// The panel a door shows when netget is not all there. It does not say where you are: the top bar does, once, in
-// the same syntax on every page.
+// The panel a door shows when netget is not all there. It does not say where you are (namespace, path): the top
+// bar does, once, in the same syntax on every page.
 const meta: Meta<typeof DoorLayersPanel> = {
   title: 'Pieces/netget/Door',
   component: DoorLayersPanel,
@@ -25,8 +25,3 @@ export const NetgetOff = () => (
   </Me>
 );
 
-export const UnknownPath = () => (
-  <Me username="sui">
-    <DoorLayersPanel layers={off} location="http://localhost" asked="/apps" />
-  </Me>
-);

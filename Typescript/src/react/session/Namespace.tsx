@@ -1997,12 +1997,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
 // What a path that is none of the document's pages shows. See the catch-all route in the shell.
 const UnknownPath: React.FC<{ layers: DoorLayers; location: string }> = ({ layers, location }) => {
-  const asked = useLocation().pathname;
   const reading = layers.backend === 'checking' || layers.monad === 'checking';
   if (!reading && !doorBlocks(layers, 'both')) return <Navigate to="/" replace />;
   return (
     <Box sx={{ p: 3, pt: 9, width: '100%', boxSizing: 'border-box' }}>
-      <DoorLayersPanel layers={layers} location={location} asked={asked} data-gui-node-id="GUI.window.layout.content.unknown" />
+      <DoorLayersPanel layers={layers} location={location} data-gui-node-id="GUI.window.layout.content.unknown" />
     </Box>
   );
 };
