@@ -356,6 +356,53 @@
                         }
                       }
                     }
+                  },
+                  "gui": {
+                    "label": "GUI",
+                    "component": "GuiHome",
+                    "route": "/GUI",
+                    "note": "What is drawing this page: this.gui, the active theme, the layout. Each part has its own page under /GUI.",
+                    "children": {
+                      "themes": {
+                        "label": "Themes",
+                        "component": "GuiThemes",
+                        "route": "/GUI/themes",
+                        "note": "The active theme: the theme strip, its palette and its typography. Used to be a dialog opened from the theme launcher's gear.",
+                        "children": {
+                          "strip": {
+                            "label": "Theme strip",
+                            "note": "Every theme; click one to switch."
+                          },
+                          "tabs": {
+                            "label": "Tabs",
+                            "children": {
+                              "palette": {
+                                "label": "Palette"
+                              },
+                              "typography": {
+                                "label": "Typography"
+                              }
+                            }
+                          },
+                          "palette": {
+                            "label": "Palette",
+                            "note": "Each color of the theme with its shades and value."
+                          },
+                          "typography": {
+                            "label": "Typography",
+                            "component": "GuiThemes",
+                            "route": "/GUI/themes/typography",
+                            "note": "The active theme's type scale."
+                          }
+                        }
+                      },
+                      "layout": {
+                        "label": "Layout",
+                        "component": "GuiLayout",
+                        "route": "/GUI/layout",
+                        "note": "The tree this page declares (this document plus what the app adds)."
+                      }
+                    }
                   }
                 },
                 "label": "Content"

@@ -15,6 +15,7 @@ import { LeftSidebarContext } from '@/gui-internals/Contexts/LeftSidebarContext'
 import { useOptionalSelection, useRegisterGuiNode } from '@/runtime/selection';
 import { useLauncherPopover } from '@/runtime/launcherPopover';
 import { useGuiNodeId } from '@/runtime/guiNodeId';
+import { useThemeSettings } from '@/runtime/themeSettings';
 
 export interface ThemeLauncherProps {
   sx?: any;
@@ -35,6 +36,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   const [hoverOpen, setHoverOpen] = useLauncherPopover('theme');
   const [optimisticThemeId, setOptimisticThemeId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  // The shell's page (`/GUI/themes`) when there is one; the dialog otherwise.
+  const openThemeSettings = useThemeSettings();
   const anchorRef = useRef<HTMLDivElement>(null);
   // Popper anchors to the avatar bubble itself, not the full-width row —
   // otherwise, with the sidebar expanded, the tooltip pops out far to the
@@ -292,7 +295,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
                 aria-label="Open theme settings"
                 onClick={() => {
                   setHoverOpen(false);
-                  setInspectorOpen(true);
+                  if (openThemeSettings) openThemeSettings();
+                  else setInspectorOpen(true);
                 }}
               >
                 <Icon name="settings" fontSize="1rem" />

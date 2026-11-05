@@ -1,6 +1,7 @@
 // src/gui/Theme/Inspector/ThemeInspector.tsx
 // A real, in-app view of the active theme's palette + typography scale —
-// opened from ThemeLauncher's settings icon, not a Storybook-only debug dump.
+// opened from ThemeLauncher's settings icon, not a Storybook-only debug dump. Inside a namespace's shell it is the
+// page `/GUI/themes` (GuiPages.tsx); the dialog is for hosts with no router.
 import React, { useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -361,8 +362,48 @@ function TypographyTab() {
   );
 }
 
+export type ThemeInspectorTab = 'palette' | 'typography';
+
+/**
+ * What the inspector shows, without the frame: the theme strip, the two tabs and the open tab. The page `/GUI/themes`
+ * draws it in the content area (where the tab is part of the address: `/GUI/themes`, `/GUI/themes/typography`); the
+ * dialog below draws it where there is no router to give it an address.
+ */
+export function ThemeInspectorBody({
+  tab,
+  onTab,
+  contentSx,
+  nodeId,
+}: {
+  tab: ThemeInspectorTab;
+  onTab: (tab: ThemeInspectorTab) => void;
+  contentSx?: any;
+  nodeId?: string;
+}) {
+  return (
+    <>
+      <Box data-gui-node-id={nodeId ? `${nodeId}.strip` : undefined}>
+        <ThemeStrip />
+      </Box>
+      <Tabs
+        value={tab}
+        onChange={(_, v) => onTab(v)}
+        sx={{ px: 2, borderBottom: '1px solid', borderColor: 'divider' }}
+        data-gui-node-id={nodeId ? `${nodeId}.tabs` : undefined}
+      >
+        <Tab value="palette" label="Palette" data-gui-node-id={nodeId ? `${nodeId}.tabs.palette` : undefined} />
+        <Tab value="typography" label="Typography" data-gui-node-id={nodeId ? `${nodeId}.tabs.typography` : undefined} />
+      </Tabs>
+      <Box sx={{ px: 3, py: 2, ...contentSx }} data-gui-node-id={nodeId ? `${nodeId}.${tab}` : undefined}>
+        {tab === 'palette' ? <PaletteTab /> : <TypographyTab />}
+      </Box>
+    </>
+  );
+}
+
+/** The same view in a dialog: for a host with no router (an app that mounts the launcher on its own). */
 const ThemeInspector: React.FC<ThemeInspectorProps> = ({ open, onClose }) => {
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<ThemeInspectorTab>('palette');
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -376,13 +417,8 @@ const ThemeInspector: React.FC<ThemeInspectorProps> = ({ open, onClose }) => {
           <Icon name="close" fontSize="1rem" />
         </IconButton>
       </DialogTitle>
-      <ThemeStrip />
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Tab label="Palette" />
-        <Tab label="Typography" />
-      </Tabs>
-      <DialogContent dividers={false} sx={{ maxHeight: '60vh' }}>
-        {tab === 0 ? <PaletteTab /> : <TypographyTab />}
+      <DialogContent dividers={false} sx={{ maxHeight: '70vh', p: 0 }}>
+        <ThemeInspectorBody tab={tab} onTab={setTab} contentSx={{ px: 3 }} />
       </DialogContent>
     </Dialog>
   );

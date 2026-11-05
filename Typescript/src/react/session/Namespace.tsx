@@ -68,6 +68,8 @@ import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
+import { GuiHome, GuiThemes, GuiLayout, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
+import { ThemeSettingsContext } from '@/runtime/themeSettings';
 
 interface DirectoryUser {
   username: string;
@@ -1469,6 +1471,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // here — not two independent derivations that could drift (the earlier gap this closes).
   const location = useLocation();
   const navigate = useNavigate();
+  // The theme launcher's gear opens the theme settings as a page of this shell, not a dialog.
+  const openThemeSettings = useCallback(() => navigate(GUI_THEMES_ROUTE), [navigate]);
   // The identity (the QR, the sign-in/register/recover card) is a PAGE of the namespace, at `/.me`: it has an address,
   // survives a refresh, and Back returns to where you were. It used to open as a dialog over whatever page you were on;
   // that is gone. `/` stays the namespace's home.
@@ -1680,9 +1684,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
   // Every page the document declares under GUI.window.layout.content: what renders and
-  // where it is served both come from the document.
+  // where it is served both come from the document. The GUI's own pages nest (`/GUI`, `/GUI/themes`, ...): every routed
+  // part under `content.gui` is a page of the shell too.
   const documentPageRoutes = flattenGuiDocument(doc)
-    .filter((entry) => entry.parentId === 'GUI.window.layout.content' && entry.component && entry.route)
+    .filter((entry) => isShellPage(entry))
     .map((entry) => {
       const route = documentRoute(entry.route);
       // A page whose layer is off is replaced, here, by the one panel that says which layer is missing -- the
@@ -1723,6 +1728,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             ? { ...props, welcome: { where: typeof window !== 'undefined' ? window.location.host : '' } }
             : isLanding
             ? landingProps
+            : isGuiPage(entry)
+            ? { ...props, guiDocument: doc }
             : entry.id === 'GUI.window.layout.content.netget'
               ? {
                   ...props,
@@ -1896,6 +1903,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
   return (
     <GuiCapabilitiesContext.Provider value={capabilityResolution}>
+    <ThemeSettingsContext.Provider value={openThemeSettings}>
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
         // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
@@ -1993,6 +2001,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         </Routes>
       </Layout>
     </Box>
+    </ThemeSettingsContext.Provider>
     </GuiCapabilitiesContext.Provider>
   );
 };
@@ -2048,10 +2057,23 @@ const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   Netget: CleakerNetgetView,
   Claim: CleakerNetgetClaimView,
   Sign: CleakerNetgetAdminSignView,
+  GuiHome,
+  GuiThemes,
+  GuiLayout,
 };
 
 // A document `route` ("/" or "/users") as react-router wants it: the index
 // route, or a path relative to the shell.
+const GUI_PAGES_ID = 'GUI.window.layout.content.gui';
+function isGuiPage(entry: { id: string }): boolean {
+  return entry.id === GUI_PAGES_ID || entry.id.startsWith(`${GUI_PAGES_ID}.`);
+}
+// A page the shell routes: a direct child of `content`, or any routed part of the GUI's own pages.
+function isShellPage(entry: { id: string; parentId?: string; component?: string; route?: string }): boolean {
+  if (!entry.component || !entry.route) return false;
+  return entry.parentId === 'GUI.window.layout.content' || isGuiPage(entry);
+}
+
 function documentRoute(route?: string): { index?: true; path?: string } {
   if (!route) return {};
   return route === '/' ? { index: true } : { path: route.replace(/^\//, '') };
