@@ -66,7 +66,7 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
-import { positionExpression as composePosition, shownNamespace, cardNamespace } from '@/react/positionExpression';
+import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 
 interface DirectoryUser {
@@ -1512,6 +1512,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   });
   // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
   const positionExpression = positionComposed.compact;
+  // nothing answered: `? @ where` (the surface is known, the `.me` is not)
+  const positionUnresolved = unresolvedPosition(typeof window !== 'undefined' ? window.location : null);
   const positionExpressionFull = positionComposed.full;
   // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
   // address for its own roots, the chosen host for another root. The GUI route is not part of it (that is the surface;
@@ -1718,7 +1720,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         doc,
         props:
           entry.component === 'Welcome'
-            ? { ...props, welcome: { namespace: resolvingNamespace ? (verifiedRoot.status === 'error' ? 'sin respuesta' : 'resolviendo…') : positionIdentity, origin: typeof window !== 'undefined' ? window.location.origin : '' } }
+            ? { ...props, welcome: { where: typeof window !== 'undefined' ? window.location.host : '' } }
             : isLanding
             ? landingProps
             : entry.id === 'GUI.window.layout.content.netget'
@@ -1867,7 +1869,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     '&:hover': { textDecoration: 'underline' },
                   }}
                 >
-                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : <CompactAt text={positionExpression} />}
+                  {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? positionUnresolved : 'resolviendo…') : <CompactAt text={positionExpression} />}
                 </Box>
                 </UnlessLeftBarExpanded>
               </Box>
@@ -1928,7 +1930,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 '&:hover': { textDecoration: 'underline' },
               }}
             >
-              {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? 'sin respuesta' : 'resolviendo…') : positionExpression}
+              {resolvingNamespace ? (verifiedRoot.status === 'error' || monadOff ? positionUnresolved : 'resolviendo…') : positionExpression}
             </Box>
           ),
           // `active` applied ONCE, HERE, uniformly across every element
@@ -2006,10 +2008,11 @@ const UnknownPath: React.FC<{ layers: DoorLayers; location: string }> = ({ layer
   );
 };
 
-// The namespace's home ("/"): the welcome. It says WHICH namespace this is (never with the port: the port belongs to
-// the surface, and the surface is said on its own line) and where you are being served from; the identity is a page of
-// its own (`/.me`), one link away.
-const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string; origin: string } }> = ({
+// The namespace's home ("/"): the welcome. "Welcome to" goes with a PLACE, so it names the where (the address you came
+// in by, `host[:port]`), never the `.me`: the `.me` is a subject, and who answered here is said once, in the top bar
+// (`me @ where`). It does not change while the `.me` is still being resolved. The identity is a page of its own
+// (`/.me`), one link away.
+const WelcomePage: React.FC<DocumentPageProps & { welcome?: { where: string } }> = ({
   welcome,
   'data-gui-node-id': nodeId = 'GUI.window.layout.content.home',
   'data-gui-component': nodeComponent = 'Welcome',
@@ -2024,15 +2027,10 @@ const WelcomePage: React.FC<DocumentPageProps & { welcome?: { namespace: string;
     </Typography>
     <Typography variant="h4" component="h1" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
       Welcome to{' '}
-      <Box component="span" data-gui-node-id={`${nodeId}.namespace`} sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
-        {welcome?.namespace || ''}
+      <Box component="span" data-gui-node-id={`${nodeId}.where`} sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
+        {welcome?.where || ''}
       </Box>
     </Typography>
-    {welcome?.origin ? (
-      <Typography variant="body2" sx={{ mt: 1.5, opacity: 0.65, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-        served from {welcome.origin}
-      </Typography>
-    ) : null}
     <Typography variant="body2" sx={{ mt: 4 }}>
       <Link to="/.me" data-gui-node-id={`${nodeId}.me`}>Open your .me</Link>
     </Typography>

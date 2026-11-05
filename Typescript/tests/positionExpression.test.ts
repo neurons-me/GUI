@@ -192,4 +192,14 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   assert.equal(cardNamespace({ address: 'cleaker.me', source: 'declared', selected: 'x.test' }).namespace, 'x.test');
 }
 
+// nothing answered: `? @ where`
+{
+  const { unresolvedPosition } = await import('../src/react/positionExpression');
+  assert.equal(unresolvedPosition({ host: 'localhost', protocol: 'http:' }), '? @ localhost');
+  assert.equal(unresolvedPosition({ host: 'localhost:6006', protocol: 'http:' }), '? @ localhost:6006');
+  assert.equal(unresolvedPosition({ host: 'netget.site', protocol: 'https:' }), '? @ netget.site');
+  assert.equal(unresolvedPosition({ host: '192.168.1.5', protocol: 'http:' }), '? @ "http://192.168.1.5"', 'plain http off loopback is news');
+  assert.equal(unresolvedPosition(null), '?');
+}
+
 console.log('positionExpression: ok');

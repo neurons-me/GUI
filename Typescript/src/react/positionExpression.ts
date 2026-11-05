@@ -155,6 +155,15 @@ export function positionExpression(input: {
   return { compact: `${base} @ ${surfaceToken(page, schemeExplains)}`, full, bound: false };
 }
 
+/**
+ * The position when no `.me` has answered yet: `? @ where`. The surface is known (it is the page's own address); the
+ * `.me` is not, and it is not guessed from the address (see shownNamespace). `?` alone when there is no page.
+ */
+export function unresolvedPosition(page: { host: string; protocol: string } | null | undefined): string {
+  const where = page ? surfaceToken(page) : '';
+  return where ? `? @ ${where}` : '?';
+}
+
 /** The compact label (what is drawn). */
 export function positionLabel(input: Parameters<typeof positionExpression>[0]): string {
   return positionExpression(input).compact;

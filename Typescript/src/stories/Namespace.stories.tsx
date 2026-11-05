@@ -14,12 +14,18 @@ import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
 // stays at All.This/Cleaker/.me — same component, same setup, this story
 // duplicates none of that logic, it just gives the root document a front
 // door in the nav that matches its real role.
-setActiveNamespaceRoot('local.cleaker');
+//
+// Resolved as the real page does it, nothing written in by hand: the address is only a draft
+// (namespaceSource "address"), and the `.me` is named only once a monad answers for it. It is asked through this
+// machine's own door (http://localhost, nginx). Until something answers, the top bar says `? @ localhost:6006`.
+// (local.cleaker / local.netget were retired on 2026-10-07.)
+const PAGE_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+setActiveNamespaceRoot(PAGE_HOST);
 
 const Root = () => (
   <Theme>
-    <SeedSessionProvider transportOrigin="http://local.cleaker/apps/netget" sessionBackend="cleaker">
-      <Namespace cleakerEndpoint="http://local.cleaker" netgetMonadOrigin="http://local.netget/apps/netget" />
+    <SeedSessionProvider transportOrigin="http://localhost/apps/netget" sessionBackend="cleaker">
+      <Namespace namespaceSource="address" cleakerEndpoint="http://localhost" netgetMonadOrigin="http://localhost/apps/netget" />
     </SeedSessionProvider>
   </Theme>
 );
