@@ -2,6 +2,7 @@ import React from 'react';
 import type { SxProps, Theme } from '@mui/system';
 import { Box } from '@/gui/Atoms';
 import { useInsets } from '@/gui-internals/Hooks';
+import { CONTENT_GUTTER_PX } from './contentGutter';
 
 export type ContentProps = {
   children?: React.ReactNode;
@@ -21,7 +22,7 @@ const Content: React.FC<ContentProps> = ({ children, sx, disableInsetPadding = f
   const bottomInset = Math.max(0, Number(insets?.bottom ?? 0));
   const leftInset = disableInsetPadding ? 0 : Math.max(0, Number(insets?.left ?? 0));
   const rightInset = disableInsetPadding ? 0 : Math.max(0, Number(insets?.right ?? 0));
-  const contentGutter = 1.618;
+  const contentGutter = CONTENT_GUTTER_PX;
   return (
     <Box
       id="content"

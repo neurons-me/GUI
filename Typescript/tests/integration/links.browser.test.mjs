@@ -28,7 +28,7 @@ const freePort = () => new Promise((resolve, reject) => {
 async function startHarness() {
   const port = await freePort();
   const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
-    cwd: root, env: { ...process.env, DEMO: 'true' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: root, env: { ...process.env, DEMO: 'true', BROWSER: 'none' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const stop = () => { try { child.kill('SIGTERM'); } catch { /* already gone */ } };
   process.on('exit', stop);

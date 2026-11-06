@@ -1,116 +1,228 @@
 // The GUI's own pages, inside the namespace's shell: `/GUI` (what is drawing this page), `/GUI/themes` (the active theme:
-// palette, typography) and `/GUI/layout` (the tree the page declares). They are declared in GUI.document.json under
-// `GUI.window.layout.content.gui`, like every other page, and have addresses: a refresh keeps you there and Back returns.
+// palette, typography) and `/GUI/layout` (the tree the page declares). Declarative: GUI.document.json declares each page
+// (`GUI.window.layout.content.gui…`, component `GuiPage`, its route) AND its content, as child parts with a `component`
+// and `props`. `GuiPage` only draws what its node declares (guiDocumentPartSpecs + renderNode), in that order; the parts
+// are the components registered below (GUI_PAGE_PARTS). Changing what a page shows is changing the tree.
 // The theme settings used to be a dialog opened from the launcher's gear; the gear now comes here (themeSettings.ts),
 // and the dialog stays only for hosts with no router.
 import * as React from 'react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
+import Avatar from '@/gui/Atoms/Avatar/Avatar';
+import { getGuiThemes } from '@/gui/Theme/utils/catalog';
+import { useTheme } from '@mui/material/styles';
+import { fontSizePx, relativeSubtitlePx } from '@/gui/Theme/utils/typeScale';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import ThemeModeToggle from '@/gui/Theme/ToggleMode/ToggleMode';
 import { ThemeInspectorBody, type ThemeInspectorTab } from '@/gui/Theme/Inspector/ThemeInspector';
-import { flattenGuiDocument, GUI_DOCUMENT, type GuiDocument, type GuiDocumentEntry } from '@/runtime/guiDocument';
+import { useAddressAxis } from '@/runtime/addressAxis';
+import { renderNode } from '@/runtime/renderer';
+import { flattenGuiDocument, guiDocumentPartSpecs, GUI_DOCUMENT, type GuiDocument, type GuiDocumentEntry } from '@/runtime/guiDocument';
 
 export const GUI_HOME_ROUTE = '/GUI';
 export const GUI_THEMES_ROUTE = '/GUI/themes';
 export const GUI_THEMES_TYPOGRAPHY_ROUTE = '/GUI/themes/typography';
 export const GUI_LAYOUT_ROUTE = '/GUI/layout';
 
-type GuiPageProps = {
-  'data-gui-node-id'?: string;
-  'data-gui-component'?: string;
-  /** The document this page belongs to (the GUI's plus the app's); the layout page draws it. */
-  guiDocument?: GuiDocument;
-};
-
 declare const __GUI_VERSION__: string | undefined;
 const GUI_VERSION = typeof __GUI_VERSION__ === 'string' ? __GUI_VERSION__ : '';
 
-// The same air under the top bar as /users (~21px to the first line), not a hero's.
-const pageSx = { px: { xs: 3, sm: 6 }, pt: 2.5, pb: { xs: 5, sm: 8 }, maxWidth: 820, mx: 'auto', boxSizing: 'border-box', width: '100%' } as const;
-const monoSx = { fontFamily: 'monospace' } as const;
+/** What a part may need from the page it is drawn in: the document (the whole tree, the GUI's plus the app's). */
+const GuiPageContext = React.createContext<{ doc: GuiDocument }>({ doc: GUI_DOCUMENT });
 
-/** `GUI / Themes`: where this page sits under `/GUI`, each step a link but the last. */
-function Trail({ steps, nodeId }: { steps: Array<{ label: string; to?: string }>; nodeId: string }) {
+type PartProps = { 'data-gui-node-id'?: string; children?: React.ReactNode };
+
+// ── the page ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// On the address axis (addressAxis.ts): the page starts on the same left line as the address in the top bar, as its
+// continuation, and its first line sits close under the bar. The width is capped for reading, from the left.
+// The heading line has lineHeight 1, so its glyph box starts ADDRESS_PAGE_TOP_PX under the bar; its ink (the title's
+// capitals) ~2px lower. Both are measured by addressAxis.browser.test.mjs.
+function usePageSx() {
+  const axis = useAddressAxis();
+  return React.useMemo(() => ({
+    pl: `${axis.pagePl}px`,
+    pr: 3,
+    pt: `${axis.pagePt()}px`,
+    pb: { xs: 5, sm: 8 },
+    maxWidth: 820,
+    mx: 0,
+    boxSizing: 'border-box',
+    width: '100%',
+  }), [axis]);
+}
+
+/**
+ * A page of the GUI: draws the parts its document node declares, in order. `partsOf` draws another node's parts (the
+ * same page served on a second route: `/GUI/themes/typography` is `/GUI/themes` with its other tab open).
+ */
+export function GuiPage({ guiDocument, partsOf, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.gui', 'data-gui-component': component = 'GuiPage' }: {
+  guiDocument?: GuiDocument;
+  partsOf?: string;
+  'data-gui-node-id'?: string;
+  'data-gui-component'?: string;
+}) {
+  const doc = guiDocument ?? GUI_DOCUMENT;
+  const specs = React.useMemo(() => guiDocumentPartSpecs(partsOf || nodeId, doc), [partsOf, nodeId, doc]);
+  const context = React.useMemo(() => ({ doc }), [doc]);
   return (
-    <Typography variant="overline" data-gui-node-id={`${nodeId}.trail`} sx={{ opacity: 0.6, letterSpacing: '0.12em', display: 'block' }}>
-      {steps.map((step, i) => (
-        <React.Fragment key={step.label}>
-          {i > 0 ? ' / ' : ''}
-          {step.to ? (
-            <Box component={RouterLink} to={step.to} sx={{ color: 'inherit' }}>{step.label}</Box>
-          ) : (
-            step.label
-          )}
-        </React.Fragment>
-      ))}
+    <GuiPageContext.Provider value={context}>
+      <Box data-gui-node-id={nodeId} data-gui-component={component} sx={usePageSx()}>
+        {specs.map((spec) => <React.Fragment key={spec.props['data-gui-node-id']}>{renderNode(spec as any, { React, registry: GUI_PAGE_PARTS })}</React.Fragment>)}
+      </Box>
+    </GuiPageContext.Provider>
+  );
+}
+
+// ── the parts ────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const monoSx = { fontFamily: 'monospace' } as const;
+const HEADING_VARIANT = 'h4' as const;
+// Optical, not geometric: the trail's uppercase Roboto (`G`) carries ~1px less side bearing than the address's monospace
+// `?`, so with equal boxes its ink started 1px left of the address's. Measured by the browser test (ink, dpr 1 and 2).
+const TRAIL_INK_SHIFT_PX = 1;
+
+/**
+ * A subtitle that accompanies the heading: its size comes from the title's (typeScale.ts: √(title · body), halfway
+ * between them), so a bigger title gets a bigger subtitle; the secondary text color and a compact, semibold setting make
+ * it another kind of text, as the theme's subtitles are.
+ */
+function HeadingSubtitle({ children, nodeId }: { children: React.ReactNode; nodeId: string }) {
+  const theme = useTheme() as any;
+  const titlePx = fontSizePx(theme?.typography?.[HEADING_VARIANT]?.fontSize) ?? 21;
+  const bodyPx = fontSizePx(theme?.typography?.body1?.fontSize) ?? 16;
+  return (
+    <Typography
+      component="p"
+      data-gui-node-id={`${nodeId}.subtitle`}
+      sx={{
+        m: 0,
+        mt: 0.75,
+        fontFamily: theme?.typography?.subtitle1?.fontFamily,
+        fontSize: `${relativeSubtitlePx(titlePx, bodyPx).toFixed(2)}px`,
+        fontWeight: 600,
+        lineHeight: 1.25,
+        letterSpacing: '-0.015em',
+        color: 'text.secondary',
+      }}
+    >
+      {children}
     </Typography>
   );
 }
 
-function Row({ label, children, nodeId }: { label: string; children: React.ReactNode; nodeId: string }) {
+/**
+ * The page's heading, ONE line: where it sits (`parents`: small, dim, each a link) and its name at title size, on one
+ * baseline -- `GUI / Themes`. `version` puts this.gui's version beside the name; `subtitle` goes under it (`{parts}` is
+ * the number of parts the document declares); `titleStyle: brand` sets the name in the brand's mono and color. Its child
+ * parts (a mode control) sit at the end of the line. `spacing` is the space under it (theme spacing units).
+ */
+function GuiHeading({ title, parents = [], version, subtitle, titleStyle, spacing = 3, children, 'data-gui-node-id': nodeId = 'heading' }: PartProps & {
+  title?: string;
+  parents?: Array<{ label: string; to: string }>;
+  version?: boolean;
+  subtitle?: string;
+  titleStyle?: 'brand';
+  spacing?: number;
+}) {
+  const { doc } = React.useContext(GuiPageContext);
+  const parts = React.useMemo(() => flattenGuiDocument(doc).length, [doc]);
+  const titleSx = titleStyle === 'brand' ? { ...monoSx, color: 'primary.main' } : undefined;
   return (
-    <Box data-gui-node-id={nodeId} sx={{ display: 'flex', gap: 2, alignItems: 'baseline', py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: spacing }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant={HEADING_VARIANT}
+          component="h1"
+          data-gui-node-id={nodeId}
+          sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 1, fontWeight: 600, lineHeight: 1, m: 0, ml: parents.length ? `${TRAIL_INK_SHIFT_PX}px` : 0 }}
+        >
+          {parents.length ? (
+            <Typography component="span" variant="overline" data-gui-node-id={`${nodeId}.trail`} sx={{ opacity: 0.6, letterSpacing: '0.12em', lineHeight: 1, fontWeight: 400 }}>
+              {parents.map((step) => (
+                <React.Fragment key={step.to}>
+                  <Box component={RouterLink} to={step.to} sx={{ color: 'inherit' }}>{step.label}</Box>
+                  {' /'}
+                </React.Fragment>
+              ))}
+            </Typography>
+          ) : null}
+          <Box component="span" data-gui-node-id={`${nodeId}.title`} sx={titleSx}>{title}</Box>
+          {version && GUI_VERSION ? (
+            <Typography component="span" variant="caption" data-gui-node-id={`${nodeId}.version`} sx={{ ...monoSx, color: 'text.secondary', fontWeight: 400, lineHeight: 1 }}>
+              {GUI_VERSION}
+            </Typography>
+          ) : null}
+        </Typography>
+        {subtitle ? <HeadingSubtitle nodeId={nodeId}>{subtitle.replace('{parts}', String(parts))}</HeadingSubtitle> : null}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+/** A labelled row: the label, then its child parts on one line. */
+function GuiRow({ label, children, 'data-gui-node-id': nodeId }: PartProps & { label?: string }) {
+  return (
+    <Box data-gui-node-id={nodeId} sx={{ display: 'flex', gap: 2, alignItems: 'center', py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography variant="body2" sx={{ width: 120, flexShrink: 0, color: 'text.secondary' }}>{label}</Typography>
-      <Box sx={{ minWidth: 0 }}>{children}</Box>
+      <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 1.25 }}>{children}</Box>
     </Box>
   );
 }
 
-/** `/GUI`: what is drawing this page, and the way to each part. */
-export function GuiHome({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.gui', 'data-gui-component': component = 'GuiHome' }: GuiPageProps) {
-  const { themeName, mode } = useThemeContext();
+/** The active theme, its avatar and name, as a link (`to`). */
+function ActiveTheme({ to = GUI_THEMES_ROUTE, 'data-gui-node-id': nodeId }: PartProps & { to?: string }) {
+  const { themeId, themeName } = useThemeContext();
+  const theme = React.useMemo(() => getGuiThemes().find((t) => t.themeId === themeId), [themeId]);
   return (
-    <Box data-gui-node-id={nodeId} data-gui-component={component} sx={pageSx}>
-      <Trail steps={[{ label: 'GUI' }]} nodeId={nodeId} />
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 3 }}>
-        <Box component="span" sx={{ ...monoSx, color: 'primary.main' }}>.GUI</Box>
+    <Box
+      component={RouterLink}
+      to={to}
+      data-gui-node-id={nodeId}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, color: 'inherit', textDecoration: 'none', '&:hover .gui-theme-name': { textDecoration: 'underline' } }}
+    >
+      {theme?.badgeUrl ? (
+        <Avatar src={theme.badgeUrl} alt={themeName} sx={{ width: 24, height: 24 }} />
+      ) : (
+        <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>{themeName?.[0] ?? 'T'}</Avatar>
+      )}
+      <Typography variant="body2">
+        <Box component="span" className="gui-theme-name" sx={{ color: 'primary.main' }}>{themeName || 'Theme'}</Box>
       </Typography>
-      {GUI_VERSION ? (
-        <Row label="this.gui" nodeId={`${nodeId}.version`}>
-          <Typography variant="body2" sx={monoSx}>{GUI_VERSION}</Typography>
-        </Row>
-      ) : null}
-      <Row label="Theme" nodeId={`${nodeId}.theme`}>
-        <Typography variant="body2">
-          <Box component={RouterLink} to={GUI_THEMES_ROUTE} sx={{ color: 'primary.main' }}>{themeName || 'Theme'}</Box>
-          <Box component="span" sx={{ color: 'text.secondary' }}> · {mode}</Box>
-        </Typography>
-      </Row>
-      <Row label="Typography" nodeId={`${nodeId}.typography`}>
-        <Typography variant="body2">
-          <Box component={RouterLink} to={GUI_THEMES_TYPOGRAPHY_ROUTE} sx={{ color: 'primary.main' }}>the active theme's type scale</Box>
-        </Typography>
-      </Row>
-      <Row label="Layout" nodeId={`${nodeId}.layout`}>
-        <Typography variant="body2">
-          <Box component={RouterLink} to={GUI_LAYOUT_ROUTE} sx={{ color: 'primary.main' }}>the tree this page declares</Box>
-        </Typography>
-      </Row>
     </Box>
   );
 }
 
-/** `/GUI/themes` and `/GUI/themes/typography`: the active theme. The tab is part of the address. */
-export function GuiThemes({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.gui.themes', 'data-gui-component': component = 'GuiThemes' }: GuiPageProps) {
+/** Light or dark, as the theme's own control (its icon is the mode), at the end of the line it is in. */
+function ThemeMode({ 'data-gui-node-id': nodeId }: PartProps) {
+  return (
+    <Box data-gui-node-id={nodeId} sx={{ ml: 'auto', display: 'flex' }}>
+      <ThemeModeToggle variant="minimal" iconSize="small" />
+    </Box>
+  );
+}
+
+/** A link to a route, with its text. */
+function RouteLink({ to = '/', text, 'data-gui-node-id': nodeId }: PartProps & { to?: string; text?: string }) {
+  return (
+    <Typography variant="body2" data-gui-node-id={nodeId}>
+      <Box component={RouterLink} to={to} sx={{ color: 'primary.main' }}>{text ?? to}</Box>
+    </Typography>
+  );
+}
+
+/** The active theme's strip, palette and typography; the open tab is part of the address (`routes`). */
+function ThemeInspectorPanel({ routes = { palette: GUI_THEMES_ROUTE, typography: GUI_THEMES_TYPOGRAPHY_ROUTE }, 'data-gui-node-id': nodeId }: PartProps & {
+  routes?: { palette: string; typography: string };
+}) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const tab: ThemeInspectorTab = pathname.replace(/\/+$/, '').endsWith('/typography') ? 'typography' : 'palette';
+  const tab: ThemeInspectorTab = pathname.replace(/\/+$/, '') === routes.typography.replace(/\/+$/, '') ? 'typography' : 'palette';
   return (
-    <Box data-gui-node-id={nodeId} data-gui-component={component} sx={pageSx}>
-      <Trail steps={[{ label: 'GUI', to: GUI_HOME_ROUTE }, { label: 'Themes' }]} nodeId={nodeId} />
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600, flex: 1 }}>Themes</Typography>
-        <ThemeModeToggle variant="minimal" iconSize="small" />
-      </Box>
-      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-        <ThemeInspectorBody
-          tab={tab}
-          onTab={(next) => navigate(next === 'typography' ? GUI_THEMES_TYPOGRAPHY_ROUTE : GUI_THEMES_ROUTE)}
-          nodeId={nodeId}
-        />
-      </Box>
+    <Box data-gui-node-id={nodeId} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+      <ThemeInspectorBody tab={tab} onTab={(next) => navigate(routes[next])} nodeId={nodeId} />
     </Box>
   );
 }
@@ -141,24 +253,28 @@ function TreeNode({ entry, byId, depth }: { entry: GuiDocumentEntry; byId: Map<s
 }
 
 /**
- * `/GUI/layout`: the tree the page declares (GUI.document.json plus what the app adds), every part with its name, the
- * component that implements it and its route. The same ids the Semantic Inspector reads; nothing is drawn here that the
- * document does not say.
+ * The tree the page declares (GUI.document.json plus what the app adds), every part with its name, the component that
+ * implements it and its route. The same ids the Semantic Inspector reads; nothing is drawn that the document does not say.
  */
-export function GuiLayout({ guiDocument, 'data-gui-node-id': nodeId = 'GUI.window.layout.content.gui.layout', 'data-gui-component': component = 'GuiLayout' }: GuiPageProps) {
-  const entries = React.useMemo(() => flattenGuiDocument(guiDocument ?? GUI_DOCUMENT), [guiDocument]);
+function DocumentTree({ 'data-gui-node-id': nodeId }: PartProps) {
+  const { doc } = React.useContext(GuiPageContext);
+  const entries = React.useMemo(() => flattenGuiDocument(doc), [doc]);
   const byId = React.useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
   const roots = entries.filter((e) => !e.parentId);
   return (
-    <Box data-gui-node-id={nodeId} data-gui-component={component} sx={pageSx}>
-      <Trail steps={[{ label: 'GUI', to: GUI_HOME_ROUTE }, { label: 'Layout' }]} nodeId={nodeId} />
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 1 }}>Layout</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-        {entries.length} parts declared. Bold: a part with its own component.
-      </Typography>
-      <Box component="ul" data-gui-node-id={`${nodeId}.tree`} sx={{ m: 0, p: 0 }}>
-        {roots.map((root) => <TreeNode key={root.id} entry={root} byId={byId} depth={0} />)}
-      </Box>
+    <Box component="ul" data-gui-node-id={nodeId} sx={{ m: 0, p: 0 }}>
+      {roots.map((root) => <TreeNode key={root.id} entry={root} byId={byId} depth={0} />)}
     </Box>
   );
 }
+
+/** The components the GUI pages' parts may name (`component` in the document), by that name. */
+export const GUI_PAGE_PARTS: Record<string, React.ComponentType<any>> = {
+  GuiHeading,
+  GuiRow,
+  ActiveTheme,
+  ThemeMode,
+  RouteLink,
+  ThemeInspectorPanel,
+  DocumentTree,
+};

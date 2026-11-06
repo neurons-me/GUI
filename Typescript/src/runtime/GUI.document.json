@@ -359,48 +359,183 @@
                   },
                   "gui": {
                     "label": "GUI",
-                    "component": "GuiHome",
+                    "component": "GuiPage",
                     "route": "/GUI",
-                    "note": "What is drawing this page: this.gui, the active theme, the layout. Each part has its own page under /GUI.",
+                    "note": "What is drawing this page: this.gui, the active theme, the layout. Its content is the parts below, drawn in this order.",
                     "children": {
+                      "heading": {
+                        "label": "Heading",
+                        "component": "GuiHeading",
+                        "props": {
+                          "title": ".GUI",
+                          "titleStyle": "brand",
+                          "version": true
+                        },
+                        "children": {
+                          "title": {
+                            "label": "Title"
+                          },
+                          "version": {
+                            "label": "Version",
+                            "note": "this.gui's version, beside the name."
+                          }
+                        }
+                      },
+                      "theme": {
+                        "label": "Theme",
+                        "component": "GuiRow",
+                        "props": {
+                          "label": "Theme"
+                        },
+                        "children": {
+                          "active": {
+                            "label": "Active theme",
+                            "component": "ActiveTheme",
+                            "props": {
+                              "to": "/GUI/themes"
+                            },
+                            "note": "The active theme's avatar and name: the way to its page."
+                          },
+                          "mode": {
+                            "label": "Mode",
+                            "component": "ThemeMode",
+                            "note": "Light or dark, as the theme's own control."
+                          }
+                        }
+                      },
+                      "tree": {
+                        "label": "Layout",
+                        "component": "GuiRow",
+                        "props": {
+                          "label": "Layout"
+                        },
+                        "children": {
+                          "link": {
+                            "label": "Link",
+                            "component": "RouteLink",
+                            "props": {
+                              "to": "/GUI/layout",
+                              "text": "the tree this page declares"
+                            }
+                          }
+                        }
+                      },
                       "themes": {
                         "label": "Themes",
-                        "component": "GuiThemes",
+                        "component": "GuiPage",
                         "route": "/GUI/themes",
                         "note": "The active theme: the theme strip, its palette and its typography. Used to be a dialog opened from the theme launcher's gear.",
                         "children": {
-                          "strip": {
-                            "label": "Theme strip",
-                            "note": "Every theme; click one to switch."
-                          },
-                          "tabs": {
-                            "label": "Tabs",
+                          "heading": {
+                            "label": "Heading",
+                            "component": "GuiHeading",
+                            "props": {
+                              "title": "Themes",
+                              "parents": [
+                                {
+                                  "label": "GUI",
+                                  "to": "/GUI"
+                                }
+                              ],
+                              "spacing": 2
+                            },
                             "children": {
-                              "palette": {
-                                "label": "Palette"
+                              "trail": {
+                                "label": "Trail",
+                                "note": "Where the page sits under /GUI, each step a link."
                               },
-                              "typography": {
-                                "label": "Typography"
+                              "title": {
+                                "label": "Title"
+                              },
+                              "mode": {
+                                "label": "Mode",
+                                "component": "ThemeMode"
                               }
                             }
                           },
-                          "palette": {
-                            "label": "Palette",
-                            "note": "Each color of the theme with its shades and value."
+                          "inspector": {
+                            "label": "Theme",
+                            "component": "ThemeInspectorPanel",
+                            "props": {
+                              "routes": {
+                                "palette": "/GUI/themes",
+                                "typography": "/GUI/themes/typography"
+                              }
+                            },
+                            "children": {
+                              "strip": {
+                                "label": "Theme strip",
+                                "note": "Every theme; click one to switch."
+                              },
+                              "tabs": {
+                                "label": "Tabs",
+                                "children": {
+                                  "palette": {
+                                    "label": "Palette"
+                                  },
+                                  "typography": {
+                                    "label": "Typography"
+                                  }
+                                }
+                              },
+                              "palette": {
+                                "label": "Palette",
+                                "note": "Each color of the theme with its shades and value."
+                              },
+                              "typography": {
+                                "label": "Typography",
+                                "note": "The active theme's type scale."
+                              }
+                            }
                           },
                           "typography": {
                             "label": "Typography",
-                            "component": "GuiThemes",
+                            "component": "GuiPage",
                             "route": "/GUI/themes/typography",
-                            "note": "The active theme's type scale."
+                            "props": {
+                              "partsOf": "GUI.window.layout.content.gui.themes"
+                            },
+                            "note": "The same page with the Typography tab open."
                           }
                         }
                       },
                       "layout": {
                         "label": "Layout",
-                        "component": "GuiLayout",
+                        "component": "GuiPage",
                         "route": "/GUI/layout",
-                        "note": "The tree this page declares (this document plus what the app adds)."
+                        "note": "The tree this page declares (this document plus what the app adds).",
+                        "children": {
+                          "heading": {
+                            "label": "Heading",
+                            "component": "GuiHeading",
+                            "props": {
+                              "title": "Layout",
+                              "parents": [
+                                {
+                                  "label": "GUI",
+                                  "to": "/GUI"
+                                }
+                              ],
+                              "subtitle": "{parts} parts declared. Bold: a part with its own component."
+                            },
+                            "children": {
+                              "trail": {
+                                "label": "Trail",
+                                "note": "Where the page sits under /GUI, each step a link."
+                              },
+                              "title": {
+                                "label": "Title"
+                              },
+                              "subtitle": {
+                                "label": "Subtitle"
+                              }
+                            }
+                          },
+                          "tree": {
+                            "label": "Tree",
+                            "component": "DocumentTree"
+                          }
+                        }
                       }
                     }
                   }

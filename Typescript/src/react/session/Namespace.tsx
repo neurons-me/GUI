@@ -68,8 +68,9 @@ import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
-import { GuiHome, GuiThemes, GuiLayout, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
+import { GuiPage, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
 import { ThemeSettingsContext } from '@/runtime/themeSettings';
+import { useAddressAxis, TOP_BAR_TOOLBAR_PL_PX } from '@/runtime/addressAxis';
 
 interface DirectoryUser {
   username: string;
@@ -1473,6 +1474,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const navigate = useNavigate();
   // The theme launcher's gear opens the theme settings as a page of this shell, not a dialog.
   const openThemeSettings = useCallback(() => navigate(GUI_THEMES_ROUTE), [navigate]);
+  // Where the address starts in the top bar: the axis the page under it starts on too (addressAxis.ts).
+  const axis = useAddressAxis();
   // The identity (the QR, the sign-in/register/recover card) is a PAGE of the namespace, at `/.me`: it has an address,
   // survives a refresh, and Back returns to where you were. It used to open as a dialog over whatever page you were on;
   // that is gone. `/` stays the namespace's home.
@@ -1910,7 +1913,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
         // the top bar's first pixels; the location label starts past it, with a gap, instead of under it.
-        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: 0.25 }, elementsLeftSx: { pl: 1 } }}
+        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: `${TOP_BAR_TOOLBAR_PL_PX}px` }, elementsLeftSx: { pl: `${axis.addressPl}px` } }}
         LeftBar={{
           brand: positionBrand,
           // Shown while the bar is open: where you are, written out, and the way to the identity page.
@@ -2059,9 +2062,7 @@ const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   Netget: CleakerNetgetView,
   Claim: CleakerNetgetClaimView,
   Sign: CleakerNetgetAdminSignView,
-  GuiHome,
-  GuiThemes,
-  GuiLayout,
+  GuiPage,
 };
 
 // A document `route` ("/" or "/users") as react-router wants it: the index

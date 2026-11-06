@@ -54,6 +54,12 @@ export type GuiDocumentNode = {
    * namespace may override by declaring the same id) or `end` (after). Defaults to `default`.
    */
   placement?: 'start' | 'default' | 'end';
+  /**
+   * What the part's component is given, declared with the part (JSON values only: text, numbers, routes, flags). A
+   * page's content is its child parts with a `component` and their `props`, drawn in the order declared
+   * (guiDocumentPartSpecs): changing what a page shows is changing this tree, not the page's code.
+   */
+  props?: Record<string, unknown>;
   children?: Record<string, GuiDocumentNode>;
 };
 
@@ -74,6 +80,7 @@ export type GuiDocumentEntry = {
   icon?: string;
   requires?: GuiRequirement;
   placement?: 'start' | 'default' | 'end';
+  props?: Record<string, unknown>;
   /** Ids of the parts the document declares directly under this one. */
   childIds: string[];
 };
@@ -100,6 +107,7 @@ export function flattenGuiDocument(doc: GuiDocument = GUI_DOCUMENT): GuiDocument
       icon: node.icon,
       requires: node.requires,
       placement: node.placement,
+      props: node.props,
       childIds: childKeys.map((k) => `${id}.${k}`),
     });
     childKeys.forEach((k) => walk(k, node.children![k], id));
@@ -145,13 +153,38 @@ export function renderGuiDocumentPage(
   return renderNode(
     {
       type: entry.component,
-      props: { ...(options.props ?? {}), 'data-gui-node-id': entry.id },
+      // the page's own declared props (e.g. `partsOf`), then what the shell hands every page
+      props: { ...(entry.props ?? {}), ...(options.props ?? {}), 'data-gui-node-id': entry.id },
       provenance: { source: 'document', documentPath: entry.id, note: entry.note },
     },
     { React: options.React, registry: options.registry }
   );
 }
 
+
+/**
+ * A page's content, as the document declares it: the parts under `pageId` that have a `component` and are not pages of
+ * their own (no `route`), in the order declared, each a spec node `{ type: component, props, children }` with its
+ * document path as `data-gui-node-id`; a part's own drawn parts become its children. A part with no `component` is a
+ * name for something its parent draws (it stays in the tree, it is not drawn here). Render with renderNode.
+ */
+export function guiDocumentPartSpecs(pageId: string, doc: GuiDocument = GUI_DOCUMENT): Array<Record<string, any>> {
+  const entries = flattenGuiDocument(doc);
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const specOf = (entry: GuiDocumentEntry): Record<string, any> => {
+    const kids = drawnChildren(entry);
+    return {
+      type: entry.component,
+      props: { ...(entry.props ?? {}), 'data-gui-node-id': entry.id },
+      provenance: { source: 'document', documentPath: entry.id, note: entry.note },
+      ...(kids.length ? { children: kids.map(specOf) } : {}),
+    };
+  };
+  const drawnChildren = (entry: GuiDocumentEntry) =>
+    entry.childIds.map((id) => byId.get(id)).filter((e): e is GuiDocumentEntry => Boolean(e && e.component && !e.route));
+  const page = byId.get(pageId);
+  return page ? drawnChildren(page).map(specOf) : [];
+}
 
 /**
  * Adds the parts of `extension` to `base` without changing `base`: a part in both keeps the base's own fields
