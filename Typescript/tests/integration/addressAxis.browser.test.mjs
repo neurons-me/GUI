@@ -26,10 +26,14 @@ const ALIGN_TOLERANCE_PX = 0.5;
 // loaded). GuiPages.tsx's optical compensation for the trail was measured in it too.
 const INK_APPROVED_FACE = {
   name: 'Helvetica (macOS)',
-  // what the theme's `Roboto, sans-serif` draws at the heading's weight and size, measured where the spacing was tuned
+  // what the theme's `Roboto, sans-serif` draws at the heading's weight and size, measured where the spacing was tuned.
+  // Width alone is not enough: Liberation Sans (Linux's stand-in) is built with Helvetica's widths; its ascent differs.
   font: '600 21px Roboto, sans-serif',
-  sample: 'GUI / Layout ? @ localhost mmmmmwwwwiiiil',
-  width: 460.37,
+  sample: 'Layout Themes GUI',
+  width: 197.203125,
+  ascent: 15.50390625,
+  fontAscent: 19,
+  fontDescent: 5,
 };
 const TRAIL_INK_SHIFT_PX = 1;
 const TOP_TOLERANCE_PX = 0.5;
@@ -106,14 +110,17 @@ async function measure(browser, harness, dpr) {
   // The ink means something only in the font the spacing was approved with. The theme asks for `Roboto, sans-serif`
   // and loads no Roboto, so each machine draws its own sans-serif: Helvetica on the Mac where this was tuned
   // (2026-11-05), another face on CI's Linux. With another face the side bearings and the ascent differ, so there the
-  // boxes (pure CSS, the same everywhere) are checked instead. Recognised by a fingerprint (the width of a sample in the
-  // approved face), not by name: a Linux machine answers to "Helvetica" with another face, and document.fonts.check
+  // boxes (pure CSS, the same everywhere) are checked instead. Recognised by a fingerprint (width and vertical metrics of
+  // a sample in the approved face), not by name: a Linux machine answers to "Helvetica" with another face, and document.fonts.check
   // answers true for a font the machine lacks.
-  const themeFont = await page.evaluate((fingerprint) => {
+  const face = await page.evaluate((fingerprint) => {
     const ctx = document.createElement('canvas').getContext('2d');
     ctx.font = fingerprint.font;
-    return Math.abs(ctx.measureText(fingerprint.sample).width - fingerprint.width) < 0.05;
+    const m = ctx.measureText(fingerprint.sample);
+    return { width: m.width, ascent: m.actualBoundingBoxAscent, fontAscent: m.fontBoundingBoxAscent, fontDescent: m.fontBoundingBoxDescent };
   }, INK_APPROVED_FACE);
+  const themeFont = ['width', 'ascent', 'fontAscent', 'fontDescent'].every((k) => Math.abs(face[k] - INK_APPROVED_FACE[k]) < 0.05);
+  if (!themeFont) console.log(`      face drawn here: ${JSON.stringify(face)}`);
   const barBottom = await page.evaluate(() => document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top"]').getBoundingClientRect().bottom);
   const address = await textBox(page, '[data-gui-node-id="GUI.window.layout.bars.top.namespace"]');
   const trail = await textBox(page, '[data-gui-node-id="GUI.window.layout.content.gui.layout.heading.trail"]');
