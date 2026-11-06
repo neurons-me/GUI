@@ -1,6 +1,6 @@
-import React, { forwardRef, Suspense } from 'react';
+import { forwardRef } from 'react';
 import { Link as MuiLink, LinkProps as MuiLinkProps } from '@mui/material';
-import { useInRouterContext } from 'react-router-dom';
+import { Link as RouterLink, useInRouterContext } from 'react-router-dom';
 import type { LinkProps as RouterLinkProps } from 'react-router-dom';
 
 type GuiLinkProps = MuiLinkProps & { to?: RouterLinkProps['to'] };
@@ -19,17 +19,11 @@ const Link = forwardRef<HTMLAnchorElement, GuiLinkProps>(function Link(props, re
     return <MuiLink href={href} ref={ref} {...rest} />;
   }
 
-  // ✅ Lazy load RouterLink only inside router context
-  const RouterLink = React.lazy(async () => {
-    const mod = await import('react-router-dom');
-    return { default: mod.Link };
-  });
-
-  return (
-    <Suspense fallback={<MuiLink ref={ref} {...rest} />}>
-      <MuiLink component={RouterLink} to={to} ref={ref} {...rest} />
-    </Suspense>
-  );
+  // RouterLink is imported statically (this file already imports react-router-dom). It used to be a React.lazy created
+  // during render: a NEW component on every render, so it suspended again each time. Under React Router 7 every
+  // navigation is a transition, and a transition that keeps suspending never commits: with one of these on the page,
+  // no navigation in the whole app ever rendered its new route (the URL changed, the page did not).
+  return <MuiLink component={RouterLink} to={to} ref={ref} {...rest} />;
 });
 
 export default Link;
