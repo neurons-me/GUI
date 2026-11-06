@@ -156,12 +156,13 @@ export function positionExpression(input: {
 }
 
 /**
- * The position when no `.me` has answered yet: `? @ where`. The surface is known (it is the page's own address); the
- * `.me` is not, and it is not guessed from the address (see shownNamespace). `?` alone when there is no page.
+ * The position when no `.me` has answered: only `where`, the page's own address (`localhost`). `me @ where` appears once
+ * a `.me` answers; until then nothing stands in for it -- the `.me` is not guessed from the address (see
+ * shownNamespace), and no placeholder is shown. `?` only when there is no page at all.
  */
 export function unresolvedPosition(page: { host: string; protocol: string } | null | undefined): string {
   const where = page ? surfaceToken(page) : '';
-  return where ? `? @ ${where}` : '?';
+  return where || '?';
 }
 
 /** The compact label (what is drawn). */

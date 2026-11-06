@@ -1,6 +1,6 @@
 // The address axis (src/runtime/addressAxis.ts), checked by the INK in a real browser (Playwright/Chromium).
 //
-// The address in the top bar (`? @ <host>`) and the first lines of a GUI page under it start on one vertical line, and
+// The address in the top bar (`<host>` while no .me answers, `me @ <host>` once one does) and the first lines of a GUI page under it start on one vertical line, and
 // the page's first line sits ADDRESS_PAGE_TOP_PX under the top bar. Boxes can agree while the letters do not (each
 // glyph carries its own side bearing, each font its own ascent), so this measures the drawn pixels: a screenshot of each
 // line, scanned for the first column (and row) with ink. At device pixel ratio 1 and 2.
@@ -105,7 +105,8 @@ async function measure(browser, harness, dpr) {
   const page = await context.newPage();
   await page.goto(`${harness.origin}/addressAxis.html?path=/GUI/layout`);
   await page.waitForSelector('[data-gui-node-id="GUI.window.layout.content.gui.layout.heading"]', { timeout: 15000 });
-  await page.waitForFunction(() => /\? @ /.test(document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.namespace"]')?.textContent || ''), null, { timeout: 15000 });
+  // settled: the address shows the page's own host (nothing answers for a .me here), not the transient "resolviendo…"
+  await page.waitForFunction(() => (document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.namespace"]')?.textContent || '').includes(location.host), null, { timeout: 15000 });
   await page.waitForTimeout(400);
   // The ink means something only in the font the spacing was approved with. The theme asks for `Roboto, sans-serif`
   // and loads no Roboto, so each machine draws its own sans-serif: Helvetica on the Mac where this was tuned

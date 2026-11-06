@@ -1519,7 +1519,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   });
   // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
   const positionExpression = positionComposed.compact;
-  // nothing answered: `? @ where` (the surface is known, the `.me` is not)
+  // nothing answered: only `where` (the surface is known; no `.me` is shown until one answers)
   const positionUnresolved = unresolvedPosition(typeof window !== 'undefined' ? window.location : null);
   const positionExpressionFull = positionComposed.full;
   // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
