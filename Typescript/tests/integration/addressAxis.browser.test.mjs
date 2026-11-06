@@ -22,6 +22,10 @@ const PAGE_TOP_PX = 13; // the glyph box (addressAxis.ts ADDRESS_PAGE_TOP_PX)
 // 15px. Kept as measured when the spacing was approved (2026-11-05); a font or size change moves it, and this says so.
 const PAGE_TOP_INK_PX = 15;
 const ALIGN_TOLERANCE_PX = 0.5;
+// The face the ink values below were approved in (what macOS draws for the theme's `Roboto, sans-serif`: no Roboto is
+// loaded). GuiPages.tsx's optical compensation for the trail was measured in it too.
+const INK_APPROVED_FACE = 'Helvetica';
+const TRAIL_INK_SHIFT_PX = 1;
 const TOP_TOLERANCE_PX = 0.5;
 const MEASURE_ONLY = process.argv.includes('--measure');
 
@@ -93,6 +97,19 @@ async function measure(browser, harness, dpr) {
   await page.waitForSelector('[data-gui-node-id="GUI.window.layout.content.gui.layout.heading"]', { timeout: 15000 });
   await page.waitForFunction(() => /\? @ /.test(document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top.namespace"]')?.textContent || ''), null, { timeout: 15000 });
   await page.waitForTimeout(400);
+  // The ink means something only in the font the spacing was approved with. The theme asks for `Roboto, sans-serif`
+  // and loads no Roboto, so each machine draws its own sans-serif: Helvetica on the Mac where this was tuned
+  // (2026-11-05), another face on CI's Linux. With another face the side bearings and the ascent differ, so there the
+  // boxes (pure CSS, the same everywhere) are checked instead. Measured, not asked: document.fonts.check answers true
+  // when no @font-face has to load, even for a font the machine lacks.
+  const themeFont = await page.evaluate((approved) => {
+    const ctx = document.createElement('canvas').getContext('2d');
+    const sample = 'GUI / Layout ? @ localhost mmmmmwwwwiiiil';
+    const width = (font) => { ctx.font = font; return ctx.measureText(sample).width; };
+    const has = (face) => ['monospace', 'serif'].every((fb) => Math.abs(width(`600 21px "${face}", ${fb}`) - width(`600 21px ${fb}`)) > 0.5);
+    // the face drawn for `Roboto, sans-serif` is the approved one when Roboto is absent and sans-serif IS the approved face
+    return !has('Roboto') && has(approved) && Math.abs(width('600 21px sans-serif') - width(`600 21px "${approved}", monospace`)) < 0.01;
+  }, INK_APPROVED_FACE);
   const barBottom = await page.evaluate(() => document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top"]').getBoundingClientRect().bottom);
   const address = await textBox(page, '[data-gui-node-id="GUI.window.layout.bars.top.namespace"]');
   const trail = await textBox(page, '[data-gui-node-id="GUI.window.layout.content.gui.layout.heading.trail"]');
@@ -106,7 +123,7 @@ async function measure(browser, harness, dpr) {
     heading: await inkEdges(page, { x: heading.left - 6, y: Math.max(0, heading.top - 6), width: heading.right - heading.left + 6, height: heading.bottom - heading.top + 8 }, dpr),
   };
   await context.close();
-  return { barBottom, boxes: { address, trail, title, heading }, ink };
+  return { barBottom, boxes: { address, trail, title, heading }, ink, themeFont };
 }
 
 async function main() {
@@ -120,16 +137,24 @@ async function main() {
       console.log(`dpr ${dpr}: ink left  address ${f(m.ink.address.left)}  trail ${f(m.ink.trail.left)}  title ${f(m.ink.title.left)}   |  box left  address ${f(m.boxes.address.left)}  trail ${f(m.boxes.trail.left)}  title ${f(m.boxes.title.left)}`);
       console.log(`dpr ${dpr}: heading ink top ${f(m.ink.heading.top)}  box top ${f(m.boxes.heading.top)}  bar bottom ${f(m.barBottom)}  -> ink air ${f(m.ink.heading.top - m.barBottom)}  box air ${f(m.boxes.heading.top - m.barBottom)}`);
       if (MEASURE_ONLY) continue;
-      const dAT = Math.abs(m.ink.address.left - m.ink.trail.left);
-      check(`dpr ${dpr}: the page's first line starts on the address's line (ink)`, dAT <= ALIGN_TOLERANCE_PX, `|address - trail| = ${dAT.toFixed(2)}px (<= ${ALIGN_TOLERANCE_PX})`);
       const air = m.boxes.heading.top - m.barBottom;
-      const inkAir = m.ink.heading.top - m.barBottom;
-      // ink is found row by row: it is known to a device pixel, so half of one is added to what it may stray
-      const inkTolerance = TOP_TOLERANCE_PX + 0.5 / dpr;
       check(`dpr ${dpr}: the heading's glyph box sits ${PAGE_TOP_PX}px under the top bar`, Math.abs(air - PAGE_TOP_PX) <= TOP_TOLERANCE_PX, `${air.toFixed(2)}px`);
-      check(`dpr ${dpr}: its ink sits ${PAGE_TOP_INK_PX}px under the top bar`, Math.abs(inkAir - PAGE_TOP_INK_PX) <= inkTolerance, `${inkAir.toFixed(2)}px (± ${inkTolerance})`);
       const sameLine = Math.abs((m.boxes.trail.bottom + m.boxes.trail.top) / 2 - (m.boxes.title.bottom + m.boxes.title.top) / 2) < 12;
-      check(`dpr ${dpr}: the trail and the title are one line`, sameLine && m.ink.title.left > m.ink.trail.left, `trail ${m.boxes.trail.top.toFixed(1)}-${m.boxes.trail.bottom.toFixed(1)}, title ${m.boxes.title.top.toFixed(1)}-${m.boxes.title.bottom.toFixed(1)}`);
+      check(`dpr ${dpr}: the trail and the title are one line`, sameLine && m.boxes.title.left > m.boxes.trail.left, `trail ${m.boxes.trail.top.toFixed(1)}-${m.boxes.trail.bottom.toFixed(1)}, title ${m.boxes.title.top.toFixed(1)}-${m.boxes.title.bottom.toFixed(1)}`);
+      if (m.themeFont) {
+        const dAT = Math.abs(m.ink.address.left - m.ink.trail.left);
+        check(`dpr ${dpr}: the page's first line starts on the address's line (ink)`, dAT <= ALIGN_TOLERANCE_PX, `|address - trail| = ${dAT.toFixed(2)}px (<= ${ALIGN_TOLERANCE_PX})`);
+        const inkAir = m.ink.heading.top - m.barBottom;
+        // ink is found row by row: it is known to a device pixel, so half of one is added to what it may stray
+        const inkTolerance = TOP_TOLERANCE_PX + 0.5 / dpr;
+        check(`dpr ${dpr}: its ink sits ${PAGE_TOP_INK_PX}px under the top bar`, Math.abs(inkAir - PAGE_TOP_INK_PX) <= inkTolerance, `${inkAir.toFixed(2)}px (± ${inkTolerance})`);
+      } else {
+        // In another face, the boxes: the trail's box sits TRAIL_INK_SHIFT_PX right of the address's (the optical
+        // compensation measured in the approved face), so the axis itself is checked through them.
+        const dBox = Math.abs(m.boxes.address.left - (m.boxes.trail.left - TRAIL_INK_SHIFT_PX));
+        check(`dpr ${dpr}: the page's first line starts on the address's line (boxes; the approved face is not drawn here)`, dBox <= ALIGN_TOLERANCE_PX, `|address - (trail - ${TRAIL_INK_SHIFT_PX})| = ${dBox.toFixed(2)}px`);
+        console.log(`      dpr ${dpr}: ink not compared: this machine draws another face than ${INK_APPROVED_FACE}`);
+      }
       const onPixel = (x) => Math.abs(x * dpr - Math.round(x * dpr)) < 0.05;
       check(`dpr ${dpr}: the address starts on a device pixel`, onPixel(m.boxes.address.left), `box left ${m.boxes.address.left.toFixed(3)}`);
     }
