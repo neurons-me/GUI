@@ -24,7 +24,13 @@ const PAGE_TOP_INK_PX = 15;
 const ALIGN_TOLERANCE_PX = 0.5;
 // The face the ink values below were approved in (what macOS draws for the theme's `Roboto, sans-serif`: no Roboto is
 // loaded). GuiPages.tsx's optical compensation for the trail was measured in it too.
-const INK_APPROVED_FACE = 'Helvetica';
+const INK_APPROVED_FACE = {
+  name: 'Helvetica (macOS)',
+  // what the theme's `Roboto, sans-serif` draws at the heading's weight and size, measured where the spacing was tuned
+  font: '600 21px Roboto, sans-serif',
+  sample: 'GUI / Layout ? @ localhost mmmmmwwwwiiiil',
+  width: 460.37,
+};
 const TRAIL_INK_SHIFT_PX = 1;
 const TOP_TOLERANCE_PX = 0.5;
 const MEASURE_ONLY = process.argv.includes('--measure');
@@ -100,15 +106,13 @@ async function measure(browser, harness, dpr) {
   // The ink means something only in the font the spacing was approved with. The theme asks for `Roboto, sans-serif`
   // and loads no Roboto, so each machine draws its own sans-serif: Helvetica on the Mac where this was tuned
   // (2026-11-05), another face on CI's Linux. With another face the side bearings and the ascent differ, so there the
-  // boxes (pure CSS, the same everywhere) are checked instead. Measured, not asked: document.fonts.check answers true
-  // when no @font-face has to load, even for a font the machine lacks.
-  const themeFont = await page.evaluate((approved) => {
+  // boxes (pure CSS, the same everywhere) are checked instead. Recognised by a fingerprint (the width of a sample in the
+  // approved face), not by name: a Linux machine answers to "Helvetica" with another face, and document.fonts.check
+  // answers true for a font the machine lacks.
+  const themeFont = await page.evaluate((fingerprint) => {
     const ctx = document.createElement('canvas').getContext('2d');
-    const sample = 'GUI / Layout ? @ localhost mmmmmwwwwiiiil';
-    const width = (font) => { ctx.font = font; return ctx.measureText(sample).width; };
-    const has = (face) => ['monospace', 'serif'].every((fb) => Math.abs(width(`600 21px "${face}", ${fb}`) - width(`600 21px ${fb}`)) > 0.5);
-    // the face drawn for `Roboto, sans-serif` is the approved one when Roboto is absent and sans-serif IS the approved face
-    return !has('Roboto') && has(approved) && Math.abs(width('600 21px sans-serif') - width(`600 21px "${approved}", monospace`)) < 0.01;
+    ctx.font = fingerprint.font;
+    return Math.abs(ctx.measureText(fingerprint.sample).width - fingerprint.width) < 0.05;
   }, INK_APPROVED_FACE);
   const barBottom = await page.evaluate(() => document.querySelector('[data-gui-node-id="GUI.window.layout.bars.top"]').getBoundingClientRect().bottom);
   const address = await textBox(page, '[data-gui-node-id="GUI.window.layout.bars.top.namespace"]');
@@ -153,7 +157,7 @@ async function main() {
         // compensation measured in the approved face), so the axis itself is checked through them.
         const dBox = Math.abs(m.boxes.address.left - (m.boxes.trail.left - TRAIL_INK_SHIFT_PX));
         check(`dpr ${dpr}: the page's first line starts on the address's line (boxes; the approved face is not drawn here)`, dBox <= ALIGN_TOLERANCE_PX, `|address - (trail - ${TRAIL_INK_SHIFT_PX})| = ${dBox.toFixed(2)}px`);
-        console.log(`      dpr ${dpr}: ink not compared: this machine draws another face than ${INK_APPROVED_FACE}`);
+        console.log(`      dpr ${dpr}: ink not compared: this machine draws another face than ${INK_APPROVED_FACE.name}`);
       }
       const onPixel = (x) => Math.abs(x * dpr - Math.round(x * dpr)) < 0.05;
       check(`dpr ${dpr}: the address starts on a device pixel`, onPixel(m.boxes.address.left), `box left ${m.boxes.address.left.toFixed(3)}`);
