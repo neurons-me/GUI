@@ -34,7 +34,7 @@ import TextField from '@mui/material/TextField';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import ConnectFailure from './ConnectFailure';
 import { connectTrace } from '@/react/session/connectTrace';
-import { positionExpression as composePosition, cardNamespace } from '@/react/positionExpression';
+import { positionExpression as composePosition, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
 import { useQRConnect } from './useQRConnect';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 import { setActiveNamespaceRoot, splitTypedNamespace } from '@/gui/All.This/Cleaker/signedRequest';
@@ -454,8 +454,9 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // The namespace this card reads, its semantic path, and -- unless the page's own origin was checked to answer for it --
   // the surface the page is on: `cleaker.me @ localhost`, or just `cleaker.me` when they coincide. Both parts stay
   // separate; only the text is abbreviated (react/positionExpression.ts).
+  // No .me has answered: the address alone, as the top bar shows it (unresolvedPosition), not a placeholder.
   const labelBase = !namespaceReady
-    ? (sharedRootStatus === 'error' ? 'sin respuesta' : 'resolviendo…')
+    ? (sharedRootStatus === 'error' ? unresolvedPosition(typeof window !== 'undefined' ? window.location : null) : 'resolviendo…')
     : authenticated
     ? beatleExpression
     : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
