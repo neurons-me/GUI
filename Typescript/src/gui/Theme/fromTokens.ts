@@ -203,6 +203,8 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
   const iconSizes = g.iconSizes || {};
   const lineHeights = g.lineHeights || {};
   const shadowsTokens = g.shadows;
+  // The secondary text color: the palette's `text.secondary`, and the subtitles' own color (see typography below).
+  const textSecondary = pick(c, ['textSecondary'], mode === 'dark' ? 'rgba(255,255,255,0.7)' : '#444');
   // Build MUI theme
   const theme = createTheme({
     // Palette accepts custom keys like `link` and `background.nav` in our design system,
@@ -222,11 +224,7 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
       },
       text: {
         primary: pick(c, ['textPrimary'], mode === 'dark' ? '#fff' : '#111'),
-        secondary: pick(
-          c,
-          ['textSecondary'],
-          mode === 'dark' ? 'rgba(255,255,255,0.7)' : '#444'
-        ),
+        secondary: textSecondary,
       },
       link: {
         main: pick(c, ['link'], mode === 'dark' ? '#00aa96' : '#008c7d'),
@@ -328,7 +326,15 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
       h3: { fontFamily: headingFontFamily, fontSize: pxToRem(26), fontWeight: 600, lineHeight: 1.3 },
       h4: { fontFamily: headingFontFamily, fontSize: pxToRem(21), fontWeight: 600, lineHeight: 1.35 },
       h5: { fontFamily: headingFontFamily, fontSize: pxToRem(18), fontWeight: 600, lineHeight: 1.35 },
-      subtitle1: { fontFamily: headingFontFamily, fontSize: pxToRem(16), fontWeight: 600, lineHeight: 1.4 },
+      // h6 was never set, so MUI's default (20px) sat ABOVE h5 (18px) in the scale.
+      h6: { fontFamily: headingFontFamily, fontSize: pxToRem(16), fontWeight: 700, lineHeight: 1.4 },
+      // A subtitle accompanies a heading (the deck under a title, a row's main name) and reads as ANOTHER kind of text,
+      // the way Medium and Hashnode set theirs: the secondary text color, one size step over its body, compact and
+      // firm (semibold, tight tracking, tight leading; 700 was too heavy under a title).
+      // Color carries the difference, so it reads neither as body text set bold nor as a smaller heading (h6 is bold, in
+      // the primary color). subtitle1 over body1 (16), subtitle2 over body2 (14). A `color` prop still wins.
+      subtitle1: { fontFamily: headingFontFamily, fontSize: pxToRem(17), fontWeight: 600, lineHeight: 1.25, letterSpacing: '-0.015em', color: textSecondary },
+      subtitle2: { fontFamily: headingFontFamily, fontSize: pxToRem(15), fontWeight: 600, lineHeight: 1.25, letterSpacing: '-0.01em', color: textSecondary },
       body1: { fontSize: pxToRem(16), lineHeight: 1.6 },
       body2: { fontSize: pxToRem(14), lineHeight: 1.6 },
       button: { textTransform: 'none', fontWeight: 700, letterSpacing: '0.02em' },
