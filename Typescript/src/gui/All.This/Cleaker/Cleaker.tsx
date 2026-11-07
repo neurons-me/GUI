@@ -40,7 +40,7 @@ import { useOptionalMe } from '@/react/useMe';
 import { readMeUsername } from '@/react/meIdentity';
 import { namespaceAddress } from '@/react/namespaceAddress';
 import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
-import Namespace from '@/react/session/Namespace';
+import Namespace, { type NamespaceProps } from '@/react/session/Namespace';
 import type { GuiDocument } from '@/runtime/guiDocument';
 import type { CapabilityResolvers } from '@/runtime/capabilities';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
@@ -69,6 +69,10 @@ export type CleakerProps = {
   pages?: Record<string, React.ComponentType<any>>;
   /** Left-bar item ids to leave out of the rail (icons only; the pages and routes stay). See NamespaceProps.hideBarItems. */
   hideBarItems?: string[];
+  /** The app's brand, apart from the person's QR. See NamespaceProps.brand. */
+  brand?: NamespaceProps['brand'];
+  /** The person's corner for their QR. See NamespaceProps.identityCorner. */
+  identityCorner?: NamespaceProps['identityCorner'];
   /** The semantic path the position label shows ('/' = the namespace's root). See NamespaceProps.semanticPath. */
   semanticPath?: string;
   /**
@@ -88,7 +92,7 @@ export type CleakerProps = {
   capabilityScope?: string;
 };
 
-export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, semanticPath, namespaceSource, capabilities, capabilityScope }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, brand, identityCorner, semanticPath, namespaceSource, capabilities, capabilityScope }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = String(namespaceProp || '').trim();
   const username = readMeUsername(found?.me);
@@ -133,6 +137,8 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         document={document}
         pages={pages}
         hideBarItems={hideBarItems}
+        brand={brand}
+        identityCorner={identityCorner}
         semanticPath={semanticPath}
         namespaceSource={namespaceSource}
         footerExtras={footerExtras}

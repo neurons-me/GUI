@@ -12,6 +12,7 @@
 // What each shell decides stays with it: what the position links to (a route, a panel), its text while nothing has
 // answered, and what surrounds the badge (a link, a session mark).
 import React from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import Box, { type BoxProps } from '@/gui/Atoms/Box/Box';
 import { useLeftSidebar, useGuiTheme, useGuiMediaQuery } from '@/gui-internals/Hooks';
 import type { MarksPlacement as _Placement, MarkCorner as _Corner } from './placeMarks';
@@ -236,19 +237,20 @@ export function FloatingMark({ corner, children }: { corner: _Corner; children: 
  * The site's brand (the author's mark: whose page this is), in its own cell: a logo image, or the label's first letter.
  * A link when the author gave one. It is never the person's QR and never shares its cell (placeMarks).
  */
-export function SiteBrand({ label, href, logo, compact = false }: { label: string; href?: string | null; logo?: string | null; compact?: boolean }) {
+export function SiteBrand({ label, href, to, logo, glyph, compact = false }: { label: string; href?: string | null; to?: string | null; logo?: string | null; glyph?: string | null; compact?: boolean }) {
   const initial = Array.from(label.replace(/[^\p{L}\p{N}]/gu, ''))[0]?.toUpperCase() ?? '•';
+  // `to`: a route of this app (no reload); `href`: an address; neither: the mark alone.
+  const link = to ? { component: RouterLink, to } : href ? { component: 'a', href } : { component: 'div' };
   return (
     <BarBrandCell
-      component={href ? 'a' : 'div'}
-      {...(href ? { href } : {})}
+      {...link}
       title={label}
       aria-label={label}
       data-gui-node-id="GUI.window.layout.bars.brand"
       data-gui-component="brand"
-      sx={{ fontWeight: 700, fontSize: '1.25rem', color: 'primary.main', ...(compact ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : {}), ...(href ? {} : { cursor: 'default', '&:hover': {} }) }}
+      sx={{ fontWeight: 700, fontSize: glyph ? '1.5rem' : '1.25rem', color: 'primary.main', ...(compact ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : {}), ...(to || href ? {} : { cursor: 'default', '&:hover': {} }) }}
     >
-      {logo ? <Box component="img" src={logo} alt="" sx={{ width: 28, height: 28, objectFit: 'contain' }} /> : initial}
+      {logo ? <Box component="img" src={logo} alt="" sx={{ width: 28, height: 28, objectFit: 'contain' }} /> : glyph || initial}
     </BarBrandCell>
   );
 }

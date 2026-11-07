@@ -36,7 +36,7 @@ import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import { BarBrandCell, CompactAt, LeftBarPosition, QrBadge, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
@@ -123,6 +123,15 @@ export interface NamespaceProps {
    * Blockchain, URL) are not that app's navigation.
    */
   hideBarItems?: string[];
+  /**
+   * The site's brand (the author's mark: whose page this is), apart from the person's QR (Roles-and-Territories.md §3).
+   * With it, the QR is the person's mark placed at `identityCorner` and the brand takes the other end, linking to `/`;
+   * the position is split between them (who beside the QR, `@where` beside the brand). Without it, the shell is as
+   * before: the QR leads the left bar and the whole position is written in the top bar.
+   */
+  brand?: { label: string; glyph?: string; logo?: string };
+  /** The person's corner for their QR (default top-left). */
+  identityCorner?: MarkCorner;
   /**
    * The semantic path the position label shows after the namespace; '/' (default) is the namespace's root. A GUI route
    * is not a semantic path and is never taken for one: an app whose door points at another node of the namespace says
@@ -1752,6 +1761,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // a link to the identity page, and nothing else. Expanding and contracting the bar is the bar's own arrow, so the QR is
   // never that control. On a narrow screen the corner control is the bar's standard "Open navigation" button and the QR
   // leads the drawer.
+  // The two marks (Roles-and-Territories.md §3). With an app's brand, the QR is the person's mark at their corner and
+  // the brand takes the other end; without one, placeMarks() puts the QR where it always was (the left bar's head).
+  const narrowBars = useNarrowBars();
+  const marksPlacement = placeMarks({ identity: props.identityCorner ?? 'top-left', bars: { top: true, left: true }, narrow: narrowBars, brand: Boolean(props.brand) });
   const positionBrand = (
     <BarBrandCell
       component={Link}
@@ -1763,6 +1776,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       data-position-expression={positionExpressionFull}
       data-monad-kind={monadReading.kind}
       data-gui-node-id="GUI.window.layout.bars.left.identity"
+      sx={marksPlacement.identity === 'left.brand' ? undefined : { width: 48, height: 48, minWidth: 48, flex: 'none' }}
     >
       <QrBadge
         value={positionQrValue}
@@ -1808,7 +1822,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
   // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
   // full, unambiguous form is its title.
-  const topBarLeftElements = (positionExpression || resolvingNamespace)
+  // With a brand the position is split between the marks (below), so the top bar does not write it whole.
+  const topBarLeftElements = props.brand ? [] : (positionExpression || resolvingNamespace)
     ? [
         topBarPosition(
           // No home icon: being at the namespace is being home. The address is the way back to `/`.
@@ -1827,7 +1842,29 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       ]
     : [];
 
+  // The position split between the marks, when the app has a brand: who beside the QR (the username on top while signed
+  // in, the namespace below), @where beside the brand. Text only where the bar shows text; icons only, the marks alone.
+  const splitParts = splitPosition(positionExpression || '');
+  const splitWho = whoLines(splitParts.who, authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : null);
+  const marks = marksInBars(
+    marksPlacement,
+    {
+      identity: positionBrand,
+      identityText: props.brand ? (
+        <Box component={Link} to={IDENTITY_ROUTE} title={positionExpressionFull} data-position-expression={positionExpressionFull} sx={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+          {resolvingNamespace
+            ? <IdentityText primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
+            : <IdentityText primary={splitWho.primary} secondary={splitWho.secondary} />}
+        </Box>
+      ) : undefined,
+      brand: props.brand ? <SiteBrand label={props.brand.label} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} /> : undefined,
+      brandText: props.brand && splitParts.where ? <WhereText title={positionExpressionFull} where={atWhere(splitParts.where)} /> : undefined,
+    },
+    { topText: !narrowBars },
+  );
+
   const topBarRightElements = [
+    ...marks.topEnd,
     {
       type: 'action' as const,
       props: {
@@ -1849,11 +1886,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
         // the top bar's first pixels; the location label starts past it, with a gap, instead of under it.
-        TopBar={{ elementsLeft: topBarLeftElements, elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: `${TOP_BAR_TOOLBAR_PL_PX}px` }, elementsLeftSx: { pl: `${axis.addressPl}px` } }}
+        TopBar={{ elementsLeft: [...marks.topStart, ...topBarLeftElements], elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: `${TOP_BAR_TOOLBAR_PL_PX}px` }, elementsLeftSx: { pl: `${axis.addressPl}px` } }}
         LeftBar={{
-          brand: positionBrand,
-          // Shown while the bar is open: where you are, written out, and the way to the identity page.
-          header: (
+          brand: marks.leftBrand,
+          // Shown while the bar is open: with a brand, the text of the mark in the bar's head (who, or @where); without
+          // one, where you are written out, and the way to the identity page.
+          header: props.brand ? marks.leftHeader : (
             <LeftBarPosition
               component={Link}
               to={IDENTITY_ROUTE}
@@ -1906,6 +1944,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             // bars.left system (that's navigation, this is a control), so it stays a plain prop rather
             // than a document part. Kept last so Theme/Dev Tools stay in the same place everywhere.
             ...(props.footerExtras ?? []),
+            ...marks.leftFooter,
           ],
         }}
       >
@@ -1924,6 +1963,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           />
         </Routes>
       </Layout>
+      {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
     </Box>
     </ThemeSettingsContext.Provider>
     </GuiCapabilitiesContext.Provider>
