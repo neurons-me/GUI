@@ -1507,7 +1507,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     // the SEMANTIC path only: `currentNodePath` is where the GUI navigated, not a node of the namespace
     path: props.semanticPath ?? '/',
     page: typeof window !== 'undefined'
-      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
+      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol, pathname: window.location.pathname }
       : null,
     root: {
       status: monadOff ? 'off' : verifiedRoot.status,

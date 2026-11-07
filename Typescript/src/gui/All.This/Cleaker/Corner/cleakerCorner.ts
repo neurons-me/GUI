@@ -69,7 +69,7 @@ export function namespaceEndpoint(namespace: string): string {
 }
 
 /** `me @ where`, or `where` alone while no namespace is chosen, or the namespace alone when the page IS it. */
-export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string }): string {
+export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string; pathname?: string }): string {
   const where = unresolvedPosition(page);
   if (!namespace) return where;
   return namespace === page.hostname ? namespace : `${namespace} @ ${where}`;
@@ -118,6 +118,10 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
   const probe = options.probe ?? defaultProbe;
   const page = window.location;
 
+  // The page's own address: its origin, or for a page opened as a file the file itself (`file:///…/page.html`) -- a
+  // file's origin is just `file://`, which names no place. Only this device can open it; it is still where you are.
+  const pageAddress = () => (page.protocol === 'file:' ? `file://${page.pathname}` : page.origin);
+
   const stored = read(storage, STORE_CORNER);
   let corner: CleakerCorner = isCorner(stored) ? stored : isCorner(options.corner) ? options.corner : 'bottom-right';
   const storedNs = read(storage, STORE_NAMESPACE);
@@ -155,9 +159,10 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     host.setAttribute('data-corner', corner);
     const label = cornerLabel(namespace, page);
     labelText.textContent = label;
-    labelText.parentElement!.title = label;
+    // a file's label is its name; the whole place is in the tooltip
+    labelText.parentElement!.title = page.protocol === 'file:' ? `${label}\n${decodeURI(pageAddress())}` : label;
     dot.setAttribute('data-state', state);
-    const value = namespace ? linkQrValue({ endpoint: namespaceEndpoint(namespace), namespace }) : page.origin;
+    const value = namespace ? linkQrValue({ endpoint: namespaceEndpoint(namespace), namespace }) : pageAddress();
     qrButton.innerHTML = qrSvg(value);
     qrButton.setAttribute('data-value', value);
     shadow.querySelectorAll<HTMLButtonElement>('[data-corner-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cornerChoice === corner)));

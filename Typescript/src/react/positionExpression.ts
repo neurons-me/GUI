@@ -98,6 +98,21 @@ function onlySchemeDiffers(pageOrigin: string, endpoint: string): boolean {
   }
 }
 
+/**
+ * A page opened as a file (`file:///Users/me/notes/page.html`) has no host: it is a place on this device. Its surface
+ * is the file -- drawn by its name (`page.html`), written in full (`"file:///Users/me/notes/page.html"`) wherever the
+ * expression must mean exactly one place. Only this device can open it; it is still where the page is.
+ */
+export function fileSurface(page: { protocol: string; pathname?: string } | null | undefined): { compact: string; full: string } | null {
+  if (!page || String(page.protocol || '').toLowerCase().replace(/:?$/, ':') !== 'file:') return null;
+  const path = String(page.pathname || '');
+  if (!path || path === '/') return { compact: 'file://', full: '"file:///"' };
+  const segments = path.split('/').filter(Boolean);
+  let name = segments[segments.length - 1] || '';
+  try { name = decodeURIComponent(name); } catch { /* keep it as written */ }
+  return { compact: name || 'file://', full: `"file://${path}"` };
+}
+
 const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|[^.:\s]+\.localhost)(?::\d+)?$/i;
 
 /**
@@ -105,7 +120,9 @@ const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|[^.:\s]+\.localhost)(?
  * when the scheme is news (`http:` on a non-loopback host), is the REASON the page is not bound to the namespace
  * (`forceScheme`), or the host is not a bare token (an IPv6 literal).
  */
-export function surfaceToken(pageUrl: { host: string; protocol: string }, forceScheme = false): string {
+export function surfaceToken(pageUrl: { host: string; protocol: string; pathname?: string }, forceScheme = false): string {
+  const file = fileSurface(pageUrl);
+  if (file) return forceScheme ? file.full : file.compact;
   const host = String(pageUrl.host || '').trim().toLowerCase();
   if (!host) return '';
   const scheme = String(pageUrl.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
@@ -134,7 +151,7 @@ export function positionExpression(input: {
   namespace: string;
   /** Semantic path; '' or '/' is the root. */
   path?: string;
-  page: { origin: string; host: string; protocol: string } | null;
+  page: { origin: string; host: string; protocol: string; pathname?: string } | null;
   root: RootCheck | null | undefined;
 }): PositionExpression {
   const ns = String(input.namespace || '').trim();
@@ -144,6 +161,9 @@ export function positionExpression(input: {
   const path = raw === '' || raw === '/' ? '' : raw.startsWith('/') ? raw : `/${raw}`;
   const base = `${ns}${path}`;
   const page = input.page;
+  const file = fileSurface(page);
+  // a file is never bound to a namespace: it is a place on this device, not a door any namespace answers at
+  if (file) return { compact: `${base} @ ${file.compact}`, full: `${base} @ ${file.full}`, bound: false };
   if (!page || !page.host) return { compact: base, full: base, bound: false };
   const scheme = String(page.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
   const full = `${base} @ "${scheme}//${String(page.host).trim().toLowerCase()}"`;
@@ -160,7 +180,7 @@ export function positionExpression(input: {
  * a `.me` answers; until then nothing stands in for it -- the `.me` is not guessed from the address (see
  * shownNamespace), and no placeholder is shown. `?` only when there is no page at all.
  */
-export function unresolvedPosition(page: { host: string; protocol: string } | null | undefined): string {
+export function unresolvedPosition(page: { host: string; protocol: string; pathname?: string } | null | undefined): string {
   const where = page ? surfaceToken(page) : '';
   return where || '?';
 }

@@ -467,7 +467,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     namespace: labelCut < 0 ? String(labelBase || '') : String(labelBase).slice(0, labelCut),
     path: labelCut < 0 ? semanticPath : String(labelBase).slice(labelCut),
     page: typeof window !== 'undefined'
-      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol }
+      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol, pathname: window.location.pathname }
       : null,
     root: sharedRootBinding
       ? {

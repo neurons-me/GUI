@@ -53,7 +53,9 @@ async function startStandalone() {
     res.writeHead(200, { 'content-type': 'text/html' }); return res.end(page);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  return { origin: `http://127.0.0.1:${server.address().port}`, bytes: js.length, stop: () => server.close() };
+  // the same script, next to a page opened as a FILE (file://), the way someone drops the tag into any local html
+  fs.writeFileSync(path.join(out, 'local page.html'), '<!doctype html><meta charset="utf-8"><p>a local file</p><script src="cleaker.js" data-corner="bottom-left"></script>');
+  return { origin: `http://127.0.0.1:${server.address().port}`, bytes: js.length, fileUrl: `file://${encodeURI(path.join(out, 'local page.html'))}`, stop: () => server.close() };
 }
 
 let failed = 0;
@@ -71,7 +73,8 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1000, height: 700 } });
     await routeMonads(context, [cleaker]);
     const allowed = [demo.origin, standalone.origin];
-    await context.route((u) => !allowed.includes(u.origin) && u.hostname !== 'cleaker.me', (r) => { outside.push(r.request().url()); r.abort(); });
+    // local files (file://) are this device, not the network
+    await context.route((u) => u.protocol !== 'file:' && !allowed.includes(u.origin) && u.hostname !== 'cleaker.me', (r) => { outside.push(r.request().url()); r.abort(); });
     return { context, page: await context.newPage() };
   };
   // everything Cleaker draws is inside its shadow root
@@ -144,6 +147,16 @@ async function main() {
     }
     // nobody.test is asked on purpose (2.5) and stopped here: that is what "does not answer" means
     const unexpected = outside.filter((u) => new URL(u).hostname !== 'nobody.test');
+    // ── the one-line script in a local file (file://) ────────────────────────────────────────────────────────────
+    {
+      const { context, page } = await newPage();
+      await page.goto(standalone.fileUrl);
+      await page.waitForSelector('[data-cleaker]', { timeout: 10000 }).catch(() => {});
+      const seen = await inShadow(page, `return { label: shadow.querySelector('.label .text').textContent, title: shadow.querySelector('.label').title, value: shadow.querySelector('.qr').getAttribute('data-value') }`).catch(() => null);
+      check('4.1 opened as a file, it says which file: its name', seen?.label === 'local page.html', JSON.stringify(seen));
+      check('4.2 the QR names the whole file (file:///…/local page.html), and so does the tooltip', seen?.value === standalone.fileUrl && seen?.title.includes(decodeURI(standalone.fileUrl)), JSON.stringify(seen));
+      await context.close();
+    }
     check('nothing else requested outside the test servers and the fake cleaker.me', unexpected.length === 0, unexpected.slice(0, 3).join(', '));
   } finally {
     await browser.close();

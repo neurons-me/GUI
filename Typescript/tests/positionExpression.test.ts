@@ -202,4 +202,19 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   assert.equal(unresolvedPosition(null), '?');
 }
 
+// a page opened as a file: its name is drawn, the whole file is written where the expression must mean one place
+{
+  const { unresolvedPosition, positionExpression, surfaceToken } = await import('../src/react/positionExpression');
+  const file = { origin: 'file://', host: '', protocol: 'file:', pathname: '/Users/me/notes/Mi%20doc.html' };
+  assert.equal(unresolvedPosition(file), 'Mi doc.html');
+  assert.equal(surfaceToken(file, true), '"file:///Users/me/notes/Mi%20doc.html"');
+  assert.deepEqual(positionExpression({ namespace: 'cleaker.me', page: file, root: null }), {
+    compact: 'cleaker.me @ Mi doc.html',
+    full: 'cleaker.me @ "file:///Users/me/notes/Mi%20doc.html"',
+    bound: false,
+  });
+  assert.equal(unresolvedPosition({ host: '', protocol: 'file:', pathname: '/' }), 'file://');
+  assert.equal(unresolvedPosition({ host: '', protocol: 'file:' }), 'file://');
+}
+
 console.log('positionExpression: ok');
