@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cleaker corner harness (tests/integration/cleakerCorner.browser.test.mjs — not for real use)</title>
+    <style>
+      /* A hostile page: none of this may reach Cleaker's corner, and Cleaker may change none of it. */
+      * { border: 5px solid rgb(255, 0, 0) !important; }
+      svg { width: 900px !important; height: 900px !important; }
+      button { background: rgb(255, 0, 0) !important; }
+      .label, .panel, .qr, .dot { color: rgb(1, 2, 3); }
+      body { margin: 0; font: 15px serif; }
+    </style>
+  </head>
+  <body>
+    <p class="label" data-page="own">The page's own paragraph, with the class names Cleaker uses inside.</p>
+    <script type="module" src="/cleakerCorner.main.ts"></script>
+  </body>
+</html>

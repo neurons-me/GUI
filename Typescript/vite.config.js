@@ -27,7 +27,7 @@ const isStorybook =
   lifecycle.includes('storybook') ||
   argv.includes('storybook');
 const isUMD = process.env.UMD === 'true';
-const umdTarget = process.env.UMD_TARGET || 'core'; // 'core' | 'bootstrap' | 'searchbar'
+const umdTarget = process.env.UMD_TARGET || 'core'; // 'core' | 'bootstrap' | 'searchbar' | 'cleaker'
 const isSearchbarUMD = isUMD && umdTarget === 'searchbar';
 const isDev = !isUMD && !isStorybook && !isDemo && process.env.NODE_ENV !== 'test';
 export default defineConfig({
@@ -257,10 +257,13 @@ export default defineConfig({
               ? resolve(dirname, 'src/runtime/bootstrap-umd.ts')
               : umdTarget === 'searchbar'
                 ? resolve(dirname, 'src/runtime/searchbar-standalone.tsx')
+              : umdTarget === 'cleaker'
+                ? resolve(dirname, 'src/cleaker-standalone.ts')
               : resolve(dirname, 'index.ts'),
-          name: umdTarget === 'searchbar' ? 'GUISearchBar' : 'GUI',
+          name: umdTarget === 'searchbar' ? 'GUISearchBar' : umdTarget === 'cleaker' ? 'CleakerScript' : 'GUI',
           fileName: (format) => {
             if (umdTarget === 'searchbar') return 'gui-searchbar.iife.js';
+            if (umdTarget === 'cleaker') return 'cleaker.js';
             if (format === 'umd') {
               return umdTarget === 'bootstrap' ? 'this.gui.bootstrap.umd.js' : 'this.gui.umd.js';
             }
@@ -271,7 +274,7 @@ export default defineConfig({
               ? `this.gui.bootstrap.${format}.js`
               : `this.gui.${format}.js`;
           },
-          formats: umdTarget === 'searchbar' ? ['iife'] : ['umd'],
+          formats: umdTarget === 'searchbar' || umdTarget === 'cleaker' ? ['iife'] : ['umd'],
         }
       : {
           entry: {
