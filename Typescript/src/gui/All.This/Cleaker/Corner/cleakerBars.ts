@@ -49,7 +49,7 @@ export function itemGlyph(icon: unknown, label: string): string {
 
 /**
  * An icon .GUI's Icon draws: a name (`home`, `lucide:Menu`, `mui:Favorite`) or a glyph the author wrote (`glyph:𓆣`,
- * drawn as text in the icon's box, as the shell draws Netget). Anything else is not one.
+ * drawn as text in the icon's box, as Beatle's 𓆣). Anything else is not one.
  */
 export function iconToken(icon: unknown): string | undefined {
   if (typeof icon !== 'string') return undefined;

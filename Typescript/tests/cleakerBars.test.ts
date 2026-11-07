@@ -17,10 +17,10 @@ for (const bad of ['javascript:alert(1)', ' JavaScript:alert(1)', 'data:text/htm
 assert.equal(safeHref('other.html', 'file:///Users/me/site/page.html'), 'file:///Users/me/site/other.html');
 
 // glyphs
-assert.equal(itemGlyph('glyph:𓆣', 'Netget'), '𓆣');
+assert.equal(itemGlyph('glyph:𓆣', 'Beatle'), '𓆣');
 assert.equal(itemGlyph('home', 'home page'), 'H');
 
-// icons .GUI's Icon draws: names and glyphs (the shell's Netget is glyph:𓆣); anything else is not one
+// icons .GUI's Icon draws: names and glyphs (Beatle's is glyph:𓆣); anything else is not one
 assert.equal(iconToken('home'), 'home');
 assert.equal(iconToken('lucide:Menu'), 'lucide:Menu');
 assert.equal(iconToken('glyph:𓆣'), 'glyph:𓆣');
@@ -34,14 +34,14 @@ const full = { GUI: { children: { window: { children: { layout: { children: { ba
     home: { label: 'Home', to: '/', icon: 'home' },
     evil: { label: 'Evil', to: 'javascript:alert(1)' },
     nowhere: { label: 'Nowhere' },
-    netget: { label: 'Netget', to: '/netget', icon: 'glyph:𓆣' },
+    beatle: { label: 'Beatle', to: '/beatle', icon: 'glyph:𓆣' },
   } },
 } } } } } } } } };
 const bars = readBars(full, BASE);
 assert.deepEqual(bars.map((b) => b.id), ['top', 'left'], 'only top/left/right/bottom, in that order');
 assert.equal(bars[0].defaultState, 'open');
 assert.equal(bars[1].defaultState, 'closed', 'a bar the author did not open starts closed');
-assert.deepEqual(bars[1].items.map((i) => i.id), ['home', 'netget'], 'unsafe and target-less elements are not drawn');
+assert.deepEqual(bars[1].items.map((i) => i.id), ['home', 'beatle'], 'unsafe and target-less elements are not drawn');
 assert.equal(bars[1].items[1].glyph, '𓆣');
 assert.equal(bars[1].items[0].icon, 'home');
 assert.equal(bars[1].items[1].icon, 'glyph:𓆣', 'a glyph is drawn as the shell draws it');

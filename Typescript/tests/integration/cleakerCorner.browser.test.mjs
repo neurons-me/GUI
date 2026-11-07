@@ -54,7 +54,7 @@ async function startStandalone() {
     left: { label: 'Left bar', children: {
       home: { label: 'Home', to: '/' },
       evil: { label: 'Evil', to: 'javascript:alert(1)' },
-      netget: { label: 'Netget', to: '/netget', icon: 'glyph:𓆣' },
+      beatle: { label: 'Beatle', to: '/beatle', icon: 'glyph:𓆣' },
     } },
   } };
   const barsPage = `<!doctype html><meta charset="utf-8"><title>bars</title><p>page with bars</p><script type="application/json" data-cleaker-document>${JSON.stringify(doc)}</script><script src="/cleaker.js"></script>`;
@@ -185,13 +185,13 @@ async function main() {
       const top = b.find((x) => x.bar === 'top'); const left = b.find((x) => x.bar === 'left');
       check('5.1 the author opened the top bar: it shows, with where you are and its element (current page marked)', top && !top.hidden && top.pos?.startsWith('cleaker.me @') && top.items.join() === 'docs*', JSON.stringify(top));
       check('5.2 the left bar starts closed (the page is unchanged until someone opens it)', left && left.hidden, JSON.stringify(left));
-      check('5.3 an element with an unsafe link (javascript:) is not drawn', left && left.items.join() === 'home,netget', JSON.stringify(left?.items));
+      check('5.3 an element with an unsafe link (javascript:) is not drawn', left && left.items.join() === 'home,beatle', JSON.stringify(left?.items));
       const rows = await inShadow(page, `return [...shadow.querySelectorAll('.barsec .barrow')].map((r) => r.textContent)`);
       check('5.4 the QR\'s panel offers each declared bar as a collection (open / icons / closed)', rows.length === 2 && rows.every((r) => /open.*icons.*closed/.test(r)), JSON.stringify(rows));
       await inShadow(page, `shadow.querySelector('.qr').click(); shadow.querySelector('[data-bar-choice="left:open"]').click()`);
       b = await bars();
       const openLeft = b.find((x) => x.bar === 'left');
-      check('5.5 opened: the left bar shows its elements with their names, below the top bar', !openLeft.hidden && openLeft.w === 200 && openLeft.labels.join() === 'Home,Netget', JSON.stringify(openLeft));
+      check('5.5 opened: the left bar shows its elements with their names, below the top bar', !openLeft.hidden && openLeft.w === 200 && openLeft.labels.join() === 'Home,Beatle', JSON.stringify(openLeft));
       await inShadow(page, `shadow.querySelector('[data-bar-choice="left:icons"]').click(); shadow.querySelector('[data-bar-choice="top:closed"]').click()`);
       b = await bars();
       const iconLeft = b.find((x) => x.bar === 'left'); const closedTop = b.find((x) => x.bar === 'top');

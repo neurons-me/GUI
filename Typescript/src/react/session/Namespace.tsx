@@ -129,7 +129,7 @@ export interface NamespaceProps {
    * the position is split between them (who beside the QR, `@where` beside the brand). Without it, the shell is as
    * before: the QR leads the left bar and the whole position is written in the top bar.
    */
-  brand?: { label: string; glyph?: string; logo?: string };
+  brand?: { label: string; icon?: string; glyph?: string; logo?: string };
   /** The person's corner for their QR (default top-left). */
   identityCorner?: MarkCorner;
   /**
@@ -1857,7 +1857,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             : <IdentityText primary={splitWho.primary} secondary={splitWho.secondary} />}
         </Box>
       ) : undefined,
-      brand: props.brand ? <SiteBrand label={props.brand.label} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} /> : undefined,
+      brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} /> : undefined,
       brandText: props.brand && splitParts.where ? <WhereText title={positionExpressionFull} where={atWhere(splitParts.where)} /> : undefined,
     },
     { topText: !narrowBars },

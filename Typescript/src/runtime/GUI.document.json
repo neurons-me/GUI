@@ -68,7 +68,7 @@
                       "netget": {
                         "label": "Netget",
                         "to": "/netget",
-                        "icon": "glyph:𓆣",
+                        "icon": "cable",
                         "placement": "end"
                       }
                     }
