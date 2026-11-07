@@ -1,4 +1,7 @@
-import { Suspense, useEffect } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
+import { GuiPage, GuiNavProvider, type GuiNav } from '@/gui/All.This/GUI/GuiPages';
+import { flattenGuiDocument, renderGuiDocumentPage, GUI_DOCUMENT } from './guiDocument';
+import { ThemeSettingsContext } from './themeSettings';
 import Theme from '@/gui/Theme/Theme';
 import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
@@ -90,9 +93,32 @@ export interface AppShellProps {
  * own promise resolves before render either way), but a lazy one throws a
  * promise on first render, and only a Suspense ancestor can catch that.
  */
+// The GUI's own pages (/GUI, /GUI/themes, /GUI/layout), as GUI.document.json declares them, by their route without the
+// leading slash: in AppShell they are routes of the app like its own views (`GUI/themes`), the same pages netget's shell
+// serves at the same paths.
+const GUI_PAGES_ID = 'GUI.window.layout.content.gui';
+const GUI_PAGE_BY_ROUTE = new Map(
+  flattenGuiDocument(GUI_DOCUMENT)
+    .filter((e) => (e.id === GUI_PAGES_ID || e.id.startsWith(`${GUI_PAGES_ID}.`)) && e.component && e.route)
+    .map((e) => [String(e.route).replace(/^\/+/, ''), e.id] as const),
+);
+const GUI_PAGE_REGISTRY = { GuiPage };
+/** The route a GUI page's link goes to, as AppShell's `.me` route (`/GUI/themes` -> `GUI/themes`, `/` -> `home`). */
+const routeOf = (to: string) => to.replace(/^\/+/, '').replace(/\/+$/, '') || 'home';
+
 function ActiveView({ app }: { app: AppDeclaration }) {
   const route = useMeValue<string>(`${app.namespace}.route`);
+  const setRoute = useMeAction(`${app.namespace}.route`);
   const runtimeContext = useOptionalMeRuntimeContext();
+  const guiPageId = route ? GUI_PAGE_BY_ROUTE.get(route) : undefined;
+  const nav = useMemo<GuiNav>(() => ({ pathname: `/${route ?? ''}`, go: (to) => setRoute(routeOf(to)) }), [route, setRoute]);
+  if (guiPageId) {
+    return (
+      <GuiNavProvider value={nav}>
+        {renderGuiDocumentPage(guiPageId, { React, registry: GUI_PAGE_REGISTRY, doc: GUI_DOCUMENT, props: { guiDocument: GUI_DOCUMENT } })}
+      </GuiNavProvider>
+    );
+  }
   const view = app.views[route ?? ''] ?? app.views.home;
   if (isSpecViewFactory(view)) {
     return <SpecBoundary spec={view()} runtime={runtimeContext?.runtime ?? undefined} />;
@@ -108,6 +134,8 @@ function ActiveView({ app }: { app: AppDeclaration }) {
 function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left', identityUsername }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner' | 'identityUsername'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
+  // The theme launcher's gear opens the GUI's theme page (GUI/themes), as in netget's shell; not a dialog.
+  const openThemeSettings = useCallback(() => setRoute('GUI/themes'), [setRoute]);
 
   const elements = navItems.map(({ route: r, label, icon }) => ({
     type: 'link' as const,
@@ -142,7 +170,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
   );
 
   return (
-    <>
+    <ThemeSettingsContext.Provider value={openThemeSettings}>
     <Layout
       TopBar={position ? {
         hideBrand: true,
@@ -174,7 +202,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
       <ActiveView app={app} />
     </Layout>
     {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
-    </>
+    </ThemeSettingsContext.Provider>
   );
 }
 

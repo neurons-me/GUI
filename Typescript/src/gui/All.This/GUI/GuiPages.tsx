@@ -4,9 +4,11 @@
 // and `props`. `GuiPage` only draws what its node declares (guiDocumentPartSpecs + renderNode), in that order; the parts
 // are the components registered below (GUI_PAGE_PARTS). Changing what a page shows is changing the tree.
 // The theme settings used to be a dialog opened from the launcher's gear; the gear now comes here (themeSettings.ts),
-// and the dialog stays only for hosts with no router.
+// and the dialog stays only for hosts with no shell to open the page in.
+// Where the pages navigate is the shell's (GuiNav): a router's location (netget's shell, the default inside a router), or
+// AppShell's route in `.me`. The links are plain <a href> that the shell's `go` takes over, so they also open in a new tab.
 import * as React from 'react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import Avatar from '@/gui/Atoms/Avatar/Avatar';
@@ -27,6 +29,44 @@ export const GUI_LAYOUT_ROUTE = '/GUI/layout';
 
 declare const __GUI_VERSION__: string | undefined;
 const GUI_VERSION = typeof __GUI_VERSION__ === 'string' ? __GUI_VERSION__ : '';
+
+/** Where the GUI's pages are and how they move: the shell's own navigation, whatever it is. */
+export type GuiNav = { pathname: string; go: (to: string) => void };
+const GuiNavContext = React.createContext<GuiNav | null>(null);
+/** A shell that does not route with react-router (AppShell routes in `.me`) provides its navigation here. */
+export const GuiNavProvider = GuiNavContext.Provider;
+
+/** Inside a react-router router with no GuiNavProvider: the router is the navigation (netget's shell). */
+function RouterGuiNav({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const nav = React.useMemo<GuiNav>(() => ({ pathname, go: (to) => navigate(to) }), [pathname, navigate]);
+  return <GuiNavContext.Provider value={nav}>{children}</GuiNavContext.Provider>;
+}
+
+function useGuiNav(): GuiNav {
+  const nav = React.useContext(GuiNavContext);
+  if (!nav) throw new Error('GUI pages need a GuiNavProvider or a router.');
+  return nav;
+}
+
+/** A link between the GUI's pages: an ordinary <a href> (open in a new tab works), followed by the shell's `go`. */
+const GuiLink = React.forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }>(function GuiLink({ to, onClick, ...rest }, ref) {
+  const nav = useGuiNav();
+  return (
+    <a
+      ref={ref}
+      href={to}
+      {...rest}
+      onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        nav.go(to);
+      }}
+    />
+  );
+});
 
 /** What a part may need from the page it is drawn in: the document (the whole tree, the GUI's plus the app's). */
 const GuiPageContext = React.createContext<{ doc: GuiDocument }>({ doc: GUI_DOCUMENT });
@@ -66,13 +106,19 @@ export function GuiPage({ guiDocument, partsOf, 'data-gui-node-id': nodeId = 'GU
   const doc = guiDocument ?? GUI_DOCUMENT;
   const specs = React.useMemo(() => guiDocumentPartSpecs(partsOf || nodeId, doc), [partsOf, nodeId, doc]);
   const context = React.useMemo(() => ({ doc }), [doc]);
-  return (
+  const nav = React.useContext(GuiNavContext);
+  const inRouter = useInRouterContext();
+  const page = (
     <GuiPageContext.Provider value={context}>
       <Box data-gui-node-id={nodeId} data-gui-component={component} sx={usePageSx()}>
         {specs.map((spec) => <React.Fragment key={spec.props['data-gui-node-id']}>{renderNode(spec as any, { React, registry: GUI_PAGE_PARTS })}</React.Fragment>)}
       </Box>
     </GuiPageContext.Provider>
   );
+  // the shell's navigation when it gave one; else the router's (netget's shell); else the page is not navigable
+  if (nav) return page;
+  if (inRouter) return <RouterGuiNav>{page}</RouterGuiNav>;
+  throw new Error('GuiPage needs a GuiNavProvider or a router.');
 }
 
 // ── the parts ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -142,7 +188,7 @@ function GuiHeading({ title, parents = [], version, subtitle, titleStyle, spacin
             <Typography component="span" variant="overline" data-gui-node-id={`${nodeId}.trail`} sx={{ opacity: 0.6, letterSpacing: '0.12em', lineHeight: 1, fontWeight: 400 }}>
               {parents.map((step) => (
                 <React.Fragment key={step.to}>
-                  <Box component={RouterLink} to={step.to} sx={{ color: 'inherit' }}>{step.label}</Box>
+                  <Box component={GuiLink} to={step.to} sx={{ color: 'inherit' }}>{step.label}</Box>
                   {' /'}
                 </React.Fragment>
               ))}
@@ -178,7 +224,7 @@ function ActiveTheme({ to = GUI_THEMES_ROUTE, 'data-gui-node-id': nodeId }: Part
   const theme = React.useMemo(() => getGuiThemes().find((t) => t.themeId === themeId), [themeId]);
   return (
     <Box
-      component={RouterLink}
+      component={GuiLink}
       to={to}
       data-gui-node-id={nodeId}
       sx={{ display: 'flex', alignItems: 'center', gap: 1.25, color: 'inherit', textDecoration: 'none', '&:hover .gui-theme-name': { textDecoration: 'underline' } }}
@@ -208,7 +254,7 @@ function ThemeMode({ 'data-gui-node-id': nodeId }: PartProps) {
 function RouteLink({ to = '/', text, 'data-gui-node-id': nodeId }: PartProps & { to?: string; text?: string }) {
   return (
     <Typography variant="body2" data-gui-node-id={nodeId}>
-      <Box component={RouterLink} to={to} sx={{ color: 'primary.main' }}>{text ?? to}</Box>
+      <Box component={GuiLink} to={to} sx={{ color: 'primary.main' }}>{text ?? to}</Box>
     </Typography>
   );
 }
@@ -217,8 +263,7 @@ function RouteLink({ to = '/', text, 'data-gui-node-id': nodeId }: PartProps & {
 function ThemeInspectorPanel({ routes = { palette: GUI_THEMES_ROUTE, typography: GUI_THEMES_TYPOGRAPHY_ROUTE }, 'data-gui-node-id': nodeId }: PartProps & {
   routes?: { palette: string; typography: string };
 }) {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
+  const { pathname, go: navigate } = useGuiNav();
   const tab: ThemeInspectorTab = pathname.replace(/\/+$/, '') === routes.typography.replace(/\/+$/, '') ? 'typography' : 'palette';
   return (
     <Box data-gui-node-id={nodeId} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
@@ -236,7 +281,7 @@ function TreeNode({ entry, byId, depth }: { entry: GuiDocumentEntry; byId: Map<s
         {entry.component ? <Typography variant="caption" sx={{ color: 'text.secondary' }}>{entry.component}</Typography> : null}
         {entry.route ? (
           <Typography variant="caption" sx={monoSx}>
-            <Box component={RouterLink} to={entry.route} sx={{ color: 'primary.main' }}>{entry.route}</Box>
+            <Box component={GuiLink} to={entry.route} sx={{ color: 'primary.main' }}>{entry.route}</Box>
           </Typography>
         ) : null}
       </Box>
