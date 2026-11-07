@@ -174,8 +174,11 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   );
 
   const badgeSize = resolveTopbarQrSize(value);
-  // The left bar's brand: the whole cell opens Cleaker's panel, the bar's own arrow expands and contracts the bar.
-  const brand = (
+  // In a bar the QR is a badge, as in the shell: QR.me's topbar variant, scaled as a whole to the rail's size. Never the
+  // scannable QR there -- QR.me keeps a scannable code at >= 4px per module, so a long value (namespace + at=) grows it
+  // past any bar (176px for `cleaker.me @ localhost:5176`); the scannable one is the corner's, with no bars.
+  // The badge opens Cleaker's panel; the left bar's own arrow expands and contracts the bar.
+  const badge = (where: 'left' | 'top') => (
     <Box
       component="button"
       type="button"
@@ -184,9 +187,11 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       aria-expanded={open}
       title={label}
       data-cleaker-qr={value}
-      data-cleaker-brand=""
+      data-cleaker-brand={where}
+      data-gui-node-id={`GUI.window.layout.bars.${where}.identity`}
       sx={{
-        display: 'flex', width: '100%', height: '100%', minWidth: 56, minHeight: 48, alignItems: 'center', justifyContent: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        ...(where === 'left' ? { width: '100%', height: '100%', minWidth: 56, minHeight: 48 } : { width: 48, height: 48, flex: 'none' }),
         p: 0, m: 0, border: 0, background: 'none', color: 'inherit', cursor: 'pointer',
         '&:hover': { backgroundColor: 'action.hover' },
         '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
@@ -197,6 +202,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       </Box>
     </Box>
   );
+  // The top bar leads with the badge when there is no left bar to hold it (top left, where the shell's brand sits).
+  const badgeInTop = Boolean(topBar) && !leftBar;
 
   const panel = open && (
     <Paper elevation={6} sx={{ p: 1.5, width: 280, display: 'flex', flexDirection: 'column', gap: 1 }} data-cleaker-panel="">
@@ -205,7 +212,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
         <Button type="submit" variant="contained" size="small">Use</Button>
       </Box>
       <Typography variant="caption" color="text.secondary" data-cleaker-status="">{message || statusText || label}</Typography>
-      {!leftBar && (
+      {/* the corner is where the QR sits with no bars; with bars it is in a bar */}
+      {!leftBar && !topBar && (
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           {CLEAKER_CORNERS.map((c) => (
             <Button key={c} size="small" variant={c === corner ? 'contained' : 'outlined'} onClick={() => moveTo(c)} data-corner-choice={c}>
@@ -240,13 +248,13 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     <Box data-cleaker-bars="" sx={{ position: 'fixed', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', '--gui-layout-min-height': '0px', '& main': { display: 'none' } } as any}>
       <Layout
         // The top bar is the shell's: the position on its left (while the left bar is not expanded), the author's top
-        // elements on its right. It is drawn with the left bar even when the author declared no top bar.
-        TopBar={(topBar || leftBar) ? {
+        // elements on its right. Drawn only when it shows (the author's state or the person's choice): 'closed' is closed.
+        TopBar={topBar ? {
           noBorder: true,
           hideBrand: true,
           toolbarSx: { pl: 0.25 },
           elementsLeftSx: { pl: 1 },
-          elementsLeft: [{
+          elementsLeft: [...(badgeInTop ? [{ type: 'action' as const, props: { element: badge('top') } }] : []), {
             type: 'action' as const,
             props: {
               element: (
@@ -271,10 +279,11 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
               ),
             },
           }],
-          elementsRight: (topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
+          // 'icons': the author's top elements as icons only; 'open': with their labels (where the bar's width allows).
+          elementsRight: (topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
         } : false}
         LeftBar={leftBar ? {
-          brand,
+          brand: badge('left'),
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
           header: (
@@ -298,11 +307,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     </Box>
   );
 
-  if (leftBar) {
+  // With bars the QR is in a bar, and its panel opens beside it; the corner (and its scannable QR) is for no bars.
+  if (leftBar || topBar) {
     return (
       <>
         {layout}
-        {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, top: 8, left: 72 }}>{panel}</Box>}
+        {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, ...(leftBar ? { top: 8, left: 72 } : { top: 52, left: 8 }) }}>{panel}</Box>}
       </>
     );
   }
