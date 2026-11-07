@@ -87,6 +87,14 @@ Agreed 2026-11-06. A page with bars carries two marks with two owners, and they 
   top bar, at the end the person chose (left or right), and the brand leads the drawer.
 - **The far end of the top bar is shared.** When the brand goes there it sits before the author's own elements
   (search, account, actions); it does not push them out.
+- **The position is split between the marks.** `who @ where`: the person's half goes beside their QR — their username on
+  top and the namespace below, smaller (`jabellae` / `cleaker.me`), or the namespace alone without a username — and
+  the place's half beside the brand (`@localhost:5176`; the port stays, two ports are two places). Without a brand the
+  place stays with the QR. The whole position is the tooltip and the first line of the QR's panel, where it can be
+  copied.
+- **Text only where the bar shows text.** An expanded left bar or an open top bar shows each mark with its text; icons
+  only (a rail, a top bar on icons) shows the marks alone. The QR's value does not change with any of this: it still
+  carries the namespace and the place (`at=`).
 - **Placement is layout, not trust.** The page's own script can draw something identical to a person's QR.me. Where the
   badge sits proves nothing about the page; signing and approving happen in the person's agent, outside the page
   ([Identity-Custody-Contract.md](Identity-Custody-Contract.md)).

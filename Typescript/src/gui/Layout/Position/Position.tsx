@@ -143,6 +143,8 @@ export function BarBrandCell({ sx, ...rest }: PositionProps) {
 }
 
 export { placeMarks, isMarkCorner, MARK_CORNERS } from './placeMarks';
+export { splitPosition, atWhere, whoLines } from './positionText';
+export type { PositionParts, WhoLines } from './positionText';
 export type { MarkCorner, MarkSlot, MarksPlacement } from './placeMarks';
 
 /** Whether the bars are in their narrow layout (under 600px: the left bar is a drawer), as the bars themselves decide. */
@@ -154,29 +156,68 @@ export function useNarrowBars(): boolean {
 type TopElement = { type: 'action'; props: { element: React.ReactNode } };
 type LeftAction = { type: 'action'; props: { element: React.ReactNode; tooltip?: boolean } };
 
+/** Shows its children only while the left bar is expanded (the counterpart of `UnlessLeftBarExpanded`). */
+export function OnlyWhenLeftBarExpanded({ children }: { children: React.ReactNode }) {
+  const { view } = useLeftSidebar();
+  return view === 'expanded' ? <>{children}</> : null;
+}
+
 /**
- * The two marks put where `placeMarks()` said: what goes in LeftBar's `brand` slot, at the start and the far end of the
- * top bar, at the left bar's foot, or floating in a corner no bar holds. The shell spreads these into its Layout; the
- * marks themselves (what they look like, what they link to) are the shell's.
+ * The person's half beside their QR: their username on top, the namespace below it, smaller (`jabellae` / `cleaker.me`);
+ * the namespace alone without a username. `extra` is a third, smaller line (the place, when no brand carries it).
  */
-export function marksInBars(placement: _Placement, marks: { brand?: React.ReactNode; identity?: React.ReactNode }) {
+export function IdentityText({ primary, secondary, extra, title }: { primary: string; secondary?: string | null; extra?: string | null; title?: string }) {
+  return (
+    <Box title={title} data-gui-node-id="GUI.window.layout.marks.identity.text" sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.15 }}>
+      <Box component="span" sx={{ fontWeight: 700, fontSize: '0.86rem', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{primary}</Box>
+      {secondary ? <Box component="span" sx={(t: any) => ({ ...t.typography.subtitle2, fontSize: '0.72rem', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>{secondary}</Box> : null}
+      {extra ? <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{extra}</Box> : null}
+    </Box>
+  );
+}
+
+/** The place's half beside the site's brand: `@localhost:5176`. */
+export function WhereText({ where, title }: { where: string; title?: string }) {
+  return (
+    <Box component="span" title={title} data-gui-node-id="GUI.window.layout.marks.brand.where" sx={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600, color: 'text.secondary', whiteSpace: 'nowrap' }}>
+      {where}
+    </Box>
+  );
+}
+
+const markRow = (mark: React.ReactNode, text: React.ReactNode) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>{mark}{text}</Box>
+);
+
+/**
+ * The two marks put where `placeMarks()` said, each with its text beside it when its bar shows text: LeftBar's
+ * `brand` slot (its text becomes the bar's `header`, which the bar shows only expanded), the start and the far end of
+ * the top bar (text when `topText`), the left bar's foot (text while expanded), or floating in a corner (the mark
+ * alone). With icons only, the marks alone. The marks and texts themselves are the shell's.
+ */
+export function marksInBars(
+  placement: _Placement,
+  marks: { brand?: React.ReactNode; identity?: React.ReactNode; brandText?: React.ReactNode; identityText?: React.ReactNode },
+  opts: { topText?: boolean } = {},
+) {
   const out = {
     leftBrand: undefined as React.ReactNode,
+    leftHeader: undefined as React.ReactNode,
     topStart: [] as TopElement[],
     topEnd: [] as TopElement[],
     leftFooter: [] as LeftAction[],
     float: null as null | { corner: _Corner; element: React.ReactNode },
   };
-  const put = (slot: string, element: React.ReactNode) => {
+  const put = (slot: string, element: React.ReactNode, text: React.ReactNode) => {
     if (element == null || slot === 'none' || slot === 'corner') return;
-    if (slot === 'left.brand') out.leftBrand = element;
-    else if (slot === 'top.start') out.topStart.push({ type: 'action', props: { element } });
-    else if (slot === 'top.end') out.topEnd.push({ type: 'action', props: { element } });
-    else if (slot === 'left.footer') out.leftFooter.push({ type: 'action', props: { element, tooltip: false } });
+    if (slot === 'left.brand') { out.leftBrand = element; out.leftHeader = text ?? undefined; }
+    else if (slot === 'top.start') out.topStart.push({ type: 'action', props: { element: opts.topText && text ? markRow(element, text) : element } });
+    else if (slot === 'top.end') out.topEnd.push({ type: 'action', props: { element: opts.topText && text ? markRow(element, text) : element } });
+    else if (slot === 'left.footer') out.leftFooter.push({ type: 'action', props: { element: text ? markRow(element, <OnlyWhenLeftBarExpanded>{text}</OnlyWhenLeftBarExpanded>) : element, tooltip: false } });
     else if (slot.startsWith('float:')) out.float = { corner: slot.slice(6) as _Corner, element };
   };
-  put(placement.identity, marks.identity);
-  put(placement.brand, marks.brand);
+  put(placement.identity, marks.identity, marks.identityText);
+  put(placement.brand, marks.brand, marks.brandText);
   return out;
 }
 

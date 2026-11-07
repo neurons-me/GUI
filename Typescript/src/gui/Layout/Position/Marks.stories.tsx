@@ -27,7 +27,7 @@ function Home() {
 const app: AppDeclaration = { id: 'marks', namespace: 'apps.marks', title: 'Neurons', theme: 'neurons.me', views: { home: Home } };
 const NAV = [{ route: 'home', label: 'Home', icon: 'home' }];
 
-function MarksPreview({ identityCorner }: { identityCorner: MarkCorner }) {
+function MarksPreview({ identityCorner, username }: { identityCorner: MarkCorner; username?: string }) {
   const me = useMemo(() => new ME() as any, []);
   const runtime = useMemo(() => RunMe(me), [me]);
   const value = `https://cleaker.me/?at=${encodeURIComponent(window.location.origin)}`;
@@ -45,6 +45,7 @@ function MarksPreview({ identityCorner }: { identityCorner: MarkCorner }) {
         </BarBrandCell>
       )}
       identityCorner={identityCorner}
+      identityUsername={username || undefined}
     />
   );
 }
@@ -53,8 +54,8 @@ const meta = {
   title: 'Layout/Marks (brand + QR.me)',
   component: MarksPreview,
   parameters: { layout: 'fullscreen' },
-  argTypes: { identityCorner: { control: 'inline-radio', options: [...MARK_CORNERS] } },
-  args: { identityCorner: 'top-left' },
+  argTypes: { identityCorner: { control: 'inline-radio', options: [...MARK_CORNERS] }, username: { control: 'text' } },
+  args: { identityCorner: 'top-left', username: 'jabellae' },
 } satisfies Meta<typeof MarksPreview>;
 
 export default meta;
@@ -63,3 +64,4 @@ type Story = StoryObj<typeof meta>;
 export const PersonTopLeft: Story = { args: { identityCorner: 'top-left' } };
 export const PersonTopRight: Story = { args: { identityCorner: 'top-right' } };
 export const PersonBottomLeft: Story = { args: { identityCorner: 'bottom-left' } };
+export const NoUsername: Story = { args: { identityCorner: 'top-left', username: '' } };

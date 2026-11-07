@@ -7,7 +7,7 @@ import MeLauncher from '@/react/session/MeLauncher';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
-import { CompactAt, FloatingMark, LeftBarPosition, TopBarPosition, marksInBars, placeMarks, topBarPosition, useNarrowBars, type MarkCorner } from '@/gui/Layout/Position/Position';
+import { CompactAt, FloatingMark, IdentityText, LeftBarPosition, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import type { MeLike } from '@/react/types';
 import { SelectionProvider } from './selection';
 import { LauncherPopoverProvider } from './launcherPopover';
@@ -59,6 +59,12 @@ export interface AppShellProps {
   identity?: React.ReactNode;
   /** The person's corner for `identity`. Default top-left. */
   identityCorner?: MarkCorner;
+  /**
+   * The person's username, shown on top of the namespace beside their QR (`jabellae` / `cleaker.me`) while the bar shows
+   * text. Without it, the namespace alone. With `identity` and `brand`, the position is split between the marks: who
+   * beside the QR, `@where` beside the brand.
+   */
+  identityUsername?: string;
 }
 
 /**
@@ -99,7 +105,7 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
-function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left' }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner'>) {
+function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left', identityUsername }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner' | 'identityUsername'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
 
@@ -119,7 +125,21 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
   const placement = identity
     ? placeMarks({ identity: identityCorner, bars: { top: Boolean(position), left: true }, narrow, brand: Boolean(brand) })
     : { identity: 'none' as const, brand: brand ? ('left.brand' as const) : ('none' as const) };
-  const marks = marksInBars(placement, { identity, brand });
+  // With the person's mark, the position is split between the marks (who beside the QR, @where beside the brand); with
+  // no brand the place stays with the QR, and the whole position stays in the top bar as before.
+  const parts = splitPosition(position ?? '');
+  const who = whoLines(parts.who, identityUsername);
+  const split = Boolean(identity && brand && parts.where);
+  const marks = marksInBars(
+    placement,
+    {
+      identity,
+      brand,
+      identityText: identity && parts.who ? <IdentityText title={position} primary={who.primary} secondary={who.secondary} extra={brand ? null : atWhere(parts.where)} /> : undefined,
+      brandText: identity && brand && parts.where ? <WhereText title={position} where={atWhere(parts.where)} /> : undefined,
+    },
+    { topText: !narrow },
+  );
 
   return (
     <>
@@ -130,14 +150,15 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
         toolbarSx: { pl: 0.25 },
         elementsLeftSx: { pl: 1 },
         // the position while the left bar is not expanded (Position.tsx: written once, moved, not pushed)
-        elementsLeft: [...marks.topStart, topBarPosition(<TopBarPosition title={position}><CompactAt text={position} /></TopBarPosition>)],
+        elementsLeft: [...marks.topStart, ...(split ? [] : [topBarPosition(<TopBarPosition title={position}><CompactAt text={position} /></TopBarPosition>)])],
         ...(marks.topEnd.length ? { elementsRight: marks.topEnd } : {}),
       } : undefined}
       LeftBar={{
         initialView: 'expanded',
         brand: marks.leftBrand,
         // Shown while the bar is open: where you are, written out (the top bar shows it only while the bar is closed).
-        header: position ? <LeftBarPosition title={position}>{position}</LeftBarPosition> : undefined,
+        // the text of the mark in the bar's head (who, or @where); without the person's mark, the whole position as before
+        header: identity ? marks.leftHeader : position ? <LeftBarPosition title={position}>{position}</LeftBarPosition> : undefined,
         elements,
         footerElements: [
           // tooltip: false — each of these already opens its own hover
@@ -170,7 +191,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
  * had reimplemented this exact composition — nothing below is
  * FullTrailer-specific; `navItems` is the one thing every app supplies.
  */
-export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand, identity, identityCorner }: AppShellProps) {
+export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand, identity, identityCorner, identityUsername }: AppShellProps) {
   useEffect(() => {
     declareApp(me, app);
     const initialPath = window.location.pathname.replace(/^\/+/, '') || 'home';
@@ -182,7 +203,7 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
 
   const body = (
     <Me me={me} runtime={runtime}>
-      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} />
+      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} identityUsername={identityUsername} />
     </Me>
   );
 

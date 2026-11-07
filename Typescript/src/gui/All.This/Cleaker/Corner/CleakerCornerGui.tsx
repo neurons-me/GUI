@@ -15,7 +15,7 @@ import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
-import { BarBrandCell, CompactAt, FloatingMark, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, marksInBars, placeMarks, topBarPosition, useNarrowBars } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
 import {
   CLEAKER_BAR_STATES,
   barStates,
@@ -183,10 +183,24 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   // Decided by the corner, which bars exist and the width -- never by whether a bar is open or a rail.
   const placement = placeMarks({ identity: corner, bars: { top: Boolean(topBar), left: Boolean(leftBar) }, narrow, brand: Boolean(siteBrand) });
   const idWhere = placement.identity === 'left.brand' ? 'left' : placement.identity.startsWith('float:') ? 'float' : 'top';
-  const marks = marksInBars(placement, {
-    identity: badge(idWhere),
-    brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} compact={placement.brand !== 'left.brand'} /> : undefined,
-  });
+  // The position split between the marks: who beside the QR (no username here: Cleaker on a page holds no session, so
+  // the namespace), @where beside the brand. Without a brand the place stays with the QR (a third, smaller line, and the
+  // whole position in the top bar as before). Icons only: the marks alone; the whole position is the tooltip and the
+  // panel's first line.
+  const parts = namespace ? splitPosition(label) : { who: '', where: label };
+  const who = whoLines(parts.who);
+  const marks = marksInBars(
+    placement,
+    {
+      identity: badge(idWhere),
+      identityText: parts.who
+        ? <IdentityText title={label} primary={who.primary} secondary={who.secondary} extra={siteBrand ? null : atWhere(parts.where)} />
+        : undefined,
+      brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} compact={placement.brand !== 'left.brand'} /> : undefined,
+      brandText: siteBrand && parts.where ? <WhereText title={label} where={atWhere(parts.where)} /> : undefined,
+    },
+    { topText: states.top === 'open' && !narrow },
+  );
   // The panel opens beside the QR, wherever the QR is.
   const panelAt: Record<string, string | number> =
     placement.identity === 'left.brand' ? { top: 8, left: 72 }
@@ -197,6 +211,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
 
   const panel = open && (
     <Paper elevation={6} sx={{ p: 1.5, width: 280, display: 'flex', flexDirection: 'column', gap: 1 }} data-cleaker-panel="">
+      {/* the whole position, selectable: what the marks split */}
+      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, userSelect: 'all', wordBreak: 'break-all' }} data-cleaker-full="">{namespace ? `${namespace} @ ${pageAddress}` : pageAddress}</Typography>
       <Box component="form" sx={{ display: 'flex', gap: 1 }} onSubmit={(e: React.FormEvent) => { e.preventDefault(); choose(draft); }}>
         <TextField size="small" fullWidth value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="namespace (e.g. cleaker.me)" inputProps={{ 'aria-label': 'Namespace', spellCheck: false, autoCapitalize: 'off' }} />
         <Button type="submit" variant="contained" size="small">Use</Button>
@@ -246,7 +262,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           elementsLeftSx: { pl: 1 },
           elementsLeft: [
             ...marks.topStart,
-            topBarPosition(
+            // the whole position only when no brand carries the place (with a brand it is split between the marks)
+            ...(siteBrand ? [] : [topBarPosition(
               <TopBarPosition
                 component="button"
                 type="button"
@@ -257,7 +274,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
               >
                 <CompactAt text={label} />
               </TopBarPosition>,
-            ),
+            )]),
           ],
           // 'icons': the author's top elements as icons only; 'open': with their labels (where the bar's width allows).
           // the far end holds a mark first (before the author's own elements, never pushing them out)
@@ -268,7 +285,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           footerElements: marks.leftFooter,
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
-          header: <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>,
+          // beside the mark in the bar's head: its text (who, or @where); with neither mark there, the whole position
+          header: marks.leftHeader ?? (siteBrand ? undefined : <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>),
           elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >
