@@ -61,6 +61,18 @@ export { default as Text } from '@/gui/Atoms/Typography/Typography';
 export { default as Input } from '@/gui/Atoms/TextField/TextField';
 export { default as Theme } from '@/gui/Theme/Theme';
 export { default as Layout } from '@/gui/Layout/Layout';
+// Where you are, in the shell's bars (one composition for AppShell, netget's shell and Cleaker): the position in the top
+// bar or the left bar's header, and the identity QR as a bar's badge.
+export {
+  BarBrandCell,
+  CompactAt,
+  LeftBarPosition,
+  QrBadge,
+  RAIL_BADGE_SIZE,
+  TopBarPosition,
+  topBarPosition,
+  UnlessLeftBarExpanded,
+} from '@/gui/Layout/Position/Position';
 export { default as TabViews } from '@/gui/Layout/Stage/TabViews/TabViews';
 export type { TabViewsProps, TabViewsItem } from '@/gui/Layout/Stage/TabViews/TabViews';
 export { default as StickyOptionsTop } from '@/gui/Layout/StickyOptions/StickyOptionsTop';

@@ -12,10 +12,10 @@ import { CacheProvider } from '@emotion/react';
 import { ThemeProvider, type Theme as MuiTheme } from '@mui/material/styles';
 import Theme from '@/gui/Theme/Theme';
 import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
-import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
+import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
-import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { BarBrandCell, CompactAt, LeftBarPosition, QrBadge, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
 import {
   CLEAKER_BAR_STATES,
   barStates,
@@ -38,9 +38,6 @@ import {
 const STORE_CORNER = 'cleaker:corner';
 const STORE_NAMESPACE = 'cleaker:namespace';
 const STORE_BARS = 'cleaker:bars';
-// In the left bar the QR is the bar's brand, drawn as the shell draws it (Namespace.tsx's positionBrand): the topbar
-// QR, scaled as a whole to the rail's badge size.
-const RAIL_BADGE_SIZE = 34;
 const DRAWN_BARS: readonly CleakerBarId[] = ['top', 'left'];
 const QR_DIAMETER = 76;
 
@@ -64,30 +61,6 @@ export type CleakerGuiHandle = { host: HTMLElement; unmount(): void };
 const isCorner = (v: unknown): v is CleakerCorner => typeof v === 'string' && (CLEAKER_CORNERS as readonly string[]).includes(v);
 const read = (s: Storage | null, k: string) => { try { return s ? s.getItem(k) : null; } catch { return null; } };
 const write = (s: Storage | null, k: string, v: string) => { try { s?.setItem(k, v); } catch { /* this page view only */ } };
-
-/**
- * Shows its children unless the left bar is expanded: the position is written once, in the top bar while the bar is a
- * rail and beside the QR in the bar's header while it is open (the same rule as the shell's, AppShell.tsx/Namespace.tsx).
- */
-function UnlessLeftBarExpanded({ children }: { children: React.ReactNode }) {
-  const { view } = useLeftSidebar();
-  return view === 'expanded' ? null : <>{children}</>;
-}
-
-// The position in a monospace face: the spaces around `@` are drawn small so the `@` sits close to both names, while the
-// text itself (what is copied) stays `a @ b` (the shell's CompactAt).
-const AT_SPACE_SX = { fontSize: '0.4em' } as const;
-function CompactAt({ text }: { text: string }) {
-  const at = text.indexOf(' @ ');
-  if (at < 0) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, at)}
-      <Box component="span" sx={AT_SPACE_SX}>{' '}</Box>@<Box component="span" sx={AT_SPACE_SX}>{' '}</Box>
-      {text.slice(at + 3)}
-    </>
-  );
-}
 
 type ProbeState = 'none' | 'checking' | 'ok' | 'off';
 const QR_STATUS: Record<ProbeState, 'idle' | 'checking' | 'confirmed' | 'off'> = { none: 'idle', checking: 'checking', ok: 'confirmed', off: 'off' };
@@ -173,13 +146,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     />
   );
 
-  const badgeSize = resolveTopbarQrSize(value);
   // In a bar the QR is a badge, as in the shell: QR.me's topbar variant, scaled as a whole to the rail's size. Never the
   // scannable QR there -- QR.me keeps a scannable code at >= 4px per module, so a long value (namespace + at=) grows it
   // past any bar (176px for `cleaker.me @ localhost:5176`); the scannable one is the corner's, with no bars.
   // The badge opens Cleaker's panel; the left bar's own arrow expands and contracts the bar.
   const badge = (where: 'left' | 'top') => (
-    <Box
+    <BarBrandCell
       component="button"
       type="button"
       onClick={toggle}
@@ -189,18 +161,19 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       data-cleaker-qr={value}
       data-cleaker-brand={where}
       data-gui-node-id={`GUI.window.layout.bars.${where}.identity`}
-      sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        ...(where === 'left' ? { width: '100%', height: '100%', minWidth: 56, minHeight: 48 } : { width: 48, height: 48, flex: 'none' }),
-        p: 0, m: 0, border: 0, background: 'none', color: 'inherit', cursor: 'pointer',
-        '&:hover': { backgroundColor: 'action.hover' },
-        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
-      }}
+      sx={where === 'top' ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : undefined}
     >
-      <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / badgeSize})`, transformOrigin: 'center' }}>
-        {qr({ variant: 'topbar' })}
-      </Box>
-    </Box>
+      <QrBadge
+        value={value}
+        status={QR_STATUS[probeState]}
+        statusLabel={statusText}
+        perimeterLabel={label}
+        perimeterRootLabel={namespace ?? undefined}
+        clickFlip={false}
+        hoverFlip={false}
+        cursor="pointer"
+      />
+    </BarBrandCell>
   );
   // The top bar leads with the badge when there is no left bar to hold it (top left, where the shell's brand sits).
   const badgeInTop = Boolean(topBar) && !leftBar;
@@ -254,31 +227,21 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           hideBrand: true,
           toolbarSx: { pl: 0.25 },
           elementsLeftSx: { pl: 1 },
-          elementsLeft: [...(badgeInTop ? [{ type: 'action' as const, props: { element: badge('top') } }] : []), {
-            type: 'action' as const,
-            props: {
-              element: (
-                <UnlessLeftBarExpanded>
-                  <Box
-                    component="button"
-                    type="button"
-                    onClick={toggle}
-                    title={label}
-                    data-gui-node-id="GUI.window.layout.bars.top.namespace"
-                    data-cleaker-position=""
-                    sx={{
-                      display: 'block', minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      p: 0, border: 0, background: 'none', cursor: 'pointer',
-                      fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.02em', color: 'text.primary',
-                      '&:hover': { textDecoration: 'underline' },
-                    }}
-                  >
-                    <CompactAt text={label} />
-                  </Box>
-                </UnlessLeftBarExpanded>
-              ),
-            },
-          }],
+          elementsLeft: [
+            ...(badgeInTop ? [{ type: 'action' as const, props: { element: badge('top') } }] : []),
+            topBarPosition(
+              <TopBarPosition
+                component="button"
+                type="button"
+                onClick={toggle}
+                title={label}
+                data-cleaker-position=""
+                sx={{ p: 0, border: 0, background: 'none', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+              >
+                <CompactAt text={label} />
+              </TopBarPosition>,
+            ),
+          ],
           // 'icons': the author's top elements as icons only; 'open': with their labels (where the bar's width allows).
           elementsRight: (topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
         } : false}
@@ -286,19 +249,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           brand: badge('left'),
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
-          header: (
-            <Box
-              title={label}
-              data-gui-node-id="GUI.window.layout.bars.left.position"
-              data-cleaker-position=""
-              sx={{
-                display: 'block', minWidth: 0, ml: '-10px', position: 'relative', zIndex: 1,
-                fontFamily: 'monospace', fontSize: '0.74rem', fontWeight: 600, lineHeight: 1.25, color: 'text.primary', wordBreak: 'break-word',
-              }}
-            >
-              {label}
-            </Box>
-          ),
+          header: <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>,
           elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >

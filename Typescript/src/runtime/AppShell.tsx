@@ -4,11 +4,10 @@ import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from './DevToolsLauncher';
 import MeLauncher from '@/react/session/MeLauncher';
-import Box from '@/gui/Atoms/Box/Box';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
-import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { CompactAt, LeftBarPosition, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
 import type { MeLike } from '@/react/types';
 import { SelectionProvider } from './selection';
 import { LauncherPopoverProvider } from './launcherPopover';
@@ -92,16 +91,6 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
-/**
- * Shows its children unless the left bar is expanded. The position is written once: in the bar's header when the bar is
- * open, in the top bar otherwise (the bar's `view` is only known inside the Layout, hence a component). Same rule as
- * Namespace's.
- */
-function UnlessLeftBarExpanded({ children }: { children: React.ReactNode }) {
-  const { view } = useLeftSidebar();
-  return view === 'expanded' ? null : <>{children}</>;
-}
-
 function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
@@ -123,59 +112,14 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
         noBorder: true,
         toolbarSx: { pl: 0.25 },
         elementsLeftSx: { pl: 1 },
-        elementsLeft: [{
-          type: 'action' as const,
-          props: {
-            element: (
-              <UnlessLeftBarExpanded>
-                <Box
-                  data-gui-node-id="GUI.window.layout.bars.top.namespace"
-                  title={position}
-                  sx={{
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontFamily: 'monospace',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    color: 'text.primary',
-                  }}
-                >
-                  {position}
-                </Box>
-              </UnlessLeftBarExpanded>
-            ),
-          },
-        }],
+        // the position while the left bar is not expanded (Position.tsx: written once, moved, not pushed)
+        elementsLeft: [topBarPosition(<TopBarPosition title={position}><CompactAt text={position} /></TopBarPosition>)],
       } : undefined}
       LeftBar={{
         initialView: 'expanded',
         brand,
         // Shown while the bar is open: where you are, written out (the top bar shows it only while the bar is closed).
-        header: position ? (
-          <Box
-            data-gui-node-id="GUI.window.layout.bars.left.position"
-            title={position}
-            sx={{
-              display: 'block',
-              minWidth: 0,
-              // Pulled in over the brand cell's empty right margin so it hangs close to the mark.
-              ml: '-10px',
-              position: 'relative',
-              zIndex: 1,
-              fontFamily: 'monospace',
-              fontSize: '0.74rem',
-              fontWeight: 600,
-              lineHeight: 1.25,
-              color: 'text.primary',
-              wordBreak: 'break-word',
-            }}
-          >
-            {position}
-          </Box>
-        ) : undefined,
+        header: position ? <LeftBarPosition title={position}>{position}</LeftBarPosition> : undefined,
         elements,
         footerElements: [
           // tooltip: false — each of these already opens its own hover

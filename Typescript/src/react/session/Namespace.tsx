@@ -19,7 +19,7 @@ import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
 import Dialog from '@mui/material/Dialog';
-import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
+import { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
 import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
@@ -36,7 +36,7 @@ import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { BarBrandCell, CompactAt, LeftBarPosition, QrBadge, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
 import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
@@ -511,21 +511,6 @@ const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'dat
   );
 };
 
-// The address is drawn in a monospace face, where each of the two spaces around the `@` is a full character wide and the `@`
-// floats apart from both names. The spaces stay in the text (what is copied or read out is still `a @ b`) but are drawn
-// at a fraction of the size, which pulls the `@` in without changing the characters.
-const AT_SPACE_SX = { fontSize: '0.4em' } as const;
-const CompactAt: React.FC<{ text: string }> = ({ text }) => {
-  const at = text.indexOf(' @ ');
-  if (at < 0) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, at)}
-      <Box component="span" sx={AT_SPACE_SX}>{' '}</Box>@<Box component="span" sx={AT_SPACE_SX}>{' '}</Box>
-      {text.slice(at + 3)}
-    </>
-  );
-};
 
 // The other half of "Keychain" above — real signing keys for the real
 // authenticated identity, not a mock. Reuses keychainClient.ts exactly as
@@ -1392,15 +1377,6 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 // /keychain/claim and /keychain/admin-sign are deliberately NOT nested
 // here -- they stay separate sibling routes (CleakerRoutes below),
 // unchanged.
-/**
- * Shows its children unless the left bar is expanded. The position is written once: beside the QR in the bar when the
- * bar is open, and in the top bar otherwise (the bar's `view` is only known inside the Layout, hence a component).
- */
-const UnlessLeftBarExpanded: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { view } = useLeftSidebar();
-  return view === 'expanded' ? null : <>{children}</>;
-};
-
 const GUI: React.FC<NamespaceProps> = (props) => {
   const ctx = useOptionalSeedSessionContext();
   const session = ctx?.session ?? null;
@@ -1772,13 +1748,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // the way back to it as well as the connection state. Only the search field stays in the top bar.
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
-  const RAIL_BADGE_SIZE = 34;
   // The QR is this app's brand in the left bar (LeftBar's `brand` slot, the same one any other app fills with its logo):
   // a link to the identity page, and nothing else. Expanding and contracting the bar is the bar's own arrow, so the QR is
   // never that control. On a narrow screen the corner control is the bar's standard "Open navigation" button and the QR
   // leads the drawer.
   const positionBrand = (
-    <Box
+    <BarBrandCell
       component={Link}
       to={IDENTITY_ROUTE}
       aria-label="Open .me"
@@ -1788,28 +1763,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       data-position-expression={positionExpressionFull}
       data-monad-kind={monadReading.kind}
       data-gui-node-id="GUI.window.layout.bars.left.identity"
-      sx={{
-        // The whole cell is the link, flush with the corner: a corner is a target that cannot be overshot.
-        position: 'relative',
-        display: 'flex',
-        width: '100%',
-        height: '100%',
-        minWidth: 56,
-        minHeight: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
-        p: 0,
-        m: 0,
-        textDecoration: 'none',
-        cursor: 'pointer',
-        color: 'inherit',
-        '&:hover': { backgroundColor: 'action.hover' },
-        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: '-2px' },
-      }}
     >
-      <Box sx={{ display: 'flex', transform: `scale(${RAIL_BADGE_SIZE / positionBadgeSize})`, transformOrigin: 'center' }}>
-      <QRme
-        variant="topbar"
+      <QrBadge
         value={positionQrValue}
         username={authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined}
         status={positionStatus}
@@ -1821,7 +1776,6 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         cursor="pointer"
         data-gui-node-id="GUI.window.layout.bars.top.position"
       />
-      </Box>
       {/* A session is open through this link: its own mark, apart from the ring (which says only that the service answered). */}
       {authenticated && session?.semanticNamespace ? (
         <Box
@@ -1848,7 +1802,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           {String(session.semanticNamespace).charAt(0)}
         </Box>
       ) : null}
-    </Box>
+    </BarBrandCell>
   );
 
   // Where you are, written once at the top-left of EVERY page (the bar belongs to the Layout, not to a route): the
@@ -1856,44 +1810,20 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // full, unambiguous form is its title.
   const topBarLeftElements = (positionExpression || resolvingNamespace)
     ? [
-        {
-          type: 'action' as const,
-          props: {
-            element: (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                <UnlessLeftBarExpanded>
-                {/* No home icon: being at the namespace is being home. The address is the way back to `/`. */}
-                <Box
-                  component={Link}
-                  to="/"
-                  aria-label="Home"
-                  data-gui-node-id="GUI.window.layout.bars.top.namespace"
-                  data-gui-component="namespace"
-                  data-position-expression={positionExpressionFull}
-                  title={positionExpressionFull}
-                  sx={{
-                    display: 'block',
-                    minWidth: 0,
-                    maxWidth: '100%',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontFamily: 'monospace',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    color: location.pathname === '/' ? 'primary.main' : 'text.primary',
-                    textDecoration: 'none',
-                    '&:hover': { textDecoration: 'underline' },
-                  }}
-                >
-                  {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : <CompactAt text={positionExpression} />}
-                </Box>
-                </UnlessLeftBarExpanded>
-              </Box>
-            ),
-          },
-        },
+        topBarPosition(
+          // No home icon: being at the namespace is being home. The address is the way back to `/`.
+          <TopBarPosition
+            component={Link}
+            to="/"
+            aria-label="Home"
+            data-gui-component="namespace"
+            data-position-expression={positionExpressionFull}
+            title={positionExpressionFull}
+            sx={{ color: location.pathname === '/' ? 'primary.main' : 'text.primary', '&:hover': { textDecoration: 'underline' } }}
+          >
+            {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : <CompactAt text={positionExpression} />}
+          </TopBarPosition>,
+        ),
       ]
     : [];
 
@@ -1924,33 +1854,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           brand: positionBrand,
           // Shown while the bar is open: where you are, written out, and the way to the identity page.
           header: (
-            <Box
+            <LeftBarPosition
               component={Link}
               to={IDENTITY_ROUTE}
               title={positionExpressionFull}
               data-position-expression={positionExpressionFull}
-              data-gui-node-id="GUI.window.layout.bars.left.position"
               data-gui-component="namespace"
-              sx={{
-                display: 'block',
-                minWidth: 0,
-                // The QR stays exactly where it is in the rail (its cell is as wide as the rail), and the address pulls in
-                // over the cell's empty right margin so it hangs ~6px from the QR instead of ~25px.
-                ml: '-10px',
-                position: 'relative',
-                zIndex: 1,
-                fontFamily: 'monospace',
-                fontSize: '0.74rem',
-                fontWeight: 600,
-                lineHeight: 1.25,
-                color: 'text.primary',
-                textDecoration: 'none',
-                wordBreak: 'break-word',
-                '&:hover': { textDecoration: 'underline' },
-              }}
+              sx={{ '&:hover': { textDecoration: 'underline' } }}
             >
               {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : positionExpression}
-            </Box>
+            </LeftBarPosition>
           ),
           // `active` applied ONCE, HERE, uniformly across every element
           // regardless of which of the two sources below it came from --
