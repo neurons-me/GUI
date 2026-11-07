@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cleaker playground</title>
+    <style>
+      body { margin: 0; font: 17px/1.6 Georgia, serif; background: #fbfaf7; color: #222; }
+      main { max-width: 640px; margin: 96px auto; padding: 0 20px; }
+      code { font: 14px ui-monospace, Menlo, monospace; background: #eee; padding: 1px 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cleaker playground</h1>
+      <p>A plain page, as any author's. Cleaker sits in its corner; the bars this page declares unfold from the QR.</p>
+      <p>Edit <code>src/gui/All.This/Cleaker/Corner/cleakerCorner.ts</code> or <code>cleakerBars.ts</code> and this page reloads.
+         Query: <code>?corner=top-left</code>, <code>?namespace=</code> (none), <code>?reset</code> (forget the person's choices).</p>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus posuere velit aliquet.
+         Donec ullamcorper nulla non metus auctor fringilla. Maecenas faucibus mollis interdum.</p>
+    </main>
+    <!-- the bars this page's author declares (the same shape as GUI.window.layout.bars) -->
+    <script type="application/json" data-cleaker-document>
+      {
+        "bars": {
+          "top": { "label": "Top bar", "state": "open", "children": {
+            "docs": { "label": "Docs", "to": "/cleaker.html" },
+            "nrp": { "label": "NRP", "to": "https://neurons-me.github.io/NRP/" }
+          } },
+          "left": { "label": "Left bar", "children": {
+            "home": { "label": "Home", "to": "/cleaker.html", "icon": "glyph:⌂" },
+            "users": { "label": "Users", "to": "/users", "icon": "glyph:☺" },
+            "netget": { "label": "Netget", "to": "/netget", "icon": "glyph:𓆣" }
+          } },
+          "right": { "label": "Right bar", "children": {
+            "notes": { "label": "Notes", "to": "#notes" }
+          } },
+          "bottom": { "label": "Bottom bar", "children": {
+            "about": { "label": "About", "to": "#about" }
+          } }
+        }
+      }
+    </script>
+    <script type="module" src="/cleaker.main.ts"></script>
+  </body>
+</html>
