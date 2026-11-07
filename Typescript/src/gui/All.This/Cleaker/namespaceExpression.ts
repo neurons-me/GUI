@@ -391,7 +391,17 @@ export function buildCleakerNamespaceUrl(
 ): string {
   const parsed = typeof input === "string" ? parseCleakerNamespaceExpression(input) : input;
   const surfaceHost = formatTransportSurfaceHost(parsed.transport.host, parsed.transport.port);
-  const resolvedPrefix = String(prefix ?? parsed.prefix ?? "").trim().toLowerCase();
+  // An explicit prefix (a handle) is always placed before the host. A prefix read from the expression itself is part of
+  // that host already (`https://jabellae.cleaker.me` parses as prefix `jabellae` on `jabellae.cleaker.me`): prepending it
+  // again gave `jabellae.jabellae.cleaker.me`, `neurons-me.neurons-me.github.io`. It is used only when the surface host
+  // does not carry it.
+  const explicitPrefix = prefix !== undefined && prefix !== null;
+  const expressionPrefix = String(parsed.prefix ?? "").trim().toLowerCase();
+  const surfaceName = String(parsed.transport.host ?? "").trim().toLowerCase();
+  const hostCarriesPrefix = Boolean(expressionPrefix) && (surfaceName === expressionPrefix || surfaceName.startsWith(`${expressionPrefix}.`));
+  const resolvedPrefix = explicitPrefix
+    ? String(prefix).trim().toLowerCase()
+    : hostCarriesPrefix ? "" : expressionPrefix;
   const localishSurface = isLocalishHost(parsed.transport.host);
   const targetHost = resolvedPrefix && !localishSurface ? `${resolvedPrefix}.${surfaceHost}` : surfaceHost;
 

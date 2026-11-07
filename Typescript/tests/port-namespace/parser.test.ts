@@ -42,6 +42,15 @@ test('P6 the address built for a namespace keeps its door (and the scheme)', () 
   assert.equal(buildCleakerNamespaceUrl('http://localhost:55858'), 'http://localhost:55858');
   assert.equal(buildCleakerNamespaceUrl('https://name.space:8080'), 'https://name.space:8080');
   assert.equal(buildCleakerNamespaceUrl('http://localhost:55858', 'ana'), 'http://localhost:55858/@ana');
+  // a host that already names a sub-namespace is not prefixed with its own first label again
+  assert.equal(buildCleakerNamespaceUrl('https://neurons-me.github.io'), 'https://neurons-me.github.io');
+  assert.equal(buildCleakerNamespaceUrl('https://jabellae.cleaker.me'), 'https://jabellae.cleaker.me');
+  assert.equal(buildCleakerNamespaceUrl('jabellae.cleaker.me'), 'https://jabellae.cleaker.me');
+  assert.equal(buildCleakerNamespaceUrl('me://jabellae.cleaker.me'), 'https://jabellae.cleaker.me');
+  assert.equal(buildCleakerNamespaceUrl('https://a.b.c.example.com'), 'https://a.b.c.example.com');
+  // an explicit handle is still placed before the host
+  assert.equal(buildCleakerNamespaceUrl('https://cleaker.me', 'ana'), 'https://ana.cleaker.me');
+  assert.equal(buildCleakerNamespaceUrl('https://neurons-me.github.io', 'ana'), 'https://ana.neurons-me.github.io');
 });
 test('P7 a written port against a link: agrees / refines / conflict, never ignored', () => {
   assert.deepEqual(checkWrittenDoor({ namespace: 'name.space', transport: 'https://name.space:8080' }, 8080), { state: 'agrees', port: 8080 });
