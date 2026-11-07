@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>.me — approve a request (identity agent prototype, tests only)</title>
+    <style>
+      body { margin: 0; font: 15px/1.45 -apple-system, system-ui, sans-serif; background: #f4f6f7; color: #11181c; }
+      main { max-width: 420px; margin: 0 auto; padding: 28px 20px; }
+      h1 { font-size: 20px; margin: 0 0 16px; }
+      .label { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #5b6770; }
+      .origin { margin: 2px 0 16px; font: 600 17px ui-monospace, Menlo, monospace; word-break: break-all; }
+      dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 20px; }
+      dt { color: #5b6770; } dd { margin: 0; word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+      input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 10px 12px; font: inherit; border: 1px solid #c9d1d6; border-radius: 8px; }
+      .actions { display: flex; gap: 8px; justify-content: flex-end; }
+      button { padding: 9px 16px; font: inherit; border-radius: 8px; border: 1px solid #11181c; background: #fff; cursor: pointer; }
+      button[type=submit] { background: #11181c; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <main id="agent"></main>
+    <script type="module" src="/agent.main.ts"></script>
+  </body>
+</html>
