@@ -7,7 +7,7 @@ import MeLauncher from '@/react/session/MeLauncher';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
-import { CompactAt, LeftBarPosition, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
+import { CompactAt, FloatingMark, LeftBarPosition, TopBarPosition, marksInBars, placeMarks, topBarPosition, useNarrowBars, type MarkCorner } from '@/gui/Layout/Position/Position';
 import type { MeLike } from '@/react/types';
 import { SelectionProvider } from './selection';
 import { LauncherPopoverProvider } from './launcherPopover';
@@ -51,6 +51,14 @@ export interface AppShellProps {
   position?: string;
   /** The app's mark leading the LeftBar header (a logo, an initial). Opt-in; the bar's own arrow still expands it. */
   brand?: React.ReactNode;
+  /**
+   * The person's mark (their QR.me badge: who they are, where they go), apart from the app's `brand` -- two owners, never
+   * one cell (Roles-and-Territories.md §3). Placed at `identityCorner` (the person's choice); the brand then takes the
+   * other end (placeMarks). Without it the brand leads the left bar, as before.
+   */
+  identity?: React.ReactNode;
+  /** The person's corner for `identity`. Default top-left. */
+  identityCorner?: MarkCorner;
 }
 
 /**
@@ -91,7 +99,7 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
-function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand'>) {
+function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left' }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
 
@@ -105,7 +113,16 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
     },
   }));
 
+  // The two marks: the person's where they put it, the app's at the other end (placeMarks). With no identity the brand
+  // leads the left bar, as it always has.
+  const narrow = useNarrowBars();
+  const placement = identity
+    ? placeMarks({ identity: identityCorner, bars: { top: Boolean(position), left: true }, narrow, brand: Boolean(brand) })
+    : { identity: 'none' as const, brand: brand ? ('left.brand' as const) : ('none' as const) };
+  const marks = marksInBars(placement, { identity, brand });
+
   return (
+    <>
     <Layout
       TopBar={position ? {
         hideBrand: true,
@@ -113,11 +130,12 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
         toolbarSx: { pl: 0.25 },
         elementsLeftSx: { pl: 1 },
         // the position while the left bar is not expanded (Position.tsx: written once, moved, not pushed)
-        elementsLeft: [topBarPosition(<TopBarPosition title={position}><CompactAt text={position} /></TopBarPosition>)],
+        elementsLeft: [...marks.topStart, topBarPosition(<TopBarPosition title={position}><CompactAt text={position} /></TopBarPosition>)],
+        ...(marks.topEnd.length ? { elementsRight: marks.topEnd } : {}),
       } : undefined}
       LeftBar={{
         initialView: 'expanded',
-        brand,
+        brand: marks.leftBrand,
         // Shown while the bar is open: where you are, written out (the top bar shows it only while the bar is closed).
         header: position ? <LeftBarPosition title={position}>{position}</LeftBarPosition> : undefined,
         elements,
@@ -128,11 +146,14 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
           { type: 'action', props: { element: <MeLauncher />, tooltip: false } },
           { type: 'action', props: { element: <DevToolsLauncher />, tooltip: false } },
           ...(footerElements ?? []).map((element) => ({ type: 'action' as const, props: { element } })),
+          ...marks.leftFooter,
         ],
       }}
     >
       <ActiveView app={app} />
     </Layout>
+    {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
+    </>
   );
 }
 
@@ -149,7 +170,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand }: Pick<Ap
  * had reimplemented this exact composition — nothing below is
  * FullTrailer-specific; `navItems` is the one thing every app supplies.
  */
-export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand }: AppShellProps) {
+export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand, identity, identityCorner }: AppShellProps) {
   useEffect(() => {
     declareApp(me, app);
     const initialPath = window.location.pathname.replace(/^\/+/, '') || 'home';
@@ -161,7 +182,7 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
 
   const body = (
     <Me me={me} runtime={runtime}>
-      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} />
+      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} />
     </Me>
   );
 

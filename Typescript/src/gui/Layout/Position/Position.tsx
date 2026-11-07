@@ -13,7 +13,8 @@
 // answered, and what surrounds the badge (a link, a session mark).
 import React from 'react';
 import Box, { type BoxProps } from '@/gui/Atoms/Box/Box';
-import { useLeftSidebar } from '@/gui-internals/Hooks';
+import { useLeftSidebar, useGuiTheme, useGuiMediaQuery } from '@/gui-internals/Hooks';
+import type { MarksPlacement as _Placement, MarkCorner as _Corner } from './placeMarks';
 import QRme, { resolveTopbarQrSize, type QRmeProps } from '@/gui/All.This/me/QR/QR.me';
 import type { SxProps, Theme } from '@mui/material/styles';
 
@@ -139,4 +140,74 @@ const BRAND_CELL_SX: SxProps<Theme> = {
  */
 export function BarBrandCell({ sx, ...rest }: PositionProps) {
   return <Box {...rest} sx={withSx(BRAND_CELL_SX, sx)} />;
+}
+
+export { placeMarks, isMarkCorner, MARK_CORNERS } from './placeMarks';
+export type { MarkCorner, MarkSlot, MarksPlacement } from './placeMarks';
+
+/** Whether the bars are in their narrow layout (under 600px: the left bar is a drawer), as the bars themselves decide. */
+export function useNarrowBars(): boolean {
+  const theme = useGuiTheme();
+  return useGuiMediaQuery(theme.breakpoints.down('sm'));
+}
+
+type TopElement = { type: 'action'; props: { element: React.ReactNode } };
+type LeftAction = { type: 'action'; props: { element: React.ReactNode; tooltip?: boolean } };
+
+/**
+ * The two marks put where `placeMarks()` said: what goes in LeftBar's `brand` slot, at the start and the far end of the
+ * top bar, at the left bar's foot, or floating in a corner no bar holds. The shell spreads these into its Layout; the
+ * marks themselves (what they look like, what they link to) are the shell's.
+ */
+export function marksInBars(placement: _Placement, marks: { brand?: React.ReactNode; identity?: React.ReactNode }) {
+  const out = {
+    leftBrand: undefined as React.ReactNode,
+    topStart: [] as TopElement[],
+    topEnd: [] as TopElement[],
+    leftFooter: [] as LeftAction[],
+    float: null as null | { corner: _Corner; element: React.ReactNode },
+  };
+  const put = (slot: string, element: React.ReactNode) => {
+    if (element == null || slot === 'none' || slot === 'corner') return;
+    if (slot === 'left.brand') out.leftBrand = element;
+    else if (slot === 'top.start') out.topStart.push({ type: 'action', props: { element } });
+    else if (slot === 'top.end') out.topEnd.push({ type: 'action', props: { element } });
+    else if (slot === 'left.footer') out.leftFooter.push({ type: 'action', props: { element, tooltip: false } });
+    else if (slot.startsWith('float:')) out.float = { corner: slot.slice(6) as _Corner, element };
+  };
+  put(placement.identity, marks.identity);
+  put(placement.brand, marks.brand);
+  return out;
+}
+
+/** A mark floating in a corner no bar holds (fixed, over the page, clear of the bars' edges). */
+export function FloatingMark({ corner, children }: { corner: _Corner; children: React.ReactNode }) {
+  const top = corner.startsWith('top');
+  const right = corner.endsWith('right');
+  return (
+    <Box data-gui-node-id={`GUI.window.layout.marks.${corner}`} sx={{ position: 'fixed', zIndex: (t: any) => (t.zIndex?.drawer ?? 1200) + 3, [top ? 'top' : 'bottom']: 8, [right ? 'right' : 'left']: 8 }}>
+      {children}
+    </Box>
+  );
+}
+
+/**
+ * The site's brand (the author's mark: whose page this is), in its own cell: a logo image, or the label's first letter.
+ * A link when the author gave one. It is never the person's QR and never shares its cell (placeMarks).
+ */
+export function SiteBrand({ label, href, logo, compact = false }: { label: string; href?: string | null; logo?: string | null; compact?: boolean }) {
+  const initial = Array.from(label.replace(/[^\p{L}\p{N}]/gu, ''))[0]?.toUpperCase() ?? '•';
+  return (
+    <BarBrandCell
+      component={href ? 'a' : 'div'}
+      {...(href ? { href } : {})}
+      title={label}
+      aria-label={label}
+      data-gui-node-id="GUI.window.layout.bars.brand"
+      data-gui-component="brand"
+      sx={{ fontWeight: 700, fontSize: '1.25rem', color: 'primary.main', ...(compact ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : {}), ...(href ? {} : { cursor: 'default', '&:hover': {} }) }}
+    >
+      {logo ? <Box component="img" src={logo} alt="" sx={{ width: 28, height: 28, objectFit: 'contain' }} /> : initial}
+    </BarBrandCell>
+  );
 }

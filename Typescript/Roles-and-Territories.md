@@ -62,6 +62,38 @@ person's corner and namespace are kept in their browser (their local layer). It 
 bars exist, their initial state); the person's choices win and are kept by them — locally first, later in their own
 `.me`, signed through their agent, so they follow the person across devices and nobody else can change them.
 
+### Two marks in the bars: the site's brand and the person's QR
+
+Agreed 2026-11-06. A page with bars carries two marks with two owners, and they never share a cell:
+
+| Mark | Owner | Says |
+|---|---|---|
+| **Brand** | The author (the page, the app) | Whose page this is |
+| **QR.me** | The person (their layer) | Who I am, where I go |
+
+- **On a page that uses .GUI the bars coexist.** Cleaker does not draw bars of its own there: the person's QR takes a
+  place in the page's bars (`identity`, apart from `brand`). On a page without .GUI, `cleaker.js` draws the bars the
+  author declared, and the author may declare a brand for them (`bars.brand`).
+- **The person places their QR; the brand takes the other end.** The person picks a corner. The brand goes to the
+  other end of the same edge (QR top-left → brand top-right); when no bar holds that corner, to the diagonal; when
+  nothing holds that either, to the first free place in the bars. With no bars at all there is no brand to place and
+  the QR is the scannable corner QR (level 1).
+- **The person wins on their own screen.** If the author asks for a corner and the person's QR is there, the brand
+  moves. It is `base @ overlay(person)`: the author's default, the person's choice over it.
+- **The brand moves only because the person moved.** On a wide screen it changes place only when the person changes
+  their corner, and then stays; never because the window was resized or a bar was opened or closed. Recognising a
+  site depends on its mark staying put.
+- **A narrow screen has one layout of its own** (under 600px, where the left bar is a drawer): the QR stays in the
+  top bar, at the end the person chose (left or right), and the brand leads the drawer.
+- **The far end of the top bar is shared.** When the brand goes there it sits before the author's own elements
+  (search, account, actions); it does not push them out.
+- **Placement is layout, not trust.** The page's own script can draw something identical to a person's QR.me. Where the
+  badge sits proves nothing about the page; signing and approving happen in the person's agent, outside the page
+  ([Identity-Custody-Contract.md](Identity-Custody-Contract.md)).
+
+The rule is one function, `placeMarks()` in `src/gui/Layout/Position/Position.tsx`, used by every shell that draws the
+marks (AppShell, Cleaker), so it is decided once.
+
 ## 4. Apps are shells; holes are filled from territories
 
 An app declares **holes** in the `.me` grammar, and the page fills them from a territory instead of from the app's own

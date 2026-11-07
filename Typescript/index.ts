@@ -62,17 +62,26 @@ export { default as Input } from '@/gui/Atoms/TextField/TextField';
 export { default as Theme } from '@/gui/Theme/Theme';
 export { default as Layout } from '@/gui/Layout/Layout';
 // Where you are, in the shell's bars (one composition for AppShell, netget's shell and Cleaker): the position in the top
-// bar or the left bar's header, and the identity QR as a bar's badge.
+// bar or the left bar's header, the identity QR as a bar's badge, and where the site's brand and the person's QR go
+// (placeMarks: two owners, never one cell).
 export {
   BarBrandCell,
   CompactAt,
+  FloatingMark,
+  isMarkCorner,
   LeftBarPosition,
+  MARK_CORNERS,
+  marksInBars,
+  placeMarks,
   QrBadge,
   RAIL_BADGE_SIZE,
+  SiteBrand,
   TopBarPosition,
   topBarPosition,
   UnlessLeftBarExpanded,
+  useNarrowBars,
 } from '@/gui/Layout/Position/Position';
+export type { MarkCorner, MarkSlot, MarksPlacement } from '@/gui/Layout/Position/Position';
 export { default as TabViews } from '@/gui/Layout/Stage/TabViews/TabViews';
 export type { TabViewsProps, TabViewsItem } from '@/gui/Layout/Stage/TabViews/TabViews';
 export { default as StickyOptionsTop } from '@/gui/Layout/StickyOptions/StickyOptionsTop';

@@ -15,12 +15,13 @@ import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
-import { BarBrandCell, CompactAt, LeftBarPosition, QrBadge, TopBarPosition, topBarPosition } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, marksInBars, placeMarks, topBarPosition, useNarrowBars } from '@/gui/Layout/Position/Position';
 import {
   CLEAKER_BAR_STATES,
   barStates,
   isBarState,
   readBars,
+  readBrand,
   type CleakerBar,
   type CleakerBarId,
   type CleakerBarState,
@@ -50,8 +51,9 @@ export type CleakerGuiOptions = {
   probe?: (namespace: string) => Promise<boolean>;
   /**
    * Level 2: the author's GUI document (or `{ bars }`). Its GUI.window.layout.bars are drawn with .GUI's own Layout
-   * (LeftBar, TopBar), each in the author's state until the person chooses another. While the left bar shows, the QR
-   * is its brand (top left), as in the shell.
+   * (LeftBar, TopBar), each in the author's state until the person chooses another. The author may declare the site's
+   * brand (`bars.brand: { label, to?, logo? }`); the person's QR and the brand are placed by placeMarks() (the person's
+   * corner; the brand at the other end).
    */
   document?: unknown;
 };
@@ -128,6 +130,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   const value = namespace ? positionQrValue(namespace, pageAddress) : pageAddress;
   const statusText = probeState === 'ok' ? `${namespace} answered` : probeState === 'off' ? `${namespace} did not answer` : probeState === 'checking' ? `asking ${namespace}…` : undefined;
 
+  const siteBrand = React.useMemo(() => readBrand(options.document, page.href), [options.document, page.href]);
+  const narrow = useNarrowBars();
   const leftBar = bars.find((b) => b.id === 'left' && states.left !== 'closed');
   const topBar = bars.find((b) => b.id === 'top' && states.top !== 'closed');
   const toggle = () => { setOpen((o) => !o); setDraft(namespace ?? ''); };
@@ -150,7 +154,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   // scannable QR there -- QR.me keeps a scannable code at >= 4px per module, so a long value (namespace + at=) grows it
   // past any bar (176px for `cleaker.me @ localhost:5176`); the scannable one is the corner's, with no bars.
   // The badge opens Cleaker's panel; the left bar's own arrow expands and contracts the bar.
-  const badge = (where: 'left' | 'top') => (
+  const badge = (where: 'left' | 'top' | 'float') => (
     <BarBrandCell
       component="button"
       type="button"
@@ -159,9 +163,9 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       aria-expanded={open}
       title={label}
       data-cleaker-qr={value}
-      data-cleaker-brand={where}
-      data-gui-node-id={`GUI.window.layout.bars.${where}.identity`}
-      sx={where === 'top' ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : undefined}
+      data-cleaker-brand={placement.identity}
+      data-gui-node-id={where === 'float' ? 'GUI.window.layout.marks.identity' : `GUI.window.layout.bars.${where}.identity`}
+      sx={where === 'left' ? undefined : { width: 48, height: 48, minWidth: 48, flex: 'none', ...(where === 'float' ? { bgcolor: 'background.paper', borderRadius: 2, boxShadow: 3 } : {}) }}
     >
       <QrBadge
         value={value}
@@ -175,8 +179,21 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       />
     </BarBrandCell>
   );
-  // The top bar leads with the badge when there is no left bar to hold it (top left, where the shell's brand sits).
-  const badgeInTop = Boolean(topBar) && !leftBar;
+  // The two marks (Roles-and-Territories.md §3): the person's QR where they put it, the site's brand at the other end.
+  // Decided by the corner, which bars exist and the width -- never by whether a bar is open or a rail.
+  const placement = placeMarks({ identity: corner, bars: { top: Boolean(topBar), left: Boolean(leftBar) }, narrow, brand: Boolean(siteBrand) });
+  const idWhere = placement.identity === 'left.brand' ? 'left' : placement.identity.startsWith('float:') ? 'float' : 'top';
+  const marks = marksInBars(placement, {
+    identity: badge(idWhere),
+    brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} compact={placement.brand !== 'left.brand'} /> : undefined,
+  });
+  // The panel opens beside the QR, wherever the QR is.
+  const panelAt: Record<string, string | number> =
+    placement.identity === 'left.brand' ? { top: 8, left: 72 }
+      : placement.identity === 'top.start' ? { top: 52, left: 8 }
+      : placement.identity === 'top.end' ? { top: 52, right: 8 }
+      : placement.identity === 'left.footer' ? { bottom: 8, left: 72 }
+      : { [corner.startsWith('top') ? 'top' : 'bottom']: 64, [corner.endsWith('right') ? 'right' : 'left']: 8 };
 
   const panel = open && (
     <Paper elevation={6} sx={{ p: 1.5, width: 280, display: 'flex', flexDirection: 'column', gap: 1 }} data-cleaker-panel="">
@@ -185,8 +202,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
         <Button type="submit" variant="contained" size="small">Use</Button>
       </Box>
       <Typography variant="caption" color="text.secondary" data-cleaker-status="">{message || statusText || label}</Typography>
-      {/* the corner is where the QR sits with no bars; with bars it is in a bar */}
-      {!leftBar && !topBar && (
+      {/* the person's corner: where their QR sits (in a bar when bars show, else the corner itself) */}
+      {(
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
           {CLEAKER_CORNERS.map((c) => (
             <Button key={c} size="small" variant={c === corner ? 'contained' : 'outlined'} onClick={() => moveTo(c)} data-corner-choice={c}>
@@ -228,7 +245,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           toolbarSx: { pl: 0.25 },
           elementsLeftSx: { pl: 1 },
           elementsLeft: [
-            ...(badgeInTop ? [{ type: 'action' as const, props: { element: badge('top') } }] : []),
+            ...marks.topStart,
             topBarPosition(
               <TopBarPosition
                 component="button"
@@ -243,10 +260,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
             ),
           ],
           // 'icons': the author's top elements as icons only; 'open': with their labels (where the bar's width allows).
-          elementsRight: (topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
+          // the far end holds a mark first (before the author's own elements, never pushing them out)
+          elementsRight: [...marks.topEnd, ...(topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } }))],
         } : false}
         LeftBar={leftBar ? {
-          brand: badge('left'),
+          brand: marks.leftBrand,
+          footerElements: marks.leftFooter,
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
           header: <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>,
@@ -263,7 +282,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     return (
       <>
         {layout}
-        {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, ...(leftBar ? { top: 8, left: 72 } : { top: 52, left: 8 }) }}>{panel}</Box>}
+        {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
+        {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }}>{panel}</Box>}
       </>
     );
   }
@@ -322,7 +342,10 @@ export function mountCleakerGui(options: CleakerGuiOptions = {}): CleakerGuiHand
       <Theme>
         <ThemeProvider theme={portals}>
           <MemoryRouter>
-            <CornerApp options={options} storage={storage} />
+            {/* text in the shadow root would inherit the page's font (its body); it is the theme's */}
+            <Box sx={{ fontFamily: (t: MuiTheme) => t.typography.fontFamily }}>
+              <CornerApp options={options} storage={storage} />
+            </Box>
           </MemoryRouter>
         </ThemeProvider>
       </Theme>

@@ -107,3 +107,21 @@ export function barStates(bars: CleakerBar[], chosen: Partial<Record<CleakerBarI
   for (const bar of bars) out[bar.id] = isBarState(chosen[bar.id]) ? (chosen[bar.id] as CleakerBarState) : bar.defaultState;
   return out;
 }
+
+/** The site's brand an author declares for the bars (`bars.brand`): whose page this is. Apart from the person's QR. */
+export type CleakerBrand = { label: string; href: string | null; logo: string | null };
+
+/**
+ * The author's brand (`bars.brand: { label, to?, logo? }`), in the full GUI document shape or the short one; null when
+ * none is declared. Text and safe links only, as for the bars: `to` and `logo` are kept only when they are somewhere a
+ * link may go (relative, http(s)); a logo is an image address, never markup.
+ */
+export function readBrand(doc: unknown, base: string): CleakerBrand | null {
+  const node = barsNode(doc) as Record<string, DocNode & { logo?: unknown }> | null;
+  const brand = node?.brand;
+  if (!brand || typeof brand !== 'object') return null;
+  const label = typeof brand.label === 'string' && brand.label.trim() ? brand.label.trim().slice(0, MAX_LABEL) : '';
+  if (!label) return null;
+  const logo = safeHref(brand.logo, base);
+  return { label, href: safeHref(brand.to, base), logo: logo && !logo.startsWith('#') ? logo : null };
+}

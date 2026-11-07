@@ -57,3 +57,12 @@ assert.deepEqual(barStates(bars, { left: 'icons', top: 'closed' }), { top: 'clos
 assert.deepEqual(barStates(bars, { left: 'wide' as never }), { top: 'open', left: 'closed' });
 
 console.log('cleakerBars: ok');
+
+// the site's brand (the author's), apart from the person's QR
+import { readBrand } from '../src/gui/All.This/Cleaker/Corner/cleakerBars';
+assert.deepEqual(readBrand({ bars: { brand: { label: 'Neurons', to: '/', logo: '/logo.svg' } } }, BASE), { label: 'Neurons', href: 'https://neurons-me.github.io/', logo: 'https://neurons-me.github.io/logo.svg' });
+assert.deepEqual(readBrand({ bars: { brand: { label: 'N', to: 'javascript:alert(1)', logo: 'data:image/svg+xml,<svg/>' } } }, BASE), { label: 'N', href: null, logo: null });
+assert.equal(readBrand({ bars: { brand: { to: '/' } } }, BASE), null, 'a brand names itself');
+assert.equal(readBrand({ bars: {} }, BASE), null);
+assert.deepEqual(readBars({ bars: { brand: { label: 'N' } } }, BASE), [], 'the brand is not a bar');
+console.log('cleakerBars brand: ok');
