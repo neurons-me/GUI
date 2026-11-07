@@ -9,12 +9,17 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import createCache from '@emotion/cache';
 import { CacheProvider } from '@emotion/react';
-import { ThemeProvider, type Theme as MuiTheme } from '@mui/material/styles';
+import { ThemeProvider, useTheme, type Theme as MuiTheme } from '@mui/material/styles';
 import Theme from '@/gui/Theme/Theme';
 import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
+import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
+import DevToolsLauncher from '@/runtime/DevToolsLauncher';
+import { SelectionProvider } from '@/runtime/selection';
+import { ThemeSettingsContext } from '@/runtime/themeSettings';
+import { NamespaceRoutePanel, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
 import {
   CLEAKER_BAR_STATES,
@@ -24,6 +29,7 @@ import {
   readBrand,
   type CleakerBar,
   type CleakerBarId,
+  type CleakerBarItem,
   type CleakerBarState,
 } from './cleakerBars';
 import {
@@ -56,6 +62,17 @@ export type CleakerGuiOptions = {
    * corner; the brand at the other end).
    */
   document?: unknown;
+  /**
+   * The dev tools in the left bar's foot (the wrench), as the shell has them when its app asks for them: the inspector's
+   * selection (SelectionProvider) is given to the bars. Off by default: a page's visitor has no dev tools.
+   */
+  devtools?: boolean;
+  /**
+   * Views for the namespace's routes, by route (`/users`): what opens over the page when an item with that `route` is
+   * chosen. The GUI's own pages (`/GUI`, `/GUI/themes`, `/GUI/layout`) are always here; a route with no view says so
+   * and offers the namespace's own door, where the route renders in the content area.
+   */
+  pages?: Record<string, React.ComponentType<CleakerRouteProps>>;
 };
 
 export type CleakerGuiHandle = { host: HTMLElement; unmount(): void };
@@ -66,6 +83,9 @@ const write = (s: Storage | null, k: string, v: string) => { try { s?.setItem(k,
 
 type ProbeState = 'none' | 'checking' | 'ok' | 'off';
 const QR_STATUS: Record<ProbeState, 'idle' | 'checking' | 'confirmed' | 'off'> = { none: 'idle', checking: 'checking', ok: 'confirmed', off: 'off' };
+
+/** What a view of a namespace route is given when it opens over a page. */
+export type CleakerRouteProps = NamespaceRouteProps;
 
 function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: Storage | null }) {
   const page = window.location;
@@ -102,6 +122,15 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     setChosenBars(next);
   };
   const [probeState, setProbeState] = React.useState<ProbeState>('none');
+  // The namespace route open over the page (a modal), if any; its item's label is the modal's title.
+  const [openRoute, setOpenRoute] = React.useState<{ route: string; label?: string } | null>(null);
+  const goRoute = React.useCallback((route: string) => setOpenRoute({ route }), []);
+  const closeRoute = React.useCallback(() => setOpenRoute(null), []);
+  const openThemeSettings = React.useCallback(() => setOpenRoute({ route: '/GUI/themes' }), []);
+  // An item of a bar as the bar draws it: the author's link goes where it says; a route of the namespace opens over the page.
+  const itemProps = (it: CleakerBarItem) => it.route
+    ? { label: it.label, icon: it.icon ?? 'link', active: openRoute?.route === it.route, onClick: () => setOpenRoute((cur) => (cur?.route === it.route ? null : { route: it.route!, label: it.label })) }
+    : { label: it.label, href: it.href, icon: it.icon ?? 'link' };
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState('');
   const [message, setMessage] = React.useState('');
@@ -249,9 +278,11 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     // .GUI's own Layout, drawn over the author's page: its bars are fixed to the viewport and its content area is
     // empty, so the page is not covered beyond the bars themselves.
     // Its content area is the author's page, not Layout's: Layout's own <main> (its background, its padding) is not drawn.
+    // The bars are one layer (fixed): at the app bar's level, over a namespace route open in the content area's place
+    // (just under it) and under their own menus and drawer (portaled, higher).
     // The bars publish their insets on the document (--gui-inset-left/top/…), so an author who wants the page pushed
     // instead of covered can pad with them.
-    <Box data-cleaker-bars="" sx={{ position: 'fixed', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', '--gui-layout-min-height': '0px', '& main': { display: 'none' } } as any}>
+    <Box data-cleaker-bars="" sx={{ position: 'fixed', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', zIndex: (t: MuiTheme) => t.zIndex.appBar, '--gui-layout-min-height': '0px', '& main': { display: 'none' } } as any}>
       <Layout
         // The top bar is the shell's: the position on its left (while the left bar is not expanded), the author's top
         // elements on its right. Drawn only when it shows (the author's state or the person's choice): 'closed' is closed.
@@ -278,16 +309,21 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           ],
           // 'icons': the author's top elements as icons only; 'open': with their labels (where the bar's width allows).
           // the far end holds a mark first (before the author's own elements, never pushing them out)
-          elementsRight: [...marks.topEnd, ...(topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } }))],
+          elementsRight: [...marks.topEnd, ...(topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { ...itemProps(it), ...(states.top === 'icons' ? { showLabel: false } : {}), 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } }))],
         } : false}
         LeftBar={leftBar ? {
           brand: marks.leftBrand,
-          footerElements: marks.leftFooter,
+          // The same foot as the shell's (Namespace.tsx): the theme and the dev tools, then a mark that sits at the foot.
+          footerElements: [
+            { type: 'action' as const, props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
+            { type: 'action' as const, props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
+            ...marks.leftFooter,
+          ],
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
           // beside the mark in the bar's head: its text (who, or @where); with neither mark there, the whole position
           header: marks.leftHeader ?? (siteBrand ? undefined : <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>),
-          elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
+          elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { ...itemProps(it), 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >
         {null}
@@ -296,13 +332,25 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   );
 
   // With bars the QR is in a bar, and its panel opens beside it; the corner (and its scannable QR) is for no bars.
+  const routeDialog = (
+    <NamespaceRoutePanel
+      route={openRoute?.route ?? null}
+      label={openRoute?.label}
+      namespace={namespace}
+      pages={options.pages}
+      go={goRoute}
+      onClose={closeRoute}
+    />
+  );
+
   if (leftBar || topBar) {
     return (
-      <>
+      <ThemeSettingsContext.Provider value={openThemeSettings}>
         {layout}
+        {routeDialog}
         {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
         {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }}>{panel}</Box>}
-      </>
+      </ThemeSettingsContext.Provider>
     );
   }
 
@@ -323,6 +371,19 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       </Box>
     </>
   );
+}
+
+/**
+ * The theme's font and text color on the Cleaker's root element: its menus and popovers (portaled there, outside the
+ * bars) would otherwise inherit the author's page's (dark text on the theme's dark paper).
+ */
+function ThemeTextOn({ element }: { element: HTMLElement }) {
+  const theme = useTheme();
+  React.useLayoutEffect(() => {
+    element.style.fontFamily = String(theme.typography.fontFamily ?? '');
+    element.style.color = theme.palette.text.primary;
+  }, [element, theme]);
+  return null;
 }
 
 /** Mounts Cleaker's corner, drawn with .GUI, in its own Shadow DOM. */
@@ -360,9 +421,12 @@ export function mountCleakerGui(options: CleakerGuiOptions = {}): CleakerGuiHand
       <Theme>
         <ThemeProvider theme={portals}>
           <MemoryRouter>
-            {/* text in the shadow root would inherit the page's font (its body); it is the theme's */}
-            <Box sx={{ fontFamily: (t: MuiTheme) => t.typography.fontFamily }}>
-              <CornerApp options={options} storage={storage} />
+            {/* text in the shadow root would inherit the page's font and color (its body); they are the theme's */}
+            <ThemeTextOn element={mountPoint} />
+            <Box sx={{ fontFamily: (t: MuiTheme) => t.typography.fontFamily, color: 'text.primary' }}>
+              {options.devtools
+                ? <SelectionProvider><CornerApp options={options} storage={storage} /></SelectionProvider>
+                : <CornerApp options={options} storage={storage} />}
             </Box>
           </MemoryRouter>
         </ThemeProvider>

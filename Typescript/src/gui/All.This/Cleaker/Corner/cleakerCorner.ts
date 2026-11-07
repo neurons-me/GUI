@@ -238,8 +238,12 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
       nav.hidden = states[bar.id] === 'closed';
       if (bar.id === 'top' || bar.id === 'bottom') nav.append(el('span', { class: 'pos' }, cornerLabel(namespace, page)));
       for (const item of bar.items) {
-        const a = el('a', { href: item.href, title: item.label, 'data-item': item.id });
-        if (item.href.split('#')[0] === here) a.setAttribute('aria-current', 'page');
+        // a route of the namespace: this plain corner has no modal, so it opens at the namespace's own door, where the
+        // route renders in the content area; with no namespace chosen there is nowhere to open it
+        const href = item.route ? (namespace ? `https://${namespace}${item.route}` : '') : item.href;
+        if (!href) continue;
+        const a = el('a', { href, title: item.label, 'data-item': item.id });
+        if (href.split('#')[0] === here) a.setAttribute('aria-current', 'page');
         a.append(el('span', { class: 'glyph', 'aria-hidden': 'true' }, item.glyph), el('span', { class: 'text' }, item.label));
         nav.append(a);
       }

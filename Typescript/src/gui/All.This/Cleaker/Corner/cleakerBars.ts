@@ -16,7 +16,12 @@ export type CleakerBarState = 'open' | 'icons' | 'closed';
 export const CLEAKER_BAR_STATES: readonly CleakerBarState[] = ['open', 'icons', 'closed'];
 
 /** `icon`: the author's icon for .GUI's Icon (`home`, `lucide:Menu`, `glyph:𓆣`), when it is one Icon draws. */
-export type CleakerBarItem = { id: string; label: string; href: string; glyph: string; icon?: string };
+/**
+ * `route`: a route of the namespace (`/users`, `/GUI/themes`), not a place on the author's site. On the namespace's own
+ * page its routes render in the content area; on any other page they open over it (a modal), never replacing it. An
+ * item has a `route` or an `href` (the author's link); with a route, `href` is ''.
+ */
+export type CleakerBarItem = { id: string; label: string; href: string; glyph: string; icon?: string; route?: string };
 export type CleakerBar = { id: CleakerBarId; label: string; defaultState: CleakerBarState; items: CleakerBarItem[] };
 
 const MAX_ITEMS = 24;
@@ -41,6 +46,14 @@ export function safeHref(to: unknown, base: string): string | null {
   }
 }
 
+/** A route of the namespace an item may open: an absolute path of plain segments (`/users`, `/GUI/themes`). */
+export function safeRoute(route: unknown): string | null {
+  if (typeof route !== 'string') return null;
+  const r = route.trim();
+  if (!/^\/[A-Za-z0-9._~\-/]{0,120}$/.test(r) || r.includes('//')) return null;
+  return r.split('/').some((seg) => seg === '.' || seg === '..') ? null : r;
+}
+
 /** What stands for an item when only icons show: a glyph the author wrote (`glyph:𓆣`), else the label's first letter. */
 export function itemGlyph(icon: unknown, label: string): string {
   if (typeof icon === 'string' && icon.startsWith('glyph:') && icon.length > 6) return Array.from(icon.slice(6))[0] ?? '';
@@ -60,7 +73,7 @@ export function iconToken(icon: unknown): string | undefined {
   return /^([a-z]+:)?[A-Za-z][A-Za-z0-9_]{0,40}$/.test(icon) ? icon : undefined;
 }
 
-type DocNode = { label?: unknown; to?: unknown; icon?: unknown; state?: unknown; props?: { state?: unknown }; children?: Record<string, DocNode> };
+type DocNode = { label?: unknown; to?: unknown; route?: unknown; icon?: unknown; state?: unknown; props?: { state?: unknown }; children?: Record<string, DocNode> };
 
 /** The bars node of a GUI document, in the full shape or the short `{ bars }` one. */
 function barsNode(doc: unknown): Record<string, DocNode> | null {
@@ -85,10 +98,12 @@ export function readBars(doc: unknown, base: string): CleakerBar[] {
       if (items.length >= MAX_ITEMS) break;
       if (!child || typeof child !== 'object') continue;
       const label = String(child.label ?? key).slice(0, MAX_LABEL);
-      const href = safeHref(child.to, base);
-      if (!href) continue;   // a bar element is a place to go; one without a safe target is not drawn
+      // a route of the namespace, or a link of the author's; one with neither (or an unsafe one) is not drawn
+      const route = safeRoute(child.route);
+      const href = route ? '' : safeHref(child.to, base);
+      if (!route && !href) continue;
       const icon = iconToken(child.icon);
-      items.push({ id: key, label, href, glyph: itemGlyph(child.icon, label), ...(icon ? { icon } : {}) });
+      items.push({ id: key, label, href: href ?? '', glyph: itemGlyph(child.icon, label), ...(icon ? { icon } : {}), ...(route ? { route } : {}) });
     }
     const declared = bar.props?.state ?? bar.state;
     bars.push({

@@ -1,7 +1,7 @@
 // Level 2 (src/gui/All.This/Cleaker/Corner/cleakerBars.ts): the bars read from an author's document, kept safe to draw,
 // and each bar's state from the author's default and the person's choice.
 import assert from 'node:assert/strict';
-import { barStates, iconToken, itemGlyph, readBars, safeHref } from '../src/gui/All.This/Cleaker/Corner/cleakerBars';
+import { barStates, iconToken, itemGlyph, readBars, safeHref, safeRoute } from '../src/gui/All.This/Cleaker/Corner/cleakerBars';
 
 const BASE = 'https://neurons-me.github.io/docs/index.html';
 
@@ -65,4 +65,24 @@ assert.deepEqual(readBrand({ bars: { brand: { label: 'N', to: 'javascript:alert(
 assert.equal(readBrand({ bars: { brand: { to: '/' } } }, BASE), null, 'a brand names itself');
 assert.equal(readBrand({ bars: {} }, BASE), null);
 assert.deepEqual(readBars({ bars: { brand: { label: 'N' } } }, BASE), [], 'the brand is not a bar');
+// a route of the namespace (`route`): kept as a route, not a link of the author's (it opens over the page, or at the
+// namespace's own door); only plain absolute paths
+{
+  const [left] = readBars({ bars: { left: { children: {
+    users: { label: 'Users', route: '/users', icon: 'group' },
+    themes: { label: 'Themes', route: '/GUI/themes' },
+    up: { label: 'Up', route: '/../etc' },
+    js: { label: 'JS', route: 'javascript:alert(1)' },
+    rel: { label: 'Rel', route: 'users' },
+    docs: { label: 'Docs', to: '/docs' },
+  } } } }, BASE);
+  assert.deepEqual(left.items.map((i) => [i.id, i.route ?? null, i.href]), [
+    ['users', '/users', ''],
+    ['themes', '/GUI/themes', ''],
+    ['docs', null, 'https://neurons-me.github.io/docs'],
+  ]);
+  assert.equal(safeRoute('/a//b'), null);
+  assert.equal(safeRoute('/monad'), '/monad');
+}
+
 console.log('cleakerBars brand: ok');

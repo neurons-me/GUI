@@ -12,6 +12,7 @@ import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
 import { CompactAt, FloatingMark, IdentityText, LeftBarPosition, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import type { MeLike } from '@/react/types';
+import { NamespaceRoutePanel, type NamespaceRouteItem, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 import { SelectionProvider } from './selection';
 import { LauncherPopoverProvider } from './launcherPopover';
 import { RuntimeEnvironmentProvider } from './runtimeContext';
@@ -68,6 +69,16 @@ export interface AppShellProps {
    * beside the QR, `@where` beside the brand.
    */
   identityUsername?: string;
+  /**
+   * The namespace this app is reached through (`cleaker.me`), when it is not the app itself: the person's, beside the
+   * app's own views. Its routes (`namespaceRoutes`) are drawn in the left bar after the app's items and open in the
+   * content area's place, over the app's view (which stays as it is underneath), never as a route of the app.
+   */
+  namespace?: string;
+  /** The namespace's routes (Users, Blockchain, Netget, Monad…), as the namespace's own shell draws them. */
+  namespaceRoutes?: NamespaceRouteItem[];
+  /** Views for the namespace's routes, by route; the GUI's own pages are always there. */
+  namespacePages?: Record<string, React.ComponentType<NamespaceRouteProps>>;
 }
 
 /**
@@ -131,21 +142,40 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
-function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left', identityUsername }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner' | 'identityUsername'>) {
+function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left', identityUsername, namespace, namespaceRoutes, namespacePages }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner' | 'identityUsername' | 'namespace' | 'namespaceRoutes' | 'namespacePages'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
   // The theme launcher's gear opens the GUI's theme page (GUI/themes), as in netget's shell; not a dialog.
   const openThemeSettings = useCallback(() => setRoute('GUI/themes'), [setRoute]);
 
-  const elements = navItems.map(({ route: r, label, icon }) => ({
-    type: 'link' as const,
-    props: {
-      label,
-      icon,
-      active: route === r,
-      onClick: () => setRoute(r),
-    },
-  }));
+  // The namespace route open over the app's view, if any (the app's own route is unchanged under it).
+  const [openRoute, setOpenRoute] = React.useState<{ route: string; label?: string } | null>(null);
+  const goRoute = useCallback((r: string) => setOpenRoute({ route: r }), []);
+  const closeRoute = useCallback(() => setOpenRoute(null), []);
+
+  const elements = [
+    // the app's own views: choosing one shows it (and closes a namespace route open over it)
+    ...navItems.map(({ route: r, label, icon }) => ({
+      type: 'link' as const,
+      props: {
+        label,
+        icon,
+        active: !openRoute && route === r,
+        onClick: () => { setOpenRoute(null); setRoute(r); },
+      },
+    })),
+    // the namespace's routes: they open over the app's view, never as a route of the app
+    ...(namespaceRoutes ?? []).map((it) => ({
+      type: 'link' as const,
+      props: {
+        label: it.label,
+        icon: it.icon ?? 'link',
+        active: openRoute?.route === it.route,
+        onClick: () => setOpenRoute((cur) => (cur?.route === it.route ? null : { route: it.route, label: it.label })),
+        'data-gui-node-id': `GUI.window.layout.bars.left.${it.route.replace(/^\//, '').replace(/\//g, '.') || 'root'}`,
+      },
+    })),
+  ];
 
   // The two marks: the person's where they put it, the app's at the other end (placeMarks). With no identity the brand
   // leads the left bar, as it always has.
@@ -202,6 +232,14 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
       <ActiveView app={app} />
     </Layout>
     {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
+    <NamespaceRoutePanel
+      route={openRoute?.route ?? null}
+      label={openRoute?.label}
+      namespace={namespace ?? null}
+      pages={namespacePages}
+      go={goRoute}
+      onClose={closeRoute}
+    />
     </ThemeSettingsContext.Provider>
   );
 }
@@ -219,7 +257,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
  * had reimplemented this exact composition — nothing below is
  * FullTrailer-specific; `navItems` is the one thing every app supplies.
  */
-export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand, identity, identityCorner, identityUsername }: AppShellProps) {
+export function AppShell({ app, me, runtime, navItems, devtools = true, footerElements, position, brand, identity, identityCorner, identityUsername, namespace, namespaceRoutes, namespacePages }: AppShellProps) {
   useEffect(() => {
     declareApp(me, app);
     const initialPath = window.location.pathname.replace(/^\/+/, '') || 'home';
@@ -231,7 +269,7 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
 
   const body = (
     <Me me={me} runtime={runtime}>
-      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} identityUsername={identityUsername} />
+      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} identityUsername={identityUsername} namespace={namespace} namespaceRoutes={namespaceRoutes} namespacePages={namespacePages} />
     </Me>
   );
 

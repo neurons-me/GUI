@@ -1,6 +1,10 @@
 export type TopBarLinkProps = {
   label: string;
-  href: string;
+  /** Where the link goes. Without one, `onClick` is what it does (a button, not a link). */
+  href?: string;
+  onClick?: () => void;
+  /** The place it opens is the one showing. */
+  active?: boolean;
   icon?: string;
   external?: boolean;
   iconColor?: string;

@@ -82,6 +82,8 @@ export {
   useNarrowBars,
 } from '@/gui/Layout/Position/Position';
 export type { MarkCorner, MarkSlot, MarksPlacement } from '@/gui/Layout/Position/Position';
+export { NamespaceRoutePanel } from '@/gui/Layout/Position/NamespaceRoute';
+export type { NamespaceRouteItem, NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 export { default as TabViews } from '@/gui/Layout/Stage/TabViews/TabViews';
 export type { TabViewsProps, TabViewsItem } from '@/gui/Layout/Stage/TabViews/TabViews';
 export { default as StickyOptionsTop } from '@/gui/Layout/StickyOptions/StickyOptionsTop';

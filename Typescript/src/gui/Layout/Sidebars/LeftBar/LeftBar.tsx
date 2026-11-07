@@ -506,7 +506,13 @@ const LeftSidebar = ({
           >
             {headerContent(true, () => setMobileOpen(false), 'expanded', 'inline')}
           </Box>
-          <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
+          {/* A destination chosen in the temporary drawer closes it: the place it opens is what the person wants to see. */}
+          <Box
+            sx={{ flexGrow: 1, overflowY: 'auto' }}
+            onClick={(e) => { if ((e.target as HTMLElement).closest?.('[data-gui-component="link"]')) setMobileOpen(false); }}
+          >
+            {renderElements()}
+          </Box>
           {hasFooterElements && (
             <Box
               component="footer"
