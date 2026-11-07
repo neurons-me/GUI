@@ -22,3 +22,5 @@ export { probeMonadSurface, isGenuineSurfacePayload } from '@/runtime/monads/mon
 // Shadow DOM. React-free like the rest of this subpath. The standalone script is dist/cleaker.js.
 export { mountCleaker, cornerLabel, isNamespaceName, namespaceEndpoint, CLEAKER_CORNERS, DEFAULT_CLEAKER_NAMESPACE, positionQrValue } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 export type { CleakerCorner, CleakerHandle, CleakerMountOptions } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
+export { readBars, barStates, CLEAKER_BARS, CLEAKER_BAR_STATES } from '@/gui/All.This/Cleaker/Corner/cleakerBars';
+export type { CleakerBar, CleakerBarId, CleakerBarItem, CleakerBarState } from '@/gui/All.This/Cleaker/Corner/cleakerBars';

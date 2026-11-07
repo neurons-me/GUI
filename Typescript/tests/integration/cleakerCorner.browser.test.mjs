@@ -48,8 +48,22 @@ async function startStandalone() {
   if (build.status !== 0) throw new Error(`cleaker.js build failed:\n${build.stdout}${build.stderr}`);
   const js = fs.readFileSync(path.join(out, 'cleaker.js'));
   const page = '<!doctype html><meta charset="utf-8"><title>plain page</title><p>A plain static page.</p>\n<script src="/cleaker.js" data-corner="top-left"></script>';
+  // level 2: bars declared inline (top opened by the author, left closed), and the same from a document file
+  const doc = { bars: {
+    top: { label: 'Top bar', state: 'open', children: { docs: { label: 'Docs', to: '/bars' } } },
+    left: { label: 'Left bar', children: {
+      home: { label: 'Home', to: '/' },
+      evil: { label: 'Evil', to: 'javascript:alert(1)' },
+      netget: { label: 'Netget', to: '/netget', icon: 'glyph:𓆣' },
+    } },
+  } };
+  const barsPage = `<!doctype html><meta charset="utf-8"><title>bars</title><p>page with bars</p><script type="application/json" data-cleaker-document>${JSON.stringify(doc)}</script><script src="/cleaker.js"></script>`;
+  const barsDocPage = '<!doctype html><meta charset="utf-8"><title>bars from a document</title><p>page</p><script src="/cleaker.js" data-document="/gui.document.json"></script>';
   const server = http.createServer((req, res) => {
     if (req.url === '/cleaker.js') { res.writeHead(200, { 'content-type': 'text/javascript' }); return res.end(js); }
+    if (req.url === '/bars') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(barsPage); }
+    if (req.url === '/bars-doc') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end(barsDocPage); }
+    if (req.url === '/gui.document.json') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify(doc)); }
     res.writeHead(200, { 'content-type': 'text/html' }); return res.end(page);
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -159,6 +173,43 @@ async function main() {
       check(`3.1 <script src="cleaker.js" data-corner="top-left"> puts it top-left on a plain page (${Math.round(standalone.bytes / 1024)} kB, no React)`, !!r && r.left <= 20 && r.top <= 20 && api && errors.length === 0, JSON.stringify({ r, api, errors }));
       await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
       check('3.2 with no data-namespace it starts on cleaker.me at that page', (await label(page)) === `cleaker.me @ ${new URL(standalone.origin).host}`, await label(page));
+      await context.close();
+    }
+    // ── level 2: bars unfolding from the QR ─────────────────────────────────────────────────────────────────────
+    {
+      const { context, page } = await newPage();
+      await page.goto(`${standalone.origin}/bars`);
+      await page.waitForSelector('[data-cleaker]');
+      const bars = () => inShadow(page, `return [...shadow.querySelectorAll('.bars nav')].map((n) => { const r = n.getBoundingClientRect(); return { bar: n.dataset.bar, state: n.dataset.state, hidden: n.hidden, w: Math.round(r.width), h: Math.round(r.height), items: [...n.querySelectorAll('a')].map((a) => a.dataset.item + (a.getAttribute('aria-current') ? '*' : '')), labels: [...n.querySelectorAll('a .text')].filter((t) => t.offsetParent).map((t) => t.textContent), pos: n.querySelector('.pos')?.textContent || null }; })`);
+      let b = await bars();
+      const top = b.find((x) => x.bar === 'top'); const left = b.find((x) => x.bar === 'left');
+      check('5.1 the author opened the top bar: it shows, with where you are and its element (current page marked)', top && !top.hidden && top.pos?.startsWith('cleaker.me @') && top.items.join() === 'docs*', JSON.stringify(top));
+      check('5.2 the left bar starts closed (the page is unchanged until someone opens it)', left && left.hidden, JSON.stringify(left));
+      check('5.3 an element with an unsafe link (javascript:) is not drawn', left && left.items.join() === 'home,netget', JSON.stringify(left?.items));
+      const rows = await inShadow(page, `return [...shadow.querySelectorAll('.barsec .barrow')].map((r) => r.textContent)`);
+      check('5.4 the QR\'s panel offers each declared bar as a collection (open / icons / closed)', rows.length === 2 && rows.every((r) => /open.*icons.*closed/.test(r)), JSON.stringify(rows));
+      await inShadow(page, `shadow.querySelector('.qr').click(); shadow.querySelector('[data-bar-choice="left:open"]').click()`);
+      b = await bars();
+      const openLeft = b.find((x) => x.bar === 'left');
+      check('5.5 opened: the left bar shows its elements with their names, below the top bar', !openLeft.hidden && openLeft.w === 200 && openLeft.labels.join() === 'Home,Netget', JSON.stringify(openLeft));
+      await inShadow(page, `shadow.querySelector('[data-bar-choice="left:icons"]').click(); shadow.querySelector('[data-bar-choice="top:closed"]').click()`);
+      b = await bars();
+      const iconLeft = b.find((x) => x.bar === 'left'); const closedTop = b.find((x) => x.bar === 'top');
+      check('5.6 icons only: narrow, no names; and the top bar closed by the person', iconLeft.w === 52 && iconLeft.labels.length === 0 && closedTop.hidden, JSON.stringify({ iconLeft, closedTop }));
+      await page.reload();
+      await page.waitForSelector('[data-cleaker]');
+      b = await bars();
+      check('5.7 after a reload the person\'s choices are kept, over the author\'s defaults', b.find((x) => x.bar === 'left').state === 'icons' && b.find((x) => x.bar === 'top').hidden, JSON.stringify(b.map((x) => [x.bar, x.state, x.hidden])));
+      const ownStyle = await page.evaluate(() => getComputedStyle(document.body).marginLeft + ' ' + document.body.children.length);
+      check('5.8 the page itself is not changed (bars live in Cleaker\'s shadow root)', ownStyle.startsWith('8px'), ownStyle);
+      await context.close();
+    }
+    {
+      const { context, page } = await newPage();
+      await page.goto(`${standalone.origin}/bars-doc`);
+      await page.waitForFunction(() => document.querySelector('[data-cleaker]')?.shadowRoot?.querySelectorAll('.bars nav').length === 2, null, { timeout: 8000 }).catch(() => {});
+      const count = await inShadow(page, `return shadow.querySelectorAll('.bars nav').length`);
+      check('5.9 data-document: the bars come from a document file', count === 2, String(count));
       await context.close();
     }
     // nobody.test is asked on purpose (2.5) and stopped here: that is what "does not answer" means

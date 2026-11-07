@@ -17,6 +17,7 @@ import qrcodegen from 'qrcode-generator';
 import { linkQrValue } from '@/react/linkQr';
 import { unresolvedPosition } from '@/react/positionExpression';
 import { probeMonadSurface } from '@/runtime/monads/monadDiscovery.fetch';
+import { CLEAKER_BAR_STATES, barStates, isBarState, readBars, type CleakerBar, type CleakerBarId, type CleakerBarState } from './cleakerBars';
 
 export type CleakerCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 export const CLEAKER_CORNERS: readonly CleakerCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
@@ -35,6 +36,11 @@ export type CleakerMountOptions = {
   storage?: Storage | null;
   /** Whether a namespace answers. Default: its public `/__surface`. */
   probe?: (namespace: string) => Promise<boolean>;
+  /**
+   * Level 2: the author's GUI document (or `{ bars }`), whose GUI.window.layout.bars the QR offers to unfold. Each bar
+   * starts as the author says ('closed' if not said); the person's choice wins and is kept in their browser.
+   */
+  document?: unknown;
 };
 
 /** The namespace cleaker.js starts with when neither the author nor the person chose one. */
@@ -46,11 +52,17 @@ export type CleakerHandle = {
   setCorner(corner: CleakerCorner): void;
   namespace(): string | null;
   setNamespace(namespace: string | null): Promise<void>;
+  /** Level 2: each declared bar's state, a bar set by the person, and a document that arrives later. */
+  bars(): Partial<Record<CleakerBarId, CleakerBarState>>;
+  setBar(bar: CleakerBarId, state: CleakerBarState): void;
+  setDocument(document: unknown): void;
   unmount(): void;
 };
 
 const STORE_CORNER = 'cleaker:corner';
 const STORE_NAMESPACE = 'cleaker:namespace';
+const STORE_BARS = 'cleaker:bars';
+const BAR_THICKNESS: Record<CleakerBarState, number> = { open: 44, icons: 36, closed: 0 };
 const NAMESPACE_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 const LOCAL_RE = /^(localhost|127\.0\.0\.1|\[::1\])$|\.(localhost|local|test)$/;
 
@@ -133,6 +145,26 @@ button.small { padding: 6px 10px; font: inherit; border: 1px solid #11181c; bord
 .corners { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .corners button { padding: 5px; font: inherit; border: 1px solid #c9d1d6; border-radius: 6px; background: #fff; cursor: pointer; }
 .corners button[aria-pressed="true"] { border-color: #11181c; font-weight: 600; }
+.wrap { position: relative; z-index: 1; }
+.bars nav { position: fixed; z-index: 0; display: flex; gap: 2px; box-sizing: border-box; background: rgba(255,255,255,.97); box-shadow: 0 1px 6px rgba(0,0,0,.12); font: 13px/1.3 -apple-system, system-ui, sans-serif; color: #11181c; }
+.bars nav[hidden] { display: none; }
+.bars nav[data-bar="top"], .bars nav[data-bar="bottom"] { left: 0; right: 0; height: 44px; align-items: center; padding: 0 12px; }
+.bars nav[data-bar="top"] { top: 0; } .bars nav[data-bar="bottom"] { bottom: 0; }
+.bars nav[data-bar="top"][data-state="icons"], .bars nav[data-bar="bottom"][data-state="icons"] { height: 36px; }
+.bars nav[data-bar="left"], .bars nav[data-bar="right"] { top: var(--cleaker-top, 0px); bottom: var(--cleaker-bottom, 0px); width: 200px; flex-direction: column; padding: 8px; overflow-y: auto; }
+.bars nav[data-bar="left"] { left: 0; } .bars nav[data-bar="right"] { right: 0; }
+.bars nav[data-bar="left"][data-state="icons"], .bars nav[data-bar="right"][data-state="icons"] { width: 52px; align-items: center; }
+.bars .pos { margin-right: auto; padding-right: 12px; font: 12px ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bars a { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: inherit; text-decoration: none; white-space: nowrap; }
+.bars a:hover, .bars a[aria-current="page"] { background: #eef2f4; }
+.bars .glyph { display: inline-flex; flex: none; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 6px; background: #eef2f4; font-size: 12px; }
+.bars nav[data-state="icons"] .text { display: none; }
+.barsec[hidden] { display: none; }
+.barsec { margin: 10px 0 0; padding: 10px 0 0; border-top: 1px solid #e3e8eb; }
+.barrow { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 6px; margin: 0 0 4px; }
+.seg { display: flex; gap: 2px; }
+.seg button { flex: 1; padding: 4px; font: 11px -apple-system, system-ui, sans-serif; border: 1px solid #c9d1d6; border-radius: 6px; background: #fff; cursor: pointer; }
+.seg button[aria-pressed="true"] { border-color: #11181c; font-weight: 600; }
 `;
 
 export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
@@ -159,6 +191,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
   host.setAttribute('data-corner', corner);
   const shadow = host.attachShadow({ mode: 'open' });
   shadow.innerHTML = `<style>${STYLE}</style>
+<div class="bars" part="bars"></div>
 <div class="wrap">
   <button class="qr" type="button" part="qr" aria-haspopup="dialog" aria-expanded="false" aria-label=".me"></button>
   <div class="label" part="label"><span class="dot"></span><span class="text"></span></div>
@@ -168,6 +201,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     <div class="corners" role="group" aria-label="Corner">
       ${CLEAKER_CORNERS.map((c) => `<button type="button" data-corner-choice="${c}">${c.replace('-', ' ')}</button>`).join('')}
     </div>
+    <div class="barsec" role="group" aria-label="Bars" hidden></div>
   </div>
 </div>`;
   const $ = <T extends Element>(sel: string) => shadow.querySelector(sel) as T;
@@ -178,6 +212,64 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
   const form = $<HTMLFormElement>('form');
   const input = $<HTMLInputElement>('input');
   const status = $<HTMLElement>('.status');
+  const barsLayer = $<HTMLElement>('.bars');
+  const barsSection = $<HTMLElement>('.barsec');
+
+  // Level 2: the bars the author declared, and what the person chose for each (their layer).
+  let bars: CleakerBar[] = readBars(options.document, page.href);
+  let chosenBars: Partial<Record<CleakerBarId, CleakerBarState>> = {};
+  try {
+    const raw = JSON.parse(read(storage, STORE_BARS) ?? '{}');
+    if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (isBarState(v)) chosenBars[k as CleakerBarId] = v;
+  } catch { /* nothing kept, or unreadable: the author's defaults */ }
+
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, text = '') => {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (text) node.textContent = text;
+    return node;
+  };
+
+  function renderBars() {
+    const states = barStates(bars, chosenBars);
+    const here = page.href.split('#')[0];
+    barsLayer.replaceChildren(...bars.map((bar) => {
+      const nav = el('nav', { 'data-bar': bar.id, 'data-state': states[bar.id], 'aria-label': bar.label });
+      nav.hidden = states[bar.id] === 'closed';
+      if (bar.id === 'top' || bar.id === 'bottom') nav.append(el('span', { class: 'pos' }, cornerLabel(namespace, page)));
+      for (const item of bar.items) {
+        const a = el('a', { href: item.href, title: item.label, 'data-item': item.id });
+        if (item.href.split('#')[0] === here) a.setAttribute('aria-current', 'page');
+        a.append(el('span', { class: 'glyph', 'aria-hidden': 'true' }, item.glyph), el('span', { class: 'text' }, item.label));
+        nav.append(a);
+      }
+      return nav;
+    }));
+    // a side bar starts below an open top bar and ends above an open bottom one
+    barsLayer.style.setProperty('--cleaker-top', `${states.top ? BAR_THICKNESS[states.top] : 0}px`);
+    barsLayer.style.setProperty('--cleaker-bottom', `${states.bottom ? BAR_THICKNESS[states.bottom] : 0}px`);
+    // the panel offers each declared bar as a collection: open, icons, closed
+    barsSection.hidden = bars.length === 0;
+    barsSection.replaceChildren(...bars.map((bar) => {
+      const row = el('div', { class: 'barrow' });
+      const seg = el('div', { class: 'seg', role: 'group', 'aria-label': bar.label });
+      for (const s of CLEAKER_BAR_STATES) {
+        const b = el('button', { type: 'button', 'data-bar-choice': `${bar.id}:${s}`, 'aria-pressed': String(states[bar.id] === s) }, s);
+        b.addEventListener('click', () => setBar(bar.id, s));
+        seg.append(b);
+      }
+      row.append(el('span', {}, bar.id), seg);
+      return row;
+    }));
+  }
+
+  function setBar(id: CleakerBarId, next: CleakerBarState) {
+    if (!isBarState(next) || !bars.some((b) => b.id === id)) return;
+    chosenBars = { ...chosenBars, [id]: next };
+    write(storage, STORE_BARS, JSON.stringify(chosenBars));
+    renderBars();
+    host.dispatchEvent(new CustomEvent('cleaker:bars', { detail: { bars: barStates(bars, chosenBars) }, bubbles: true, composed: true }));
+  }
 
   function render() {
     host.setAttribute('data-corner', corner);
@@ -190,6 +282,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     qrButton.innerHTML = qrSvg(value);
     qrButton.setAttribute('data-value', value);
     shadow.querySelectorAll<HTMLButtonElement>('[data-corner-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cornerChoice === corner)));
+    renderBars();
   }
 
   async function check(ns: string) {
@@ -250,6 +343,9 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     setCorner,
     namespace: () => namespace,
     setNamespace,
+    bars: () => barStates(bars, chosenBars),
+    setBar,
+    setDocument(doc: unknown) { bars = readBars(doc, page.href); renderBars(); },
     unmount() {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('pointerdown', onOutside);
