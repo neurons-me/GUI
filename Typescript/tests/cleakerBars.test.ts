@@ -20,10 +20,11 @@ assert.equal(safeHref('other.html', 'file:///Users/me/site/page.html'), 'file://
 assert.equal(itemGlyph('glyph:𓆣', 'Netget'), '𓆣');
 assert.equal(itemGlyph('home', 'home page'), 'H');
 
-// icon tokens .GUI's Icon draws; a glyph or anything else is not one
+// icons .GUI's Icon draws: names and glyphs (the shell's Netget is glyph:𓆣); anything else is not one
 assert.equal(iconToken('home'), 'home');
 assert.equal(iconToken('lucide:Menu'), 'lucide:Menu');
-for (const bad of ['glyph:𓆣', '<img>', 'home page', '', null, 'x'.repeat(60)]) assert.equal(iconToken(bad), undefined, String(bad));
+assert.equal(iconToken('glyph:𓆣'), 'glyph:𓆣');
+for (const bad of ['glyph:', 'glyph:<b>', 'glyph:abc', '<img>', 'home page', '', null, 'x'.repeat(60)]) assert.equal(iconToken(bad), undefined, String(bad));
 
 // the full GUI document shape
 const full = { GUI: { children: { window: { children: { layout: { children: { bars: { children: {
@@ -43,7 +44,7 @@ assert.equal(bars[1].defaultState, 'closed', 'a bar the author did not open star
 assert.deepEqual(bars[1].items.map((i) => i.id), ['home', 'netget'], 'unsafe and target-less elements are not drawn');
 assert.equal(bars[1].items[1].glyph, '𓆣');
 assert.equal(bars[1].items[0].icon, 'home');
-assert.equal(bars[1].items[1].icon, undefined, 'a glyph is not an icon token');
+assert.equal(bars[1].items[1].icon, 'glyph:𓆣', 'a glyph is drawn as the shell draws it');
 
 // the short shape
 assert.deepEqual(readBars({ bars: { bottom: { state: 'icons', children: { a: { label: 'A', to: '/a' } } } } }, BASE).map((b) => [b.id, b.defaultState]), [['bottom', 'icons']]);

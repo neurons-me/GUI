@@ -15,7 +15,7 @@ export const CLEAKER_BARS: readonly CleakerBarId[] = ['top', 'left', 'right', 'b
 export type CleakerBarState = 'open' | 'icons' | 'closed';
 export const CLEAKER_BAR_STATES: readonly CleakerBarState[] = ['open', 'icons', 'closed'];
 
-/** `icon`: the author's icon token for .GUI's Icon (`home`, `lucide:Menu`), when they gave one that is not a glyph. */
+/** `icon`: the author's icon for .GUI's Icon (`home`, `lucide:Menu`, `glyph:𓆣`), when it is one Icon draws. */
 export type CleakerBarItem = { id: string; label: string; href: string; glyph: string; icon?: string };
 export type CleakerBar = { id: CleakerBarId; label: string; defaultState: CleakerBarState; items: CleakerBarItem[] };
 
@@ -47,9 +47,17 @@ export function itemGlyph(icon: unknown, label: string): string {
   return (Array.from(label.trim())[0] ?? '•').toUpperCase();
 }
 
-/** An icon name .GUI's Icon can draw (`home`, `lucide:Menu`, `mui:Favorite`); a glyph or anything else is not one. */
+/**
+ * An icon .GUI's Icon draws: a name (`home`, `lucide:Menu`, `mui:Favorite`) or a glyph the author wrote (`glyph:𓆣`,
+ * drawn as text in the icon's box, as the shell draws Netget). Anything else is not one.
+ */
 export function iconToken(icon: unknown): string | undefined {
-  return typeof icon === 'string' && /^([a-z]+:)?[A-Za-z][A-Za-z0-9_]{0,40}$/.test(icon) && !icon.startsWith('glyph:') ? icon : undefined;
+  if (typeof icon !== 'string') return undefined;
+  if (icon.startsWith('glyph:')) {
+    const glyph = Array.from(icon.slice(6));
+    return glyph.length >= 1 && glyph.length <= 2 && !/[<>&"'\s]/.test(icon.slice(6)) ? icon : undefined;
+  }
+  return /^([a-z]+:)?[A-Za-z][A-Za-z0-9_]{0,40}$/.test(icon) ? icon : undefined;
 }
 
 type DocNode = { label?: unknown; to?: unknown; icon?: unknown; state?: unknown; props?: { state?: unknown }; children?: Record<string, DocNode> };

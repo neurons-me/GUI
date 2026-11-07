@@ -15,6 +15,7 @@ import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
 import QRme, { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
+import { useLeftSidebar } from '@/gui-internals/Hooks';
 import {
   CLEAKER_BAR_STATES,
   barStates,
@@ -63,6 +64,30 @@ export type CleakerGuiHandle = { host: HTMLElement; unmount(): void };
 const isCorner = (v: unknown): v is CleakerCorner => typeof v === 'string' && (CLEAKER_CORNERS as readonly string[]).includes(v);
 const read = (s: Storage | null, k: string) => { try { return s ? s.getItem(k) : null; } catch { return null; } };
 const write = (s: Storage | null, k: string, v: string) => { try { s?.setItem(k, v); } catch { /* this page view only */ } };
+
+/**
+ * Shows its children unless the left bar is expanded: the position is written once, in the top bar while the bar is a
+ * rail and beside the QR in the bar's header while it is open (the same rule as the shell's, AppShell.tsx/Namespace.tsx).
+ */
+function UnlessLeftBarExpanded({ children }: { children: React.ReactNode }) {
+  const { view } = useLeftSidebar();
+  return view === 'expanded' ? null : <>{children}</>;
+}
+
+// The position in a monospace face: the spaces around `@` are drawn small so the `@` sits close to both names, while the
+// text itself (what is copied) stays `a @ b` (the shell's CompactAt).
+const AT_SPACE_SX = { fontSize: '0.4em' } as const;
+function CompactAt({ text }: { text: string }) {
+  const at = text.indexOf(' @ ');
+  if (at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <Box component="span" sx={AT_SPACE_SX}>{' '}</Box>@<Box component="span" sx={AT_SPACE_SX}>{' '}</Box>
+      {text.slice(at + 3)}
+    </>
+  );
+}
 
 type ProbeState = 'none' | 'checking' | 'ok' | 'off';
 const QR_STATUS: Record<ProbeState, 'idle' | 'checking' | 'confirmed' | 'off'> = { none: 'idle', checking: 'checking', ok: 'confirmed', off: 'off' };
@@ -214,15 +239,57 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     // instead of covered can pad with them.
     <Box data-cleaker-bars="" sx={{ position: 'fixed', top: 0, left: 0, width: 0, height: 0, overflow: 'visible', '--gui-layout-min-height': '0px', '& main': { display: 'none' } } as any}>
       <Layout
-        TopBar={topBar ? {
+        // The top bar is the shell's: the position on its left (while the left bar is not expanded), the author's top
+        // elements on its right. It is drawn with the left bar even when the author declared no top bar.
+        TopBar={(topBar || leftBar) ? {
           noBorder: true,
           hideBrand: true,
-          elementsRight: topBar.items.map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
+          toolbarSx: { pl: 0.25 },
+          elementsLeftSx: { pl: 1 },
+          elementsLeft: [{
+            type: 'action' as const,
+            props: {
+              element: (
+                <UnlessLeftBarExpanded>
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={toggle}
+                    title={label}
+                    data-gui-node-id="GUI.window.layout.bars.top.namespace"
+                    data-cleaker-position=""
+                    sx={{
+                      display: 'block', minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      p: 0, border: 0, background: 'none', cursor: 'pointer',
+                      fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.02em', color: 'text.primary',
+                      '&:hover': { textDecoration: 'underline' },
+                    }}
+                  >
+                    <CompactAt text={label} />
+                  </Box>
+                </UnlessLeftBarExpanded>
+              ),
+            },
+          }],
+          elementsRight: (topBar?.items ?? []).map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.top.${it.id}` } })),
         } : false}
         LeftBar={leftBar ? {
           brand,
           initialView: states.left === 'open' ? 'expanded' : 'rail',
-          header: { title: label },
+          // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
+          header: (
+            <Box
+              title={label}
+              data-gui-node-id="GUI.window.layout.bars.left.position"
+              data-cleaker-position=""
+              sx={{
+                display: 'block', minWidth: 0, ml: '-10px', position: 'relative', zIndex: 1,
+                fontFamily: 'monospace', fontSize: '0.74rem', fontWeight: 600, lineHeight: 1.25, color: 'text.primary', wordBreak: 'break-word',
+              }}
+            >
+              {label}
+            </Box>
+          ),
           elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { label: it.label, href: it.href, icon: it.icon ?? 'link', 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >
