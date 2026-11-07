@@ -1669,6 +1669,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     setSelectedNamespace(namespace);
     verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
   }, [verifiedRoot.promote, rootSeed]);
+  // Another host answered for the namespace the card selected: the badge and the corner QR name it too, so the shell
+  // shows ONE selected namespace. The page's own shared root is not promoted to it (only this page's gateway answers for
+  // that), unlike a local resolution above.
+  const handleSelectedNamespaceAnswered = useCallback((namespace: string) => {
+    setSelectedNamespace(namespace);
+  }, []);
 
   // The left bar's own elements come from the document (`GUI.window.layout.bars.left`): what leads the bar ("back to the
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
@@ -1686,7 +1692,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   );
 
   // What the landing is given. The same object feeds the landing route and the identity card dialog.
-  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, onSelectedNamespaceAnswered: handleSelectedNamespaceAnswered, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }) };
 
   // Every page the document declares under GUI.window.layout.content: what renders and
   // where it is served both come from the document. The GUI's own pages nest (`/GUI`, `/GUI/themes`, ...): every routed

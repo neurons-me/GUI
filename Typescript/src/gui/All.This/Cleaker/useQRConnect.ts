@@ -61,6 +61,12 @@ export type CleakerConnectionInput = {
   sharedRootStatus: CleakerRootStatus;
   /** A LOCAL channel resolved this namespace (the page may re-verify its shared context onto it). */
   onLocalResolved?: (namespace: string) => void;
+  /**
+   * ANOTHER host answered for the namespace the person selected (cleaker.me from localhost). The shell shows it as the
+   * selected namespace -- the top bar and the corner QR name the same one the card does -- without moving the page's
+   * own shared root onto it (that root is this page's gateway's to verify, not another host's).
+   */
+  onRemoteResolved?: (namespace: string) => void;
   /** What the channel opens when it differs from what is shown (e.g. the whole identity once signed in). */
   channelExpression?: string;
   /** False while nothing should connect (registering, recovering, no secure context). */
@@ -88,6 +94,7 @@ export function useQRConnect({
   door,
   sharedRootStatus,
   onLocalResolved,
+  onRemoteResolved,
   channelExpression,
   channelEnabled,
   failureEnabled,
@@ -140,6 +147,10 @@ export function useQRConnect({
     if (channelState === 'connected' || channelState === 'streaming') {
       connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'ok', detail: `wss://${remoteRoot}/nrp` });
       setFailureShown(false);
+      if (channelState === 'connected') {
+        const ast = channel.expression?.ast;
+        onRemoteResolved?.(ast?.kind === 'namespace' && ast.value ? ast.value : remoteRoot);
+      }
     } else if (channelState === 'error' || channelState === 'invalid') {
       connectTrace.record({ expression: remoteRoot, step: 'channel', outcome: 'error', detail: String(channel.error || channelState) });
       setFailureShown(true);

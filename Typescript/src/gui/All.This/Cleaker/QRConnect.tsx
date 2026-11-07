@@ -148,6 +148,8 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // (weaker) mesh resolution does.
 export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
+  /** Another host answered for the selected namespace: the shell shows it as selected (useQRConnect's onRemoteResolved). */
+  onSelectedNamespaceAnswered?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
   /**
    * What the shared verified root confirmed (verifiedRoot.cleakerEndpoint / .answeredNamespace). The label abbreviates
@@ -175,7 +177,7 @@ export type QRConnectProps = DocumentPageProps & {
   probeDoor?: () => Promise<DoorLayers>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -501,6 +503,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     door: { off: doorOff, checking: doorChecking, layers: doorLayers, probe: probeDoor },
     sharedRootStatus,
     onLocalResolved: onBeatleNamespaceResolved,
+    onRemoteResolved: onSelectedNamespaceAnswered,
     channelExpression: beatleExpression,
     channelEnabled: qrActive && secureContextOk,
     // Once a session is open the namespace is whatever it claimed/opened: no way around to offer.
