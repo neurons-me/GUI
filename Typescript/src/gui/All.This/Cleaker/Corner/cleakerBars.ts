@@ -15,7 +15,8 @@ export const CLEAKER_BARS: readonly CleakerBarId[] = ['top', 'left', 'right', 'b
 export type CleakerBarState = 'open' | 'icons' | 'closed';
 export const CLEAKER_BAR_STATES: readonly CleakerBarState[] = ['open', 'icons', 'closed'];
 
-export type CleakerBarItem = { id: string; label: string; href: string; glyph: string };
+/** `icon`: the author's icon token for .GUI's Icon (`home`, `lucide:Menu`), when they gave one that is not a glyph. */
+export type CleakerBarItem = { id: string; label: string; href: string; glyph: string; icon?: string };
 export type CleakerBar = { id: CleakerBarId; label: string; defaultState: CleakerBarState; items: CleakerBarItem[] };
 
 const MAX_ITEMS = 24;
@@ -46,6 +47,11 @@ export function itemGlyph(icon: unknown, label: string): string {
   return (Array.from(label.trim())[0] ?? '•').toUpperCase();
 }
 
+/** An icon name .GUI's Icon can draw (`home`, `lucide:Menu`, `mui:Favorite`); a glyph or anything else is not one. */
+export function iconToken(icon: unknown): string | undefined {
+  return typeof icon === 'string' && /^([a-z]+:)?[A-Za-z][A-Za-z0-9_]{0,40}$/.test(icon) && !icon.startsWith('glyph:') ? icon : undefined;
+}
+
 type DocNode = { label?: unknown; to?: unknown; icon?: unknown; state?: unknown; props?: { state?: unknown }; children?: Record<string, DocNode> };
 
 /** The bars node of a GUI document, in the full shape or the short `{ bars }` one. */
@@ -73,7 +79,8 @@ export function readBars(doc: unknown, base: string): CleakerBar[] {
       const label = String(child.label ?? key).slice(0, MAX_LABEL);
       const href = safeHref(child.to, base);
       if (!href) continue;   // a bar element is a place to go; one without a safe target is not drawn
-      items.push({ id: key, label, href, glyph: itemGlyph(child.icon, label) });
+      const icon = iconToken(child.icon);
+      items.push({ id: key, label, href, glyph: itemGlyph(child.icon, label), ...(icon ? { icon } : {}) });
     }
     const declared = bar.props?.state ?? bar.state;
     bars.push({

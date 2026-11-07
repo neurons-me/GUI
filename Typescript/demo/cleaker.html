@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cleaker playground</title>
+    <link rel="stylesheet" href="/material-symbols.css" />
     <style>
       body { margin: 0; font: 17px/1.6 Georgia, serif; background: #fbfaf7; color: #222; }
       main { max-width: 640px; margin: 96px auto; padding: 0 20px; }
@@ -27,10 +28,10 @@
             "docs": { "label": "Docs", "to": "/cleaker.html" },
             "nrp": { "label": "NRP", "to": "https://neurons-me.github.io/NRP/" }
           } },
-          "left": { "label": "Left bar", "children": {
-            "home": { "label": "Home", "to": "/cleaker.html", "icon": "glyph:⌂" },
-            "users": { "label": "Users", "to": "/users", "icon": "glyph:☺" },
-            "netget": { "label": "Netget", "to": "/netget", "icon": "glyph:𓆣" }
+          "left": { "label": "Left bar", "state": "icons", "children": {
+            "home": { "label": "Home", "to": "/cleaker.html", "icon": "home" },
+            "users": { "label": "Users", "to": "/users", "icon": "group" },
+            "netget": { "label": "Netget", "to": "/netget", "icon": "hub" }
           } },
           "right": { "label": "Right bar", "children": {
             "notes": { "label": "Notes", "to": "#notes" }

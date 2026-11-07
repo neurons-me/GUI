@@ -1,7 +1,7 @@
 // Level 2 (src/gui/All.This/Cleaker/Corner/cleakerBars.ts): the bars read from an author's document, kept safe to draw,
 // and each bar's state from the author's default and the person's choice.
 import assert from 'node:assert/strict';
-import { barStates, itemGlyph, readBars, safeHref } from '../src/gui/All.This/Cleaker/Corner/cleakerBars';
+import { barStates, iconToken, itemGlyph, readBars, safeHref } from '../src/gui/All.This/Cleaker/Corner/cleakerBars';
 
 const BASE = 'https://neurons-me.github.io/docs/index.html';
 
@@ -20,6 +20,11 @@ assert.equal(safeHref('other.html', 'file:///Users/me/site/page.html'), 'file://
 assert.equal(itemGlyph('glyph:𓆣', 'Netget'), '𓆣');
 assert.equal(itemGlyph('home', 'home page'), 'H');
 
+// icon tokens .GUI's Icon draws; a glyph or anything else is not one
+assert.equal(iconToken('home'), 'home');
+assert.equal(iconToken('lucide:Menu'), 'lucide:Menu');
+for (const bad of ['glyph:𓆣', '<img>', 'home page', '', null, 'x'.repeat(60)]) assert.equal(iconToken(bad), undefined, String(bad));
+
 // the full GUI document shape
 const full = { GUI: { children: { window: { children: { layout: { children: { bars: { children: {
   top: { label: 'Top bar', props: { state: 'open' }, children: { docs: { label: 'Docs', to: '/docs' } } },
@@ -37,6 +42,8 @@ assert.equal(bars[0].defaultState, 'open');
 assert.equal(bars[1].defaultState, 'closed', 'a bar the author did not open starts closed');
 assert.deepEqual(bars[1].items.map((i) => i.id), ['home', 'netget'], 'unsafe and target-less elements are not drawn');
 assert.equal(bars[1].items[1].glyph, '𓆣');
+assert.equal(bars[1].items[0].icon, 'home');
+assert.equal(bars[1].items[1].icon, undefined, 'a glyph is not an icon token');
 
 // the short shape
 assert.deepEqual(readBars({ bars: { bottom: { state: 'icons', children: { a: { label: 'A', to: '/a' } } } } }, BASE).map((b) => [b.id, b.defaultState]), [['bottom', 'icons']]);

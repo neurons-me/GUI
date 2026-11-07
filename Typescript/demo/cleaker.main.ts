@@ -2,7 +2,9 @@
 //   ?corner=top-left   the author's default corner
 //   ?namespace=        start with none (absent: cleaker.me)
 //   ?reset             forget the person's choices (corner, namespace, bars) kept in this browser
+//   ?plain             the earlier hand-drawn corner (cleakerCorner.ts), to compare
 import { mountCleaker, type CleakerCorner } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
+import { mountCleakerGui } from '@/gui/All.This/Cleaker/Corner/CleakerCornerGui';
 
 const params = new URLSearchParams(window.location.search);
 if (params.has('reset')) {
@@ -10,10 +12,9 @@ if (params.has('reset')) {
     try { localStorage.removeItem(key); } catch { /* blocked storage */ }
   }
 }
+const corner = (params.get('corner') as CleakerCorner) || undefined;
+const namespace = params.has('namespace') ? params.get('namespace') : undefined;
 const inline = document.querySelector('script[type="application/json"][data-cleaker-document]');
-const handle = mountCleaker({
-  corner: (params.get('corner') as CleakerCorner) || undefined,
-  namespace: params.has('namespace') ? params.get('namespace') : undefined,
-  document: inline?.textContent ? JSON.parse(inline.textContent) : undefined,
-});
-(window as unknown as { cleaker: typeof handle }).cleaker = handle;   // for poking at it from the console
+const doc = inline?.textContent ? JSON.parse(inline.textContent) : undefined;
+if (params.has('plain')) mountCleaker({ corner, namespace, document: doc });
+else mountCleakerGui({ corner, namespace, document: doc });

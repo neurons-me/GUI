@@ -119,7 +119,7 @@ export function positionQrValue(namespace: string, pageAddress: string): string 
   }
 }
 
-async function defaultProbe(namespace: string): Promise<boolean> {
+export async function defaultProbe(namespace: string): Promise<boolean> {
   const result = await probeMonadSurface({ endpoint: namespaceEndpoint(namespace), sources: ['manual'], timeoutMs: 4000 });
   return Boolean(result.monad);
 }
