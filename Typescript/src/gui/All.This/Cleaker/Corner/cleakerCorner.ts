@@ -1,8 +1,9 @@
 // Cleaker in a corner: level 1 of bringing .GUI into any page (`cleaker.js`, `this.gui/cleaker`'s mountCleaker).
 //
 // Level 0 is a page with nothing of .GUI. Level 1 is one line that adds ONLY this: a QR floating in a corner of the
-// page, showing `me @ where` -- `where` is the page's own address, `me` the namespace the person chose (none until they
-// do; nothing is assumed, cleaker.me included). The person can move it to any of the four corners and choose a
+// page, showing `me @ where` -- `where` is the page's own address, `me` the namespace: cleaker.me unless the author
+// or the person says otherwise, so it works with no setup; anyone can choose another (their own, or a local one) or
+// none, and keep administering through cleaker.me as root. The person can move it to any of the four corners and choose a
 // namespace from its panel; both are remembered in this browser, for this site (their local layer, `base @ overlay`):
 // the page's author only sets the default corner.
 //
@@ -23,7 +24,10 @@ export const CLEAKER_CORNERS: readonly CleakerCorner[] = ['top-left', 'top-right
 export type CleakerMountOptions = {
   /** The author's default corner. The person's own choice, once made, wins. Default `bottom-right`. */
   corner?: CleakerCorner;
-  /** The author's suggested namespace, shown until the person chooses one. Default: none. */
+  /**
+   * The namespace shown until the person chooses one. Default: cleaker.me (DEFAULT_CLEAKER_NAMESPACE), so it works with
+   * no setup. `null` (or '') starts with none. The person's own choice -- including "none" -- wins.
+   */
   namespace?: string | null;
   /** Where the host element is appended. Default `document.body`. */
   container?: HTMLElement;
@@ -32,6 +36,9 @@ export type CleakerMountOptions = {
   /** Whether a namespace answers. Default: its public `/__surface`. */
   probe?: (namespace: string) => Promise<boolean>;
 };
+
+/** The namespace cleaker.js starts with when neither the author nor the person chose one. */
+export const DEFAULT_CLEAKER_NAMESPACE = 'cleaker.me';
 
 export type CleakerHandle = {
   host: HTMLElement;
@@ -85,6 +92,21 @@ export function qrSvg(value: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" aria-hidden="true"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${path}" fill="#11181c"/></svg>`;
 }
 
+/**
+ * What the QR says: the same as the label, `me @ where` -- the namespace's link, plus `at=` where the page is (its
+ * origin, or for a file the whole file). Nothing is added when the page IS the namespace.
+ */
+export function positionQrValue(namespace: string, pageAddress: string): string {
+  const link = linkQrValue({ endpoint: namespaceEndpoint(namespace), namespace });
+  try {
+    const u = new URL(link);
+    if (pageAddress && pageAddress !== u.origin) u.searchParams.set('at', pageAddress);
+    return u.toString();
+  } catch {
+    return link;
+  }
+}
+
 async function defaultProbe(namespace: string): Promise<boolean> {
   const result = await probeMonadSurface({ endpoint: namespaceEndpoint(namespace), sources: ['manual'], timeoutMs: 4000 });
   return Boolean(result.monad);
@@ -125,8 +147,10 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
   const stored = read(storage, STORE_CORNER);
   let corner: CleakerCorner = isCorner(stored) ? stored : isCorner(options.corner) ? options.corner : 'bottom-right';
   const storedNs = read(storage, STORE_NAMESPACE);
-  let namespace: string | null = storedNs && isNamespaceName(storedNs) ? storedNs
-    : options.namespace && isNamespaceName(options.namespace) ? options.namespace : null;
+  // the person's choice first ('' = they chose none), then the author's, then cleaker.me
+  const authorNs = options.namespace === undefined ? DEFAULT_CLEAKER_NAMESPACE : options.namespace;
+  let namespace: string | null = storedNs !== null ? (isNamespaceName(storedNs) ? storedNs : null)
+    : authorNs && isNamespaceName(authorNs) ? authorNs : null;
   let state: 'none' | 'checking' | 'ok' | 'off' = 'none';
   let probeRun = 0;
 
@@ -162,7 +186,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     // a file's label is its name; the whole place is in the tooltip
     labelText.parentElement!.title = page.protocol === 'file:' ? `${label}\n${decodeURI(pageAddress())}` : label;
     dot.setAttribute('data-state', state);
-    const value = namespace ? linkQrValue({ endpoint: namespaceEndpoint(namespace), namespace }) : pageAddress();
+    const value = namespace ? positionQrValue(namespace, pageAddress()) : pageAddress();
     qrButton.innerHTML = qrSvg(value);
     qrButton.setAttribute('data-value', value);
     shadow.querySelectorAll<HTMLButtonElement>('[data-corner-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cornerChoice === corner)));
@@ -191,7 +215,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
       return;
     }
     namespace = ns;
-    write(storage, STORE_NAMESPACE, ns);
+    write(storage, STORE_NAMESPACE, ns ?? '');   // '' remembers "none", so the default does not come back
     if (!ns) { probeRun += 1; state = 'none'; status.textContent = ''; render(); return; }
     await check(ns);
   }

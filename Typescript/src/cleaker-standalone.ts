@@ -3,8 +3,9 @@
 //   <script src="…/cleaker.js" data-corner="bottom-right"></script>
 //   <script src="…/cleaker.js" data-corner="top-left" data-namespace="neurons-me.github.io"></script>
 //
-// data-corner: the author's default corner (the person's own choice, once made, wins). data-namespace: a suggested
-// namespace, shown until the person chooses one (default: none). `data-cleaker-manual` skips the automatic mount;
+// data-corner: the author's default corner (the person's own choice, once made, wins). data-namespace: the namespace
+// shown until the person chooses one (default cleaker.me, so nothing needs setting up; data-namespace="" starts with
+// none). `data-cleaker-manual` skips the automatic mount;
 // `window.Cleaker.mount(options)` mounts by hand.
 import { mountCleaker, type CleakerCorner, type CleakerHandle } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 
@@ -15,7 +16,7 @@ function mountFromScript() {
   if (mounted || !script || script.hasAttribute('data-cleaker-manual')) return;
   mounted = mountCleaker({
     corner: (script.dataset.corner as CleakerCorner) || undefined,
-    namespace: script.dataset.namespace || null,
+    namespace: script.hasAttribute('data-namespace') ? script.dataset.namespace || null : undefined,
   });
 }
 
