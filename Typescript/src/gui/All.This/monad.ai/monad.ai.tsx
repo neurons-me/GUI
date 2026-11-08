@@ -5,11 +5,10 @@ import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Box } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
-import { getContrastRatio, darken, lighten, type Theme } from "@mui/material/styles";
+import { darken, lighten, type Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
-import { firstContrasting, tintsOf, QR_RING_MIN_CONTRAST } from "../me/QR/qrContrast";
 import { placeOrbLabel } from "./orbLabelPlacement";
 export type MonadProps = {
   variant?: "bubble" | "inline" | "identity";
@@ -35,10 +34,11 @@ export type MonadProps = {
   ring?: number;
   /**
    * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
-   * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps the same outer contour as the glass
-   * badge (the 2.5px border and the 3px ring) with a quieter halo than glass. The disc is a slightly receded `palette.primary.main` so the
-   * outline reads apart from the fill, and the pixel code is drawn as sharp integer squares
-   * (`palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads). No inner highlight, shading, texture or glass blob. Unhealthy fills the disc with
+   * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps an outer contour (the 2.5px border)
+   * in `palette.primary.main` — not the glass badge's neon rim — and no halo, bloom or drop shadow around the orb.
+   * The disc is a slightly receded `palette.primary.main` so the outline reads apart from the fill, and the pixel code
+   * is drawn as sharp integer squares in `palette.background.default` (the page background). No inner highlight, shading,
+   * texture or glass blob. Unhealthy fills the disc with
    * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
    */
   core?: "glass" | "flat";
@@ -102,26 +102,6 @@ function buildPixelCells(seed: string): PixelCell[] {
   return cells;
 }
 
-
-/** Flat identicon ink: keep secondary when it reads on the disc; else walk theme tints toward contrast. */
-function resolveFlatCodeColor(theme: Theme, fill: string): string {
-  const secondary = theme.palette.secondary?.main || theme.palette.primary.main;
-  let fillIsLight = false;
-  try {
-    fillIsLight = getContrastRatio("#000", fill) > getContrastRatio("#fff", fill);
-  } catch {
-    fillIsLight = theme.palette.mode !== "light";
-  }
-  // tintsOf(..., "light") darkens toward black; tintsOf(..., "dark") lightens toward white.
-  const toward = fillIsLight ? "light" : "dark";
-  const namedStep = toward === "light" ? theme.palette.secondary?.dark : theme.palette.secondary?.light;
-  return firstContrasting(
-    fill,
-    QR_RING_MIN_CONTRAST,
-    [secondary, namedStep, ...tintsOf(secondary, toward), theme.palette.getContrastText(fill)],
-    theme.palette.getContrastText(fill),
-  );
-}
 
 /** Recede the flat disc a little so the existing outline reads apart from the fill. */
 function recedeFlatDisc(fill: string, mode: string): string {
@@ -248,7 +228,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   const dangerGlow = `0 0 0 ${+(3 * orbG).toFixed(2)}px ${danger}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px color-mix(in srgb, ${danger} 55%, transparent)`;
   const fillColor = !status.active || status.error ? danger : (theme.palette.primary?.main || "#29bfff");
   const flatDiscColor = flatCore ? recedeFlatDisc(fillColor, theme.palette?.mode || "dark") : fillColor;
-  const flatCodeColor = flatCore ? resolveFlatCodeColor(theme, flatDiscColor) : "";
+  const pageBg = theme.palette?.background?.default || (theme.palette?.mode === "light" ? "#f5f5f5" : "#0b1114");
+  const flatCodeColor = flatCore ? pageBg : "";
   const hasContent = Boolean(children);
   const [meContext, setMeContext] = useState<MonadContextValue>(() => resolveMeContext());
   const visualKind = kind || (meContext.hasMe ? "me" : "monad");
@@ -611,11 +592,9 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               const borderW = +(2.5 * orbG).toFixed(2);
               const lightRing = `0 0 0 ${ringBand}px ${primary}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(5 * orbG).toFixed(2)}px color-mix(in srgb, ${primary} 55%, transparent)`;
               const darkRing = `0 0 0 ${ringBand}px #29bfff, 0 0 ${+(22 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px rgba(0,200,255,0.6)`;
-              // flat keeps the hard ring (the contour) and only a quiet edge light — no glass bloom
-              const haloBlur = +(6 * orbG).toFixed(2);
-              const lightFlatRing = `0 0 0 ${ringBand}px ${primary}, 0 0 ${haloBlur}px 0 color-mix(in srgb, ${primary} 22%, transparent)`;
-              const darkFlatRing = `0 0 0 ${ringBand}px #29bfff, 0 0 ${haloBlur}px 0 rgba(0,200,255,0.22)`;
               const lightBorder = `${borderW}px solid ${primary}`;
+              // flat: theme primary contour, no neon glass rim and nothing glowing around the orb
+              const flatBorder = `${borderW}px solid ${primary}`;
               const isIdentity = variant === "identity";
               const fill = !status.active || status.error ? danger : primary;
               return ({
@@ -631,21 +610,21 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 : isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              // flat: border + hard ring, quieter halo than glass
-              boxShadow: isIdentity || hairline !== null
+              // flat: a primary border only — no ring bloom, no outer shadow
+              boxShadow: isIdentity || hairline !== null || flatCore
                 ? "none"
                 : (!status.active || status.error
                     ? dangerGlow
-                    : (flatCore
-                        ? (t.palette.mode === "light" ? lightFlatRing : darkFlatRing)
-                        : (t.palette.mode === "light" ? lightRing : darkRing))),
+                    : (t.palette.mode === "light" ? lightRing : darkRing)),
               border: isIdentity
                 ? "none"
                 : hairline !== null
-                ? `${+(hairline * orbG).toFixed(2)}px solid ${!status.active || status.error ? danger : (flatCore ? flatCodeColor : primary)}`
+                ? `${+(hairline * orbG).toFixed(2)}px solid ${!status.active || status.error ? danger : primary}`
                 : (!status.active || status.error
                     ? `${borderW}px solid ${danger}`
-                    : (t.palette.mode === "light" ? lightBorder : `${borderW}px solid #9ff6ff`)),
+                    : (flatCore
+                        ? flatBorder
+                        : (t.palette.mode === "light" ? lightBorder : `${borderW}px solid #9ff6ff`))),
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -782,7 +761,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                         borderRadius: flatCore ? 0 : "1px",
                         bgcolor: cell.active
                           ? flatCore
-                            // disc = primary; code = secondary when it contrasts, else a theme tint that reads
+                            // disc = receded primary; code = the page background
                             ? flatCodeColor
                             : themed
                             ? `color-mix(in srgb, ${!status.active || status.error ? danger : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
