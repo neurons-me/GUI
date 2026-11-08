@@ -5,10 +5,11 @@ import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Box } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
-import type { Theme } from "@mui/material/styles";
+import { getContrastRatio, type Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
+import { firstContrasting, tintsOf, QR_RING_MIN_CONTRAST } from "../me/QR/qrContrast";
 import { placeOrbLabel } from "./orbLabelPlacement";
 export type MonadProps = {
   variant?: "bubble" | "inline" | "identity";
@@ -34,9 +35,9 @@ export type MonadProps = {
   ring?: number;
   /**
    * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
-   * "rorschach" texture on a translucent body. `flat` is a plain circle, solid, one colour from the theme (palette.primary
-   * tinted into the surface colour), no highlight, no shading, no texture: the pixel code is what is drawn on it.
-   * `flat` also draws the circumference and the code in the theme's primary (red when unhealthy), as icon mode does.
+   * "rorschach" texture on a translucent body. `flat` is a plain circle: the disc is `palette.primary.main` and the pixel
+   * code is `palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads. No highlight, no shading, no texture, no halo. Unhealthy fills the disc with
+   * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
    */
   core?: "glass" | "flat";
   /**
@@ -94,6 +95,27 @@ function buildPixelCells(seed: string): PixelCell[] {
     }
   }
   return cells;
+}
+
+
+/** Flat identicon ink: keep secondary when it reads on the disc; else walk theme tints toward contrast. */
+function resolveFlatCodeColor(theme: Theme, fill: string): string {
+  const secondary = theme.palette.secondary?.main || theme.palette.primary.main;
+  let fillIsLight = false;
+  try {
+    fillIsLight = getContrastRatio("#000", fill) > getContrastRatio("#fff", fill);
+  } catch {
+    fillIsLight = theme.palette.mode !== "light";
+  }
+  // tintsOf(..., "light") darkens toward black; tintsOf(..., "dark") lightens toward white.
+  const toward = fillIsLight ? "light" : "dark";
+  const namedStep = toward === "light" ? theme.palette.secondary?.dark : theme.palette.secondary?.light;
+  return firstContrasting(
+    fill,
+    QR_RING_MIN_CONTRAST,
+    [secondary, namedStep, ...tintsOf(secondary, toward), theme.palette.getContrastText(fill)],
+    theme.palette.getContrastText(fill),
+  );
 }
 
 export function useMonadContext() {
@@ -184,7 +206,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   const [labelAnchor, setLabelAnchor] = useState<DOMRect | null>(null);
   const hairline = typeof ring === "number" && ring > 0 ? ring : null;
   const flatCore = core === "flat";
-  // the theme drives the colours of the circumference and of the code (icon mode and a flat core)
+  // a flat core (and icon mode, which uses a hairline) take their colours from the theme
   const themed = hairline !== null || flatCore;
   // A flat core is a solid disc: the glow cycle that dims the WHOLE orb to 30-50% would make it translucent again, so
   // a flat core holds full strength unless a steady opacity was asked for.
@@ -203,6 +225,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   // unhealthy is the theme's error colour, not a fixed red: it follows the palette in light and dark
   const danger: string = theme.palette?.error?.main || "#ff1a1a";
   const dangerGlow = `0 0 0 3px ${danger}, 0 0 20px 6px color-mix(in srgb, ${danger} 55%, transparent)`;
+  const fillColor = !status.active || status.error ? danger : (theme.palette.primary?.main || "#29bfff");
+  const flatCodeColor = flatCore ? resolveFlatCodeColor(theme, fillColor) : "";
   const hasContent = Boolean(children);
   const [meContext, setMeContext] = useState<MonadContextValue>(() => resolveMeContext());
   const visualKind = kind || (meContext.hasMe ? "me" : "monad");
@@ -560,9 +584,11 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
             onMouseLeave={() => setLabelAnchor(null)}
             sx={(t: Theme) => {
               const primary = t.palette.primary?.main || "#29bfff";
+              const secondary = t.palette.secondary?.main || primary;
               const lightRing = `0 0 0 3px ${primary}, 0 0 20px 5px color-mix(in srgb, ${primary} 55%, transparent)`;
               const lightBorder = `2.5px solid ${primary}`;
               const isIdentity = variant === "identity";
+              const fill = !status.active || status.error ? danger : primary;
               return ({
               position: mode === "contained" ? "relative" : "absolute",
               top: mode === "contained" ? "auto" : 10,
@@ -571,24 +597,22 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               width: isIdentity ? identityButtonSize : 60,
               height: isIdentity ? identityButtonSize : 60,
               borderRadius: "50%",
-              background: isIdentity
+              background: flatCore
+                ? fill
+                : isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              boxShadow: isIdentity || hairline !== null
+              boxShadow: isIdentity || hairline !== null || flatCore
                 ? "none"
-                : flatCore
-                ? (!status.active || status.error
-                    ? dangerGlow
-                    : `0 0 0 3px ${primary}, 0 0 22px 6px color-mix(in srgb, ${primary} 55%, transparent)`)
                 : (!status.active || status.error
                     ? dangerGlow
                     : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
               border: isIdentity
                 ? "none"
                 : hairline !== null
-                ? `${hairline}px solid ${!status.active || status.error ? danger : primary}`
+                ? `${hairline}px solid ${!status.active || status.error ? danger : (flatCore ? flatCodeColor : primary)}`
                 : flatCore
-                ? `2.5px solid ${!status.active || status.error ? danger : primary}`
+                ? "none"
                 : (!status.active || status.error
                     ? `2.5px solid ${danger}`
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
@@ -605,9 +629,9 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ? "float 6s ease-in-out infinite"
                 : "float 6s ease-in-out infinite, glow 4.5s ease-in-out infinite",
               ...(solidOpacity !== null ? { opacity: solidOpacity } : {}),
-              backdropFilter: "blur(10px) saturate(160%)",
+              backdropFilter: flatCore || isIdentity ? "none" : "blur(10px) saturate(160%)",
               pointerEvents: "auto",
-              ...(isIdentity ? {} : { "&::before": {
+              ...(isIdentity || flatCore ? {} : { "&::before": {
                 content: '""',
                 position: "absolute",
                 top: "15%",
@@ -661,19 +685,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               </Box>
             ) : visualKind === "monad" ? (
               <>
-                {flatCore ? (
-                  <Box
-                    aria-hidden="true"
-                    sx={{
-                      position: "absolute",
-                      inset: 5,
-                      borderRadius: "50%",
-                      // solid: the theme's primary tinted into the surface colour. No gradients, no texture, no inset shading.
-                      background: `color-mix(in srgb, ${!status.active || status.error ? danger : theme.palette.primary.main} 14%, ${theme.palette.background?.paper ?? "#1e1e1e"})`,
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : (
+                {flatCore ? null : (
                 <Box
                   aria-hidden="true"
                   sx={{
@@ -725,8 +737,9 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                     gap: "2px",
                     imageRendering: "pixelated",
                     animation: "pixelBreath 9s ease-in-out infinite",
-                    filter:
-                      theme.palette.mode === "light"
+                    filter: flatCore
+                      ? "none"
+                      : theme.palette.mode === "light"
                         ? "drop-shadow(0 1px 3px rgba(0,42,58,0.18))"
                         : "drop-shadow(0 1px 4px rgba(0,0,0,0.36))",
                   }}
@@ -738,9 +751,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                       sx={{
                         borderRadius: "1px",
                         bgcolor: cell.active
-                          ? themed
-                            // icon mode / flat core: the code is drawn in the theme's own primary (red when the monad is not healthy),
-                            // the same colour as the circumference around it; the primary cells strong, the secondary softer
+                          ? flatCore
+                            // disc = primary; code = secondary when it contrasts, else a theme tint that reads
+                            ? flatCodeColor
+                            : themed
                             ? `color-mix(in srgb, ${!status.active || status.error ? danger : theme.palette.primary.main} ${cell.secondary ? 62 : 96}%, transparent)`
                             : cell.secondary
                               ? (theme.palette.mode === "light" ? "rgba(0,82,106,0.78)" : "rgba(168,214,214,0.88)")
