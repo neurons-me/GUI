@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 4.4.3
+
+- **Flat monad pixels stay sharp.** The identicon is drawn as integer squares (no rounded corners, no breath-scale) and `size` on a `bubble` sets the orb's own diameter so a page does not have to CSS-scale it (which blurs the code). The disc recedes a little from `palette.primary.main` so the existing outline reads apart from the fill. The pixel pattern and its angle are unchanged.
+
+
 Additive, except the items marked **Changed** below (`requires: 'session'` works as before).
 
 - **Changed: the GUI's own ids moved under `GUI.window.layout`.** `GUI.bars.*` is now `GUI.window.layout.bars.*` and `GUI.content.*` is

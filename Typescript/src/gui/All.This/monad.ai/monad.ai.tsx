@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { Box } from "@mui/material";
 import { GlobalStyles } from "@mui/system";
-import { getContrastRatio, type Theme } from "@mui/material/styles";
+import { getContrastRatio, darken, lighten, type Theme } from "@mui/material/styles";
 import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
@@ -36,8 +36,9 @@ export type MonadProps = {
   /**
    * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
    * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps the same outer contour as the glass
-   * badge (the 2.5px border and the 3px ring + halo). The disc is `palette.primary.main` and the pixel code is
-   * `palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads. No inner highlight, shading, texture or glass blob. Unhealthy fills the disc with
+   * badge (the 2.5px border and the 3px ring + halo). The disc is a slightly receded `palette.primary.main` so the
+   * outline reads apart from the fill, and the pixel code is drawn as sharp integer squares
+   * (`palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads). No inner highlight, shading, texture or glass blob. Unhealthy fills the disc with
    * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
    */
   core?: "glass" | "flat";
@@ -49,7 +50,10 @@ export type MonadProps = {
   scale?: number;
   /** Show the hover label. An icon that already has its own label (a rail link) turns it off. */
   tooltip?: boolean;
-  /** Diameter (px) of the identity ring. Border and dot scale proportionally. Only applies to variant="identity". Defaults to 34. */
+  /**
+   * Diameter in px. For `identity`, the ring (border and dot scale with it; defaults to 34). For `bubble`, the orb
+   * itself (defaults to 60). Prefer this over scaling the orb with a CSS `transform`, which blurs the pixel code.
+   */
   size?: number;
   children?: ReactNode;
 };
@@ -117,6 +121,15 @@ function resolveFlatCodeColor(theme: Theme, fill: string): string {
     [secondary, namedStep, ...tintsOf(secondary, toward), theme.palette.getContrastText(fill)],
     theme.palette.getContrastText(fill),
   );
+}
+
+/** Recede the flat disc a little so the existing outline reads apart from the fill. */
+function recedeFlatDisc(fill: string, mode: string): string {
+  try {
+    return mode === "light" ? lighten(fill, 0.16) : darken(fill, 0.18);
+  } catch {
+    return fill;
+  }
 }
 
 export function useMonadContext() {
@@ -218,6 +231,13 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   const identityButtonSize = Math.round(identitySize * (60 / 34));
   const identityBorderWidth = Math.max(2, Math.round(identitySize * (2 / 34)));
   const identityDotSize = Math.max(3, Math.round(identitySize * (9 / 34)));
+  const bubbleOrbSize = variant !== "identity" && typeof size === "number" && Number.isFinite(size) && size > 0
+    ? Math.round(size)
+    : 60;
+  const orbG = bubbleOrbSize / 60;
+  const flatCell = Math.max(3, Math.round(4 * orbG));
+  const flatGap = Math.max(1, Math.round(2 * orbG));
+  const flatGrid = flatCell * 5 + flatGap * 4;
   const status = {
     active: healthy !== false,
     error: healthy === false,
@@ -225,9 +245,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   const theme = useTheme() as any;
   // unhealthy is the theme's error colour, not a fixed red: it follows the palette in light and dark
   const danger: string = theme.palette?.error?.main || "#ff1a1a";
-  const dangerGlow = `0 0 0 3px ${danger}, 0 0 20px 6px color-mix(in srgb, ${danger} 55%, transparent)`;
+  const dangerGlow = `0 0 0 ${+(3 * orbG).toFixed(2)}px ${danger}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px color-mix(in srgb, ${danger} 55%, transparent)`;
   const fillColor = !status.active || status.error ? danger : (theme.palette.primary?.main || "#29bfff");
-  const flatCodeColor = flatCore ? resolveFlatCodeColor(theme, fillColor) : "";
+  const flatDiscColor = flatCore ? recedeFlatDisc(fillColor, theme.palette?.mode || "dark") : fillColor;
+  const flatCodeColor = flatCore ? resolveFlatCodeColor(theme, flatDiscColor) : "";
   const hasContent = Boolean(children);
   const [meContext, setMeContext] = useState<MonadContextValue>(() => resolveMeContext());
   const visualKind = kind || (meContext.hasMe ? "me" : "monad");
@@ -586,8 +607,10 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
             sx={(t: Theme) => {
               const primary = t.palette.primary?.main || "#29bfff";
               const secondary = t.palette.secondary?.main || primary;
-              const lightRing = `0 0 0 3px ${primary}, 0 0 20px 5px color-mix(in srgb, ${primary} 55%, transparent)`;
-              const lightBorder = `2.5px solid ${primary}`;
+              const ringBand = +(3 * orbG).toFixed(2);
+              const borderW = +(2.5 * orbG).toFixed(2);
+              const lightRing = `0 0 0 ${ringBand}px ${primary}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(5 * orbG).toFixed(2)}px color-mix(in srgb, ${primary} 55%, transparent)`;
+              const lightBorder = `${borderW}px solid ${primary}`;
               const isIdentity = variant === "identity";
               const fill = !status.active || status.error ? danger : primary;
               return ({
@@ -595,11 +618,11 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               top: mode === "contained" ? "auto" : 10,
               left: mode === "contained" ? "auto" : 10,
               transform: "none",
-              width: isIdentity ? identityButtonSize : 60,
-              height: isIdentity ? identityButtonSize : 60,
+              width: isIdentity ? identityButtonSize : bubbleOrbSize,
+              height: isIdentity ? identityButtonSize : bubbleOrbSize,
               borderRadius: "50%",
               background: flatCore
-                ? fill
+                ? flatDiscColor
                 : isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
@@ -608,14 +631,14 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ? "none"
                 : (!status.active || status.error
                     ? dangerGlow
-                    : (t.palette.mode === "light" ? lightRing : "0 0 0 3px #29bfff, 0 0 22px 6px rgba(0,200,255,0.6)")),
+                    : (t.palette.mode === "light" ? lightRing : `0 0 0 ${ringBand}px #29bfff, 0 0 ${+(22 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px rgba(0,200,255,0.6)`)),
               border: isIdentity
                 ? "none"
                 : hairline !== null
-                ? `${hairline}px solid ${!status.active || status.error ? danger : (flatCore ? flatCodeColor : primary)}`
+                ? `${+(hairline * orbG).toFixed(2)}px solid ${!status.active || status.error ? danger : (flatCore ? flatCodeColor : primary)}`
                 : (!status.active || status.error
-                    ? `2.5px solid ${danger}`
-                    : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
+                    ? `${borderW}px solid ${danger}`
+                    : (t.palette.mode === "light" ? lightBorder : `${borderW}px solid #9ff6ff`)),
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -729,14 +752,14 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                   sx={{
                     position: "relative",
                     zIndex: 1,
-                    width: 29,
-                    height: 29,
+                    width: flatCore ? flatGrid : 29,
+                    height: flatCore ? flatGrid : 29,
                     display: "grid",
-                    gridTemplateColumns: "repeat(5, 1fr)",
-                    gridTemplateRows: "repeat(5, 1fr)",
-                    gap: "2px",
+                    gridTemplateColumns: flatCore ? `repeat(5, ${flatCell}px)` : "repeat(5, 1fr)",
+                    gridTemplateRows: flatCore ? `repeat(5, ${flatCell}px)` : "repeat(5, 1fr)",
+                    gap: flatCore ? `${flatGap}px` : "2px",
                     imageRendering: "pixelated",
-                    animation: "pixelBreath 9s ease-in-out infinite",
+                    animation: flatCore ? "none" : "pixelBreath 9s ease-in-out infinite",
                     filter: flatCore
                       ? "none"
                       : theme.palette.mode === "light"
@@ -749,7 +772,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                       key={cell.key}
                       component="span"
                       sx={{
-                        borderRadius: "1px",
+                        borderRadius: flatCore ? 0 : "1px",
                         bgcolor: cell.active
                           ? flatCore
                             // disc = primary; code = secondary when it contrasts, else a theme tint that reads
