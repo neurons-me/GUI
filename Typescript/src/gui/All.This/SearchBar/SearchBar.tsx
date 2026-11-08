@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { dropdownMaxHeight, readVisibleViewport } from './SearchBar.viewport';
 import { useGuiTheme } from '@/gui-internals/Hooks';
 import type { SearchBarProps, JsonSearchIcon, JsonSearchItem, JsonSearchTile } from './SearchBar.types';
 import SearchBarMonadIcon from './SearchBarMonadIcon';
@@ -248,6 +249,8 @@ export default function SearchBar(props: SearchBarProps) {
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const [panelMaxHeight, setPanelMaxHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (providedItems || !src) return;
@@ -288,6 +291,43 @@ export default function SearchBar(props: SearchBarProps) {
   useEffect(() => {
     setActiveIndex(0);
   }, [query]);
+
+  // Keep the open dropdown above the on-screen keyboard: follow visualViewport (the only viewport the
+  // keyboard shrinks on iOS/Android), cap the panel to the visible space below the field and let it scroll.
+  const panelOpen = showSuggestions || showResults;
+  useEffect(() => {
+    if (!panelOpen || typeof window === 'undefined') return;
+    const vv = (window as any).visualViewport as (EventTarget & { height: number; offsetTop: number }) | undefined;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const field = fieldRef.current;
+        if (!field) return;
+        let vp = readVisibleViewport(window);
+        let rect = field.getBoundingClientRect();
+        // Keyboard covers the field: bring it into the visible area first.
+        if (vp && (rect.bottom > vp.top + vp.height || rect.top < vp.top)) {
+          field.scrollIntoView({ block: 'nearest' });
+          vp = readVisibleViewport(window);
+          rect = field.getBoundingClientRect();
+        }
+        setPanelMaxHeight(dropdownMaxHeight(rect.bottom, vp));
+      });
+    };
+    update();
+    vv?.addEventListener('resize', update);
+    vv?.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      vv?.removeEventListener('resize', update);
+      vv?.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update);
+    };
+  }, [panelOpen]);
 
   const handleFocus = () => {
     if (blurTimeout.current) clearTimeout(blurTimeout.current);
@@ -376,6 +416,7 @@ export default function SearchBar(props: SearchBarProps) {
       {...rest}
     >
       <div
+        ref={fieldRef}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -450,6 +491,10 @@ export default function SearchBar(props: SearchBarProps) {
             // shows its path as text), past the box
             gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 6,
+            maxHeight: panelMaxHeight,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch' as any,
           }}
         >
           {quickAccessItems.map((item) => (
@@ -523,7 +568,11 @@ export default function SearchBar(props: SearchBarProps) {
             border: `1px solid ${colors.border}`,
             background: colors.bg,
             boxShadow: isLight ? '0 8px 24px rgba(15,23,32,0.12)' : '0 8px 24px rgba(0,0,0,0.4)',
-            overflow: 'hidden',
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            maxHeight: panelMaxHeight,
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch' as any,
           }}
         >
           {results.length === 0 ? (

@@ -6,6 +6,7 @@
 
 - **Seafoam dark primary is a little clearer.** The deep sea green stays the same colour, just lifted from `#244C4E` to `#396C70` (secondary from `#457E85` to `#529096`) so logo, borders and labels read against the night background without going neon.
 - **Theme mode follows the browser** until the user toggles. With no saved light/dark, every .GUI page uses `prefers-color-scheme` instead of a page's `defaultMode`. A ModeToggle choice is still saved and then wins.
+- **SearchBar stays above the mobile keyboard.** The open quick-access grid and results follow `window.visualViewport` (resize/scroll, falling back to `innerHeight`): they are capped to the visible space below the field and scroll inside it, and the field is scrolled into view if the keyboard covers it. No change on desktop.
 
 ## 4.4.3
 
