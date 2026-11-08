@@ -10,6 +10,7 @@ import { useTheme } from "@mui/material";
 import { keccak_256 } from "js-sha3";
 import QRme from "../me/QR/QR.me";
 import { placeOrbLabel } from "./orbLabelPlacement";
+import { identityMarkColors } from "./identityMarkColors";
 export type MonadProps = {
   variant?: "bubble" | "inline" | "identity";
   mode?: "float" | "contained";
@@ -227,6 +228,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
   const danger: string = theme.palette?.error?.main || "#ff1a1a";
   const dangerGlow = `0 0 0 ${+(3 * orbG).toFixed(2)}px ${danger}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px color-mix(in srgb, ${danger} 55%, transparent)`;
   const fillColor = !status.active || status.error ? danger : (theme.palette.primary?.main || "#29bfff");
+  const meMark = identityMarkColors(fillColor, theme.palette?.mode || "dark");
   const flatDiscColor = flatCore ? recedeFlatDisc(fillColor, theme.palette?.mode || "dark") : fillColor;
   const pageBg = theme.palette?.background?.default || (theme.palette?.mode === "light" ? "#f5f5f5" : "#0b1114");
   const flatCodeColor = flatCore ? pageBg : "";
@@ -669,14 +671,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                     position: "absolute",
                     inset: 0,
                     borderRadius: "50%",
-                    border:
-                      theme.palette.mode === "light"
-                        ? `${identityBorderWidth}px solid rgba(0,90,122,0.7)`
-                        : `${identityBorderWidth}px solid rgba(230,245,245,0.85)`,
-                    boxShadow:
-                      theme.palette.mode === "light"
-                        ? "0 0 10px rgba(0,90,122,0.3)"
-                        : "0 0 12px rgba(180,230,230,0.4)",
+                    border: `${identityBorderWidth}px solid ${meMark.ringColor}`,
+                    boxShadow: meMark.ringShadow,
                   }}
                 />
                 <Box
@@ -684,11 +680,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                     width: identityDotSize,
                     height: identityDotSize,
                     borderRadius: "50%",
-                    background: theme.palette.mode === "light" ? "#005a7a" : "#eafcfa",
-                    boxShadow:
-                      theme.palette.mode === "light"
-                        ? "0 0 8px rgba(0,90,122,0.55)"
-                        : "0 0 10px rgba(234,252,250,0.75)",
+                    background: meMark.dotFill,
+                    boxShadow: meMark.dotShadow,
                   }}
                 />
               </Box>
