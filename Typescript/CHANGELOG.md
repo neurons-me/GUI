@@ -32,6 +32,11 @@ Additive, except the items marked **Changed** below (`requires: 'session'` works
   `typedocs/Declarative-Requirements.md`.
 - A left-bar link that is `off` (a disabled part, or a page whose layer is off) now carries `aria-disabled` and `data-gui-off`.
 
+## 4.4.1
+
+- **Monad `core="flat"`:** the orb's inner disc can be a plain circle in theme colours instead of the glass sphere. The disc is `palette.primary.main` (`palette.error.main` when unhealthy) and the pixel code is `palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads. No highlight, no shading, no texture, no halo. Default remains `core="glass"`. `MonadOrbIcon` and `MonadNamespaceCard` already pass `core="flat"`.
+- **Namespace routes in three places.** On the namespace's own page its routes render in the content area; on any other page they open in the content area's place, between the bars, over the page (unchanged underneath when they close). Shared panel: `NamespaceRoutePanel`. See commit `94e1344`.
+
 ## 4.2.1
 
 Package metadata (`description`, `keywords`, `homepage`, `repository`, `bugs`, `author`). No API change.

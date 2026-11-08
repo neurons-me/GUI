@@ -1,0 +1,28 @@
+import{r as o,j as e,h as C}from"./iframe-Dgz0DvjP.js";import{M as v}from"./Me-BT-LrcBn.js";import{C as p}from"./Cleaker-CfUAjuMi.js";import{C as y}from"./Namespace-Dw4SXWvB.js";import"./preload-helper-Dp1pzeXC.js";import"./me.es-Bc6mvw-6.js";import"./useMe-BLn7zUEV.js";import"./SeedSessionProvider-BeX3WvN1.js";import"./createSeedSession-BG4w7POb.js";import"./cleaker.es-CjbQ9B8Y.js";import"./sha3-Bn30YVQW.js";import"./localIdentityVault-s9IV2zl-.js";import"./namespaceExpression-vtRlIp1z.js";import"./Router-D1BGIWip.js";import"./Gauge-auIj8jG9.js";import"./Icon-zhfCvvEA.js";import"./IconButton-HxKAscSc.js";import"./IconButton-D_VO_Lm6.js";import"./ButtonBase-DnPFUmZ4.js";import"./TransitionGroupContext-Bovk2g5c.js";import"./useForkRef-DhiyL1xF.js";import"./useEventCallback-CW9ai8zV.js";import"./CircularProgress-CRe5HlWG.js";import"./Avatar-BlQEDC2q.js";import"./Avatar-CRm8ZbT3.js";import"./createSvgIcon-BTgnJVyE.js";import"./useSlot-CjwkB68v.js";import"./resolveComponentProps-C7RzSJ6V.js";import"./TextField-ROcKb43U.js";import"./useFormControl-CTXUw6wt.js";import"./isHostComponent-DVu5iVWx.js";import"./Menu-D9ienzuU.js";import"./useSlotProps-D6FndUWw.js";import"./Paper-DKRGBdYt.js";import"./Grow-D7g5qnif.js";import"./mergeSlotProps-DoPK-Muf.js";import"./List-BZwm0z1v.js";import"./useControlled-DSrQ-lxT.js";import"./isMuiElement-BIZd4XRc.js";import"./Drawer-YSKRlM1U.js";import"./dividerClasses-BXzcgXwe.js";import"./Button-B3yzBwnB.js";import"./Button-BrwXx0gp.js";import"./Paper-DdBU6wUz.js";import"./Progress-ClTpsf_Z.js";import"./Toolbar-CvqahxVg.js";import"./QR.me-BskVFbDs.js";import"./Tooltip-Dxz6oaTn.js";import"./Tooltip-B13adE9r.js";import"./QR-BWW61rs2.js";import"./PixelWordmark-DlzTr5ww.js";import"./Usernames-DBcMFGSL.js";import"./ListItemIcon-Dk9aJ05I.js";import"./listItemIconClasses-U7MvxmKI.js";import"./ListItemText-DCgrBkAM.js";import"./listItemTextClasses-CANx9uJI.js";import"./BlocksTable-otj3BZWV.js";import"./GuiPages-BITmAqEd.js";import"./TopBar-B-O3jfYe.js";import"./MenuItem-DVYWd6rG.js";import"./getThemeProps-DPkTTLbc.js";import"./useInsets-Cl1hGTb2.js";import"./LeftSidebarContext-COW4ZKa6.js";import"./AppBar-DeyLG5Ky.js";import"./Layout-eUWfEUDJ.js";import"./Collapse-DfTvU6GR.js";import"./guiNodeId-Dhpdk8uV.js";import"./AppBar-DPYXXQh5.js";import"./StickyOptionsTop-D26zHUmd.js";import"./ToggleMode-B3XOpHmB.js";import"./Switch-D3rl4sxQ.js";import"./Catalog-Bkh75JjA.js";import"./Grid-5Gb7XIfZ.js";import"./Card-BlmjwST2.js";import"./CardHeader-RTlhCgE0.js";import"./CardContent-CFaEEAZE.js";import"./CardActions-44Ka-f-U.js";import"./launcherPopover-UgT8i8jv.js";import"./ClickAwayListener-C8Hpa77_.js";import"./Chip-Ccehea2u.js";import"./Chip-84Nuw-fl.js";import"./DialogContent-b3_QE_yD.js";import"./CleakerKeychain-DqkmDEaY.js";import"./monad0-BS00-6A5.js";import"./Beatle.types-C3HRRkpt.js";import"./DoorLayersPanel-V0Ana7ZH.js";import"./MainServerView-CmiMArc7.js";import"./GatewaySetup-BQUdTTM_.js";import"./trustedOrigin-D_D34UBw.js";import"./IdentityIconRow-CXKLZ3Mu.js";import"./Claim-YrUAbhri.js";import"./Passphrase-BNPap9O6.js";import"./RecoverAccount-Dg1SrPjc.js";function S(r,T=900){return(s=>{const[g,a]=o.useState({expression:null,resolved:[],state:"idle"}),t=o.useRef(null),E=o.useCallback(m=>{t.current&&clearTimeout(t.current);const c=s.replace(/^wss?:\/\//,"").replace(/\/.*$/,""),l=r(c);a({expression:null,resolved:[],state:"connecting"}),l!=="hang"&&(t.current=setTimeout(()=>{a(l==="connect"?{expression:{raw:m,ast:{kind:"namespace",value:m}},resolved:[`https://${c}/${m}`],state:"connected"}:{expression:null,resolved:[],state:"error",error:"WebSocket error"})},T))},[s]);return o.useEffect(()=>()=>{t.current&&clearTimeout(t.current)},[]),{channel:g,open:E,send:()=>{},disconnect:()=>{}}})}const k=async()=>new Response("<!doctype html><title>no</title>",{status:200,headers:{"content-type":"text/html"}}),N={fetchImpl:k,useChannel:S(r=>r==="cleaker.me"?"connect":"error")},j={fetchImpl:k,useChannel:S(()=>"hang")},dr={title:"All.This/Cleaker",component:p,parameters:{layout:"fullscreen"}},n={render:()=>e.jsx(C,{children:e.jsx(v,{children:e.jsx(p,{namespace:"cleaker.me"})})})},i={args:{otherHost:"answers"},argTypes:{otherHost:{control:"inline-radio",options:["answers","never finishes"]}},render:({otherHost:r})=>e.jsx(y.Provider,{value:r==="answers"?N:j,children:e.jsx(C,{children:e.jsx(v,{children:e.jsx(p,{namespace:typeof window<"u"?window.location.hostname:"localhost"})})})},r)};var h,d,u;n.parameters={...n.parameters,docs:{...(h=n.parameters)==null?void 0:h.docs,source:{originalSource:`{
+  render: () => <Theme>
+      <Me>
+        <Cleaker namespace="cleaker.me" />
+      </Me>
+    </Theme>
+}`,...(u=(d=n.parameters)==null?void 0:d.docs)==null?void 0:u.source}}};var f,x,w;i.parameters={...i.parameters,docs:{...(f=i.parameters)==null?void 0:f.docs,source:{originalSource:`{
+  args: {
+    otherHost: "answers"
+  },
+  argTypes: {
+    otherHost: {
+      control: "inline-radio",
+      options: ["answers", "never finishes"]
+    }
+  },
+  render: ({
+    otherHost
+  }) =>
+  // keyed: changing the control starts the flow over, with the other channel
+  <ConnectionSeamsContext.Provider key={otherHost} value={otherHost === "answers" ? NOTHING_ANSWERS : NEVER_ANSWERS}>
+      <Theme>
+        <Me>
+          <Cleaker namespace={typeof window !== "undefined" ? window.location.hostname : "localhost"} />
+        </Me>
+      </Theme>
+    </ConnectionSeamsContext.Provider>
+}`,...(w=(x=i.parameters)==null?void 0:x.docs)==null?void 0:w.source}}};const ur=["Default","Flow"];export{n as Default,i as Flow,ur as __namedExportsOrder,dr as default};
