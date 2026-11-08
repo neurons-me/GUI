@@ -140,8 +140,9 @@
                   },
                   "home": {
                     "label": "Home",
-                    "component": "Welcome",
-                    "route": "/"
+                    "component": "Landing",
+                    "route": "/",
+                    "note": "The namespace's own page: its QR in the center, ready to connect (rule 1 of 'What you see in each'). /.me is the same identity page by its own address."
                   },
                   "users": {
                     "component": "Users",

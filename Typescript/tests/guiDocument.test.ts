@@ -26,6 +26,12 @@ const routes = entries.filter((e) => e.route).map((e) => e.route);
 assert.equal(new Set(routes).size, routes.length, 'two parts on one route');
 for (const entry of entries) if (entry.route) assert.ok(entry.component, `${entry.id}: a route needs a component`);
 
+// Rule 1 of "What you see in each": on the namespace's own page its home is its QR, in the center, ready to connect.
+// `/` is the Landing (the same identity page `/.me` names by its own address), not a welcome that links to it.
+const home = entries.find((e) => e.route === '/');
+assert.equal(home?.component, 'Landing', 'the namespace home ("/") is its QR (Landing)');
+assert.equal(entries.find((e) => e.route === '/.me')?.component, 'Landing', '/.me stays the identity page');
+
 // ── GUI.window.layout.bars.left declares its elements ────────────────────────────────────────────────────────────────
 // The left bar's elements are the document's, and for the root GUI they are exactly what the shell used to
 // hard-code (Home first, Users/Blockchain/URL as fallbacks the namespace may override, Keychain only with a
