@@ -36,7 +36,7 @@ export type MonadProps = {
   /**
    * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
    * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps the same outer contour as the glass
-   * badge (the 2.5px border and the 3px ring + halo). The disc is a slightly receded `palette.primary.main` so the
+   * badge (the 2.5px border and the 3px ring) with a quieter halo than glass. The disc is a slightly receded `palette.primary.main` so the
    * outline reads apart from the fill, and the pixel code is drawn as sharp integer squares
    * (`palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads). No inner highlight, shading, texture or glass blob. Unhealthy fills the disc with
    * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
@@ -610,6 +610,11 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
               const ringBand = +(3 * orbG).toFixed(2);
               const borderW = +(2.5 * orbG).toFixed(2);
               const lightRing = `0 0 0 ${ringBand}px ${primary}, 0 0 ${+(20 * orbG).toFixed(2)}px ${+(5 * orbG).toFixed(2)}px color-mix(in srgb, ${primary} 55%, transparent)`;
+              const darkRing = `0 0 0 ${ringBand}px #29bfff, 0 0 ${+(22 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px rgba(0,200,255,0.6)`;
+              // flat keeps the hard ring (the contour) and only a quiet edge light — no glass bloom
+              const haloBlur = +(6 * orbG).toFixed(2);
+              const lightFlatRing = `0 0 0 ${ringBand}px ${primary}, 0 0 ${haloBlur}px 0 color-mix(in srgb, ${primary} 22%, transparent)`;
+              const darkFlatRing = `0 0 0 ${ringBand}px #29bfff, 0 0 ${haloBlur}px 0 rgba(0,200,255,0.22)`;
               const lightBorder = `${borderW}px solid ${primary}`;
               const isIdentity = variant === "identity";
               const fill = !status.active || status.error ? danger : primary;
@@ -626,12 +631,14 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 : isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              // flat keeps the glass badge's outer contour (border + ring + halo) and only replaces the inner disc
+              // flat: border + hard ring, quieter halo than glass
               boxShadow: isIdentity || hairline !== null
                 ? "none"
                 : (!status.active || status.error
                     ? dangerGlow
-                    : (t.palette.mode === "light" ? lightRing : `0 0 0 ${ringBand}px #29bfff, 0 0 ${+(22 * orbG).toFixed(2)}px ${+(6 * orbG).toFixed(2)}px rgba(0,200,255,0.6)`)),
+                    : (flatCore
+                        ? (t.palette.mode === "light" ? lightFlatRing : darkFlatRing)
+                        : (t.palette.mode === "light" ? lightRing : darkRing))),
               border: isIdentity
                 ? "none"
                 : hairline !== null
