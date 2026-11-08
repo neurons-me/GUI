@@ -182,3 +182,37 @@ export const FromRemoteIndex: Story = {
     src: 'https://neurons-me.github.io/index.json',
   },
 };
+
+// The quick-access grid as the neurons.me home uses it: square tiles, the theme's colors, and each entry's `tile`
+// telling how it draws -- a wordmark painted in the accent color inside an accent frame (netget), a QR with a
+// muted name (cleaker), a wide picture across the tile (All.This). No page CSS: all of it is SearchBar + data.
+const NG = 'https://neurons-me.github.io/assets';
+const compactItems: JsonSearchItem[] = [
+  { id: 'me', title: '.me', url: 'https://neurons-me.github.io/.me/', kind: 'root', icon: { light: '', dark: '', monad: { variant: 'identity', kind: 'me', seed: 'jabellae' } } },
+  { id: 'cleaker', title: 'cleaker', url: 'https://neurons-me.github.io/Cleaker/', kind: 'root',
+    icon: { light: `${NG}/cleaker-qr-on-light.png`, dark: `${NG}/cleaker-qr-on-dark.png` }, tile: { label: 'muted' } },
+  { id: 'monad', title: 'monad', url: 'https://neurons-me.github.io/monad/', kind: 'root', icon: { light: '', dark: '', monad: { variant: 'bubble', kind: 'monad', texture: 'matte' } } },
+  { id: 'gui', title: '.GUI', url: 'https://neurons-me.github.io/GUI/', kind: 'root', icon: 'https://res.cloudinary.com/dkwnxf6gm/image/upload/v1760629119/this.gui.neurons.me_mkapde.png' },
+  { id: 'netget', title: 'netget', url: 'https://neurons-me.github.io/netget/', kind: 'root',
+    icon: { light: `${NG}/netget-letters-on-light.svg`, dark: `${NG}/netget-letters-on-dark.svg` },
+    tile: { width: 55, hideLabel: true, frame: true, tint: true } },
+  { id: 'all-this', title: 'All.This', url: 'https://github.com/neurons-me', kind: 'root',
+    icon: { light: `${NG}/all-this-on-light.svg`, dark: `${NG}/all-this-on-dark.svg` } },
+  { id: 'npm', title: 'npm', url: 'https://www.npmjs.com/org/neurons.me', kind: 'source', icon: 'https://cdn.simpleicons.org/npm/CB3837' },
+  { id: 'github', title: 'GitHub', url: 'https://github.com/neurons-me', kind: 'source', icon: { light: 'https://cdn.simpleicons.org/github/0f1720', dark: 'https://cdn.simpleicons.org/github/ffffff' } },
+  { id: 'nrp', title: 'Namespaces', url: 'https://neurons-me.github.io/NRP/', kind: 'root', icon: '𓆣' },
+];
+
+export const CompactThemed: Story = {
+  name: 'Compact grid, theme colors',
+  args: {
+    items: compactItems,
+    density: 'compact',
+    colors: 'theme',
+  },
+  render: (args) => (
+    <div style={{ width: 280, paddingBottom: 380 }}>
+      <SearchBar {...args} />
+    </div>
+  ),
+};

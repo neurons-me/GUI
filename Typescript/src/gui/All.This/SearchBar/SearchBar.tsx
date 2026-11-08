@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGuiTheme } from '@/gui-internals/Hooks';
-import type { SearchBarProps, JsonSearchIcon, JsonSearchItem } from './SearchBar.types';
+import type { SearchBarProps, JsonSearchIcon, JsonSearchItem, JsonSearchTile } from './SearchBar.types';
 import SearchBarMonadIcon from './SearchBarMonadIcon';
 
 export type { SearchBarProps, JsonSearchItem };
@@ -133,6 +133,79 @@ function Icon({
 }
 
 /**
+ * The icon of a quick-access tile, as its entry's `tile` asks: a set width (a wordmark), the tile's width cropped to
+ * fit ("cover", a wide picture), or painted in the accent color ("tint": the image becomes a mask). Without those, or
+ * for an icon that is not an image, the plain Icon.
+ */
+function TileIcon({
+  item,
+  size,
+  isLight,
+  accent,
+}: {
+  item: JsonSearchItem;
+  size: number;
+  isLight: boolean;
+  accent: string;
+}) {
+  const tile: JsonSearchTile = item.tile ?? {};
+  const resolved = resolveIcon(item.icon, isLight);
+  const monad = item.icon && typeof item.icon === 'object' && item.icon.monad;
+  if (monad || !isUrl(resolved) || !(tile.width || tile.fit === 'cover' || tile.tint)) {
+    return <Icon icon={item.icon} size={size} isLight={isLight} plate={item.iconPlate} />;
+  }
+  const cover = tile.fit === 'cover';
+  return (
+    <span
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        flexShrink: 0,
+        width: tile.width ? tile.width : cover ? '89%' : size,
+        maxWidth: '85%',
+        ...(cover ? { maxWidth: '100%' } : {}),
+        ...(tile.tint
+          ? {
+              backgroundColor: accent,
+              WebkitMaskImage: `url(${resolved})`,
+              maskImage: `url(${resolved})`,
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+            }
+          : {}),
+      }}
+    >
+      <img
+        src={resolved}
+        alt=""
+        style={{
+          width: '100%',
+          height: cover ? size : 'auto',
+          objectFit: cover ? 'cover' : 'contain',
+          borderRadius: cover ? 6 : 0,
+          display: 'block',
+          // tinted: the image keeps the box's size, the accent color painted through it as a mask shows instead
+          opacity: tile.tint ? 0 : 1,
+        }}
+      />
+    </span>
+  );
+}
+
+const VISUALLY_HIDDEN: React.CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+};
+
+/**
  * SearchBar
  * -------------
  * A search input whose results come from a generic JSON index
@@ -148,6 +221,8 @@ export default function SearchBar(props: SearchBarProps) {
     kindOrder = DEFAULT_KIND_ORDER,
     enableSlashShortcut = true,
     themeMode = 'auto',
+    density = 'comfortable',
+    colors: colorSource = 'fixed',
     onSelect,
     id,
     className,
@@ -156,6 +231,7 @@ export default function SearchBar(props: SearchBarProps) {
   } = props;
 
   const guiTheme = useGuiTheme();
+  const compact = density === 'compact';
   const pageDarkMode = usePageDarkMode(themeMode === 'auto');
   const isLight = themeMode === 'light'
     ? true
@@ -261,7 +337,18 @@ export default function SearchBar(props: SearchBarProps) {
     }
   };
 
-  const colors = isLight
+  const P = guiTheme.palette;
+  const colors = colorSource === 'theme'
+    ? {
+        border: P.divider,
+        borderHover: P.primary.main,
+        bg: P.background.paper,
+        text: P.text.primary,
+        sub: P.text.secondary,
+        kbdBg: P.action.hover,
+        rowHover: P.action.hover,
+      }
+    : isLight
     ? {
         border: 'rgba(15,23,32,0.14)',
         borderHover: '#0f6a78',
@@ -313,6 +400,7 @@ export default function SearchBar(props: SearchBarProps) {
           aria-label="Search in All.This"
           style={{
             flex: 1,
+            minWidth: 0, // an input keeps its 20-character width otherwise and pushes the "/" badge out of a narrow box
             border: 'none',
             outline: 'none',
             background: 'transparent',
@@ -358,7 +446,9 @@ export default function SearchBar(props: SearchBarProps) {
             background: colors.bg,
             boxShadow: isLight ? '0 8px 24px rgba(15,23,32,0.12)' : '0 8px 24px rgba(0,0,0,0.4)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            // minmax(0, 1fr), not 1fr: a plain 1fr column grows to its longest word (an icon that failed to load and
+            // shows its path as text), past the box
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
             gap: 6,
           }}
         >
@@ -378,31 +468,40 @@ export default function SearchBar(props: SearchBarProps) {
                 }
               }}
               style={{
+                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 4,
-                padding: '8px 4px',
+                gap: compact ? 2 : 4,
+                padding: compact ? 4 : '8px 4px',
                 borderRadius: 8,
-                border: `1px solid ${colors.border}`,
+                border: item.tile?.frame ? `2px solid ${colors.borderHover}` : `1px solid ${colors.border}`,
                 textDecoration: 'none',
                 color: colors.text,
                 textAlign: 'center',
+                minWidth: 0,
+                ...(compact ? { aspectRatio: '1 / 1', overflow: 'hidden' } : {}),
               }}
             >
-              <Icon icon={item.icon} size={32} isLight={isLight} plate={item.iconPlate} />
+              <TileIcon item={item} size={compact ? 53 : 32} isLight={isLight} accent={colors.borderHover} />
               <span
-                style={{
-                  fontSize: 9,
-                  fontWeight: 600,
-                  lineHeight: 1.15,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical' as any,
-                }}
+                style={
+                  item.tile?.hideLabel
+                    ? VISUALLY_HIDDEN
+                    : {
+                        fontSize: compact ? 8 : 9,
+                        fontWeight: item.tile?.label === 'muted' ? 500 : 600,
+                        opacity: item.tile?.label === 'muted' ? 0.7 : 1,
+                        lineHeight: 1.15,
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: compact ? 1 : 2,
+                        WebkitBoxOrient: 'vertical' as any,
+                      }
+                }
               >
                 {item.title}
               </span>

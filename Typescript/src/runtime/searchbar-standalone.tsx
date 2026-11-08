@@ -5,7 +5,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import SearchBar from '@/gui/All.This/SearchBar/SearchBar';
-import type { SearchBarThemeMode } from '@/gui/All.This/SearchBar/SearchBar.types';
+import type { SearchBarThemeMode, SearchBarDensity } from '@/gui/All.This/SearchBar/SearchBar.types';
 
 function readThemeMode(node: HTMLElement): SearchBarThemeMode {
   const raw = node.dataset.themeMode || node.dataset.mode;
@@ -21,8 +21,10 @@ function mountAll() {
     const placeholder = node.dataset.placeholder || undefined;
     const maxResults = node.dataset.maxResults ? Number(node.dataset.maxResults) : undefined;
     const themeMode = readThemeMode(node);
+    // data-density="compact": the square quick-access grid (no theme here, so colors stay the SearchBar's own)
+    const density: SearchBarDensity = node.dataset.density === 'compact' ? 'compact' : 'comfortable';
     createRoot(node).render(
-      React.createElement(SearchBar, { src, placeholder, maxResults, themeMode })
+      React.createElement(SearchBar, { src, placeholder, maxResults, themeMode, density })
     );
   });
 }
