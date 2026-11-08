@@ -4,7 +4,7 @@ import type { Palette } from '@mui/material/styles';
 /**
  * Contrast for the colours QR.me draws, kept apart from the component so it can be tested.
  *
- * Several themes' primary is a dark brand colour: Seafoam dark's `#244C4E` over its own paper `#182423` is ~1.7:1, so
+ * Several themes' primary is a dark brand colour: Seafoam dark's primary over its own paper can fall short of 4.5:1, so
  * the QR ink drawn straight in it was close to invisible and unreliable to scan. The ink and the ring now keep their
  * intended colour when it already contrasts, and only otherwise step through the theme's own fallbacks.
  */

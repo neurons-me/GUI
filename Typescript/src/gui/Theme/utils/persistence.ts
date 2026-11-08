@@ -1,6 +1,6 @@
 //src/themes/utils/persistence.ts
 // Utility to persist user's themeId using localStorage.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const LEGACY_THEME_ID_KEY = 'this.gui:themeId';
 const LEGACY_THEME_MODE_KEY = 'this.gui:themeMode';
@@ -64,14 +64,30 @@ function readThemeIdFromScope(fallback: string): string {
   );
 }
 
+function readPrefersColorScheme(fallback: 'light' | 'dark'): 'light' | 'dark' {
+  try {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return fallback;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch {
+    return fallback;
+  }
+}
+
+function readStoredThemeMode(): 'light' | 'dark' | '' {
+  const scope = resolveThemeScope('neurons.me', 'light');
+  const stored = readStorageValue(scope.themeModeKey) || readStorageValue(LEGACY_THEME_MODE_KEY);
+  return stored === 'dark' ? 'dark' : stored === 'light' ? 'light' : '';
+}
+
 function readThemeModeFromScope(fallback: 'light' | 'dark'): 'light' | 'dark' {
-  const scope = resolveThemeScope('neurons.me', fallback);
-  const stored =
-    readStorageValue(scope.themeModeKey) ||
-    readStorageValue(LEGACY_THEME_MODE_KEY) ||
-    scope.defaultMode ||
-    fallback;
-  return stored === 'dark' ? 'dark' : 'light';
+  // A stored light/dark is an explicit choice (the mode toggle). Otherwise follow the
+  // browser/OS setting — not a page's defaultMode, so every .GUI page starts automatic.
+  return readStoredThemeMode() || readPrefersColorScheme(fallback);
+}
+
+/** Resolves the mode a new page would use: saved toggle, else prefers-color-scheme, else fallback. */
+export function resolveInitialThemeMode(fallback: 'light' | 'dark' = 'light'): 'light' | 'dark' {
+  return readThemeModeFromScope(fallback);
 }
 
 /**
@@ -154,22 +170,28 @@ export function usePersistentThemeId(
 }
 
 /**
- * React hook to persist and manage the theme mode (light/dark) using localStorage.
- * Returns a [mode, setMode] tuple just like useState.
+ * React hook to persist and manage the theme mode (light/dark).
+ * If the user has not toggled, the mode follows the browser's prefers-color-scheme.
+ * A toggle writes light/dark to localStorage and then that choice wins.
  *
- * @param fallback - The fallback mode if no previous value is stored.
- * @returns A tuple [mode, setMode] that syncs with localStorage.
+ * @param fallback - Used only when no saved choice exists and the browser scheme cannot be read.
+ * @returns A tuple [mode, setMode] that syncs with localStorage after the user chooses.
  */
 export function usePersistentThemeMode(
   fallback: 'light' | 'dark'
 ): ['light' | 'dark', React.Dispatch<React.SetStateAction<'light' | 'dark'>>] {
   const [mode, setModeState] = useState<'light' | 'dark'>(() => readThemeModeFromScope(fallback));
+  const userSetRef = useRef(Boolean(readStoredThemeMode()));
 
   const setMode: React.Dispatch<React.SetStateAction<'light' | 'dark'>> = (next) => {
+    userSetRef.current = true;
     setModeState((prev) => (typeof next === 'function' ? next(prev) : next));
   };
 
   useEffect(() => {
+    // Only persist after the user toggles. Writing on mount would freeze the
+    // resolved system mode and stop following the browser.
+    if (!userSetRef.current) return;
     const scope = resolveThemeScope('neurons.me', fallback);
     try {
       if (scope.themeModeKey) {
@@ -208,10 +230,22 @@ export function usePersistentThemeMode(
     window.addEventListener('storage', handleStorage);
     window.addEventListener('this.gui:themeMode:changed', handleThemeModeEvent as EventListener);
     window.addEventListener(THEME_SCOPE_EVENT, handleThemeScopeChanged as EventListener);
+
+    const media = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    const handleScheme = () => {
+      if (userSetRef.current || readStoredThemeMode()) return;
+      const next = media && media.matches ? 'dark' : 'light';
+      setModeState((prev) => (prev === next ? prev : next));
+    };
+    if (media?.addEventListener) media.addEventListener('change', handleScheme);
+    else if (media?.addListener) media.addListener(handleScheme);
+
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('this.gui:themeMode:changed', handleThemeModeEvent as EventListener);
       window.removeEventListener(THEME_SCOPE_EVENT, handleThemeScopeChanged as EventListener);
+      if (media?.removeEventListener) media.removeEventListener('change', handleScheme);
+      else if (media?.removeListener) media.removeListener(handleScheme);
     };
   }, [fallback]);
 

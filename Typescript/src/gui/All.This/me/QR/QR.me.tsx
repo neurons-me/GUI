@@ -385,7 +385,7 @@ export default function QRme({
   // 'off' is grey: nothing answers here (no .me behind this address). Distinct from 'error' (red), where
   // something answered and refused -- the same ring colour for both would say "broken" about a thing that is
   // simply not running.
-  // The ink and the ring are contrast-checked (qrContrast.ts): Seafoam dark's primary #244C4E over its paper #182423
+  // The ink and the ring are contrast-checked (qrContrast.ts): a dark brand primary over its own paper
   // is ~1.7:1, a QR that was barely visible and unreliable to scan ("en seafoam el qr.me color no se ve bonito"). The
   // ink needs 4.5:1 against the QR background, the ring 3:1 against the page; a colour that already reaches it is kept
   // as is, otherwise the theme's own lighter (dark mode) / darker (light mode) variant, then the same colour mixed
@@ -405,7 +405,7 @@ export default function QRme({
   //
   // Everything drawn OUTSIDE the QR frame sits on the page background, so
   // it has to read against THAT. Several themes' primary is a dark brand
-  // color (Seafoam's #244C4E is ~1.9:1 against its own dark page), and the
+  // color (a dark Seafoam-like primary can be ~2:1 against its own page), and the
   // root text + idle dot were drawn straight in it -- present in the DOM but
   // effectively invisible ("falta el icono del status ... y el texto").
   // `readable` keeps the intended color when it has >= 3:1 against the page

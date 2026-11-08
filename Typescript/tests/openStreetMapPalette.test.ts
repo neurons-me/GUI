@@ -95,7 +95,7 @@ function darkWaterUnchangedAndAccentRule() {
   // CherryByte dark (was 1.87:1) is raised
   assert.ok(contrast(buildOsmPalette(themeOf(cherryDark, 'dark')).water, buildOsmPalette(themeOf(cherryDark, 'dark')).land) >= OSM_WATER_MIN_CONTRAST);
   // theme accent takes the primary / port / highlight roles only where primary is weak and accent is stronger
-  for (const [name, tokens, accentHex] of [['Seafoam dark', seafoamDark, 'rgb(240, 183, 164)'], ['PrinceOfDarkness dark', princeDark, 'rgb(0, 209, 178)']] as const) {
+  for (const [name, tokens, accentHex] of [['PrinceOfDarkness dark', princeDark, 'rgb(0, 209, 178)']] as const) {
     const pal = buildOsmPalette(themeOf(tokens, 'dark'));
     assert.equal(pal.accent, accentHex, `${name}: accent used`);
     assert.equal(pal.tones.primary, accentHex, `${name}: primary tone = accent`);
@@ -103,7 +103,7 @@ function darkWaterUnchangedAndAccentRule() {
     assert.equal(pal.states.highlight, accentHex, `${name}: highlight = accent`);
     assert.ok(contrast(pal.states.highlight, pal.land) >= 9, `${name}: highlight is vivid`);
   }
-  for (const [name, tokens, mode] of [['PrinceOfDarkness light', princeLight, 'light'], ['CherryByte light', cherryLight, 'light'], ['CherryByte dark', cherryDark, 'dark'], ['Seafoam light', seafoamLight, 'light'], ['neurons dark', neuronsDark, 'dark']] as const) {
+  for (const [name, tokens, mode] of [['PrinceOfDarkness light', princeLight, 'light'], ['CherryByte light', cherryLight, 'light'], ['CherryByte dark', cherryDark, 'dark'], ['Seafoam light', seafoamLight, 'light'], ['Seafoam dark', seafoamDark, 'dark'], ['neurons dark', neuronsDark, 'dark']] as const) {
     const theme = themeOf(tokens, mode);
     const pal = buildOsmPalette(theme);
     assert.equal(pal.accent, null, `${name}: primary kept (strong enough, or no accent)`);

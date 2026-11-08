@@ -73,12 +73,12 @@ function aContrastingPrimaryIsKeptExactly() {
 
 function seafoamDarkNoLongerDrawsInkItCannotSee() {
   const { palette } = palettes.find((p) => p.name === 'Seafoam' && p.mode === 'dark')!;
-  assert.ok(getContrastRatio(palette.primary.main, palette.background.paper) < 2, 'the bug: #244C4E on #182423');
+  assert.ok(getContrastRatio(palette.primary.main, palette.background.paper) < QR_INK_MIN_CONTRAST, 'Seafoam dark primary still needs a QR tint');
   const c = resolveQrMeColors(palette, {});
   assert.notEqual(c.qrFg, palette.primary.main);
   assert.ok(contrastOn(c.qrFg, c.qrBg) >= QR_INK_MIN_CONTRAST);
-  // Keeps the teal: the first 10% step toward white of #244C4E that reaches 4.5:1 (40%), not near-white text.
-  assert.equal(c.qrFg, 'rgb(123, 147, 148)');
+  // Keeps the teal: the first 10% step toward white of the Seafoam dark primary that reaches 4.5:1, not near-white text.
+  assert.equal(c.qrFg, 'rgb(116, 152, 154)');
   assert.notEqual(c.qrFg, palette.text.primary);
 }
 

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 4.4.4
+
+- **Seafoam dark primary is a little clearer.** The deep sea green stays the same colour, just lifted from `#244C4E` to `#396C70` (secondary from `#457E85` to `#529096`) so logo, borders and labels read against the night background without going neon.
+- **Theme mode follows the browser** until the user toggles. With no saved light/dark, every .GUI page uses `prefers-color-scheme` instead of a page's `defaultMode`. A ModeToggle choice is still saved and then wins.
+
 ## 4.4.3
 
 - **Flat monad pixels stay sharp.** The identicon is drawn as integer squares (no rounded corners, no breath-scale) and `size` on a `bubble` sets the orb's own diameter so a page does not have to CSS-scale it (which blurs the code). The disc recedes a little from `palette.primary.main` so the existing outline reads apart from the fill. The pixel pattern and its angle are unchanged. The outline is the theme primary (not the glass neon rim) with no halo, bloom or drop shadow around the orb. The pixel code uses `palette.background.default`, the page background.
