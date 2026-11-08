@@ -4,6 +4,8 @@
 
 ## 4.4.4
 
+- **QR.me avatars stay transparent.** The avatar face no longer paints a gradient plate, border, or shadow behind the image. Image avatars have no paper border and use contain sizing so transparent marks stay fully visible; the colored initials fallback remains.
+
 - **Seafoam dark primary is a little clearer.** The deep sea green stays the same colour, just lifted from `#244C4E` to `#396C70` (secondary from `#457E85` to `#529096`) so logo, borders and labels read against the night background without going neon.
 - **Theme mode follows the browser** until the user toggles. With no saved light/dark, every .GUI page uses `prefers-color-scheme` instead of a page's `defaultMode`. A ModeToggle choice is still saved and then wins.
 - **Identity .me orb follows the theme.** The ring and center dot use `palette.primary` (or `palette.error` when unhealthy) instead of a fixed teal, so the mark changes with the theme picker.

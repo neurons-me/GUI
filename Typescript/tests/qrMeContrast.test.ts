@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { getContrastRatio } from '@mui/material/styles';
 import { makeMuiTheme } from '../src/gui/Theme/fromTokens';
 import { themeTokens } from '../src/gui/Theme/styles/theme.tokens';
@@ -139,3 +140,14 @@ if (process.env.QR_CONTRAST_TABLE) {
   }
 }
 console.log('qrMeContrast.test.ts: all assertions passed');
+
+// Guard the shared avatar face used by every QR.me consumer, including Storybook.
+const qrMeSource = readFileSync(new URL('../src/gui/All.This/me/QR/QR.me.tsx', import.meta.url), 'utf8');
+const avatarFace = qrMeSource.slice(qrMeSource.lastIndexOf('<Box', qrMeSource.indexOf('<Avatar')), qrMeSource.indexOf('<Avatar'));
+assert.match(avatarFace, /background: 'transparent'/);
+assert.doesNotMatch(avatarFace, /avatarRing|gradient|border:|borderColor|boxShadow/);
+assert.doesNotMatch(qrMeSource, /avatarRing/);
+assert.match(qrMeSource, /border: avatarSrc \? 'none' : isTopbar \? '1.5px solid' : '2px solid'/);
+assert.match(qrMeSource, /const avatarBg = avatarSrc \? 'transparent' : theme.palette.primary.main/);
+assert.match(qrMeSource, /objectFit: 'contain'/);
+console.log('QR.me avatar face: transparent, unframed images and visible fallback');

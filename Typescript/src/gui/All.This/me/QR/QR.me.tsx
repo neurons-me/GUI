@@ -541,10 +541,6 @@ export default function QRme({
     theme.palette.mode === 'dark'
       ? `linear-gradient(145deg, ${theme.palette.background.paper}, ${theme.palette.section.subtle})`
       : `linear-gradient(145deg, ${theme.palette.background.paper}, ${theme.palette.section.default})`;
-  const avatarRing =
-    theme.palette.mode === 'dark'
-      ? `radial-gradient(circle at 28% 24%, ${theme.palette.primary.main}22, ${theme.palette.section.subtle} 58%, ${theme.palette.background.paper})`
-      : `radial-gradient(circle at 28% 24%, ${theme.palette.primary.main}18, ${theme.palette.section.default} 58%, ${theme.palette.background.paper})`;
   const showAvatarLabelOverlay = !isTopbar && showAvatarLabel && !avatarSrc;
 
   // The dot and the namespace text are SVG shapes, and browsers don't paint
@@ -938,12 +934,8 @@ export default function QRme({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: avatarRing,
-            border: '1px solid',
-            borderColor,
-            boxShadow: isTopbar
-              ? `0 0 0 1px ${theme.palette.primary.main}22, 0 3px 8px rgba(0,0,0,0.14)`
-              : `0 0 0 1px ${theme.palette.primary.main}33, 0 10px 24px rgba(0,0,0,0.16)`,
+            // Transparent marks should not acquire an app-icon plate.
+            background: 'transparent',
             overflow: 'hidden',
           }}
         >
@@ -960,10 +952,10 @@ export default function QRme({
                 : Math.max(18, Math.round(effectiveDiameter * 0.22)),
               fontWeight: 800,
               letterSpacing: '-0.03em',
-              border: isTopbar ? '1.5px solid' : '2px solid',
+              border: avatarSrc ? 'none' : isTopbar ? '1.5px solid' : '2px solid',
               borderColor: theme.palette.background.paper,
               '& .MuiAvatar-img': {
-                objectFit: 'cover',
+                objectFit: 'contain',
                 backgroundColor: 'transparent',
               },
             }}
