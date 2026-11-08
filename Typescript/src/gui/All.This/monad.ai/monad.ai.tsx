@@ -35,8 +35,9 @@ export type MonadProps = {
   ring?: number;
   /**
    * What the orb's inner disc is. `glass` (default) is the original sphere: highlights, inset shading and the animated
-   * "rorschach" texture on a translucent body. `flat` is a plain circle: the disc is `palette.primary.main` and the pixel
-   * code is `palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads. No highlight, no shading, no texture, no halo. Unhealthy fills the disc with
+   * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps the same outer contour as the glass
+   * badge (the 2.5px border and the 3px ring + halo). The disc is `palette.primary.main` and the pixel code is
+   * `palette.secondary.main` when that colour reaches at least 3:1 against the disc; otherwise the code walks the theme's own secondary tints (then `palette.getContrastText`) until it reads. No inner highlight, shading, texture or glass blob. Unhealthy fills the disc with
    * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
    */
   core?: "glass" | "flat";
@@ -602,7 +603,8 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 : isIdentity
                 ? (t.palette.mode === "light" ? "rgba(255,255,255,0.5)" : "rgba(8,10,11,0.55)")
                 : (t.palette.mode === "light" ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.1)"),
-              boxShadow: isIdentity || hairline !== null || flatCore
+              // flat keeps the glass badge's outer contour (border + ring + halo) and only replaces the inner disc
+              boxShadow: isIdentity || hairline !== null
                 ? "none"
                 : (!status.active || status.error
                     ? dangerGlow
@@ -611,8 +613,6 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                 ? "none"
                 : hairline !== null
                 ? `${hairline}px solid ${!status.active || status.error ? danger : (flatCore ? flatCodeColor : primary)}`
-                : flatCore
-                ? "none"
                 : (!status.active || status.error
                     ? `2.5px solid ${danger}`
                     : (t.palette.mode === "light" ? lightBorder : "2.5px solid #9ff6ff")),
