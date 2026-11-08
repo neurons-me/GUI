@@ -4,7 +4,7 @@
 
 ## 4.4.3
 
-- **Flat monad pixels stay sharp.** The identicon is drawn as integer squares (no rounded corners, no breath-scale) and `size` on a `bubble` sets the orb's own diameter so a page does not have to CSS-scale it (which blurs the code). The disc recedes a little from `palette.primary.main` so the existing outline reads apart from the fill. The pixel pattern and its angle are unchanged. The outline is the theme primary (not the glass neon rim) with no halo, bloom or drop shadow around the orb. The pixel code uses `palette.background.default`, the page background, and slowly turns a full 360°.
+- **Flat monad pixels stay sharp.** The identicon is drawn as integer squares (no rounded corners, no breath-scale) and `size` on a `bubble` sets the orb's own diameter so a page does not have to CSS-scale it (which blurs the code). The disc recedes a little from `palette.primary.main` so the existing outline reads apart from the fill. The pixel pattern and its angle are unchanged. The outline is the theme primary (not the glass neon rim) with no halo, bloom or drop shadow around the orb. The pixel code uses `palette.background.default`, the page background.
 
 
 Additive, except the items marked **Changed** below (`requires: 'session'` works as before).

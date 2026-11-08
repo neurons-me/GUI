@@ -37,8 +37,7 @@ export type MonadProps = {
    * "rorschach" texture on a translucent body. `flat` is a plain circle that keeps an outer contour (the 2.5px border)
    * in `palette.primary.main` — not the glass badge's neon rim — and no halo, bloom or drop shadow around the orb.
    * The disc is a slightly receded `palette.primary.main` so the outline reads apart from the fill, and the pixel code
-   * is drawn as sharp integer squares in `palette.background.default` (the page background) and slowly turns a full
-   * circle. No inner highlight, shading,
+   * is drawn as sharp integer squares in `palette.background.default` (the page background). No inner highlight, shading,
    * texture or glass blob. Unhealthy fills the disc with
    * `palette.error.main`. A `ring` still draws a hairline if the caller asks for one.
    */
@@ -414,10 +413,6 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
             "0%,100%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.9 },
             "50%": { transform: "translate3d(0, -1px, 0) scale(1.025)", opacity: 1 },
           },
-          "@keyframes pixelSpin": {
-            from: { transform: "rotate(0deg)" },
-            to: { transform: "rotate(360deg)" },
-          },
           "@keyframes stringWobble": {
             "0%,100%": { transform: "translateY(0px)" },
             "50%": { transform: "translateY(0.6px)" },
@@ -750,8 +745,7 @@ export default function Monad({ variant = "bubble", mode = "float", kind, seed, 
                     gridTemplateRows: flatCore ? `repeat(5, ${flatCell}px)` : "repeat(5, 1fr)",
                     gap: flatCore ? `${flatGap}px` : "2px",
                     imageRendering: "pixelated",
-                    transformOrigin: "center",
-                    animation: flatCore ? "pixelSpin 14s linear infinite" : "pixelBreath 9s ease-in-out infinite",
+                    animation: flatCore ? "none" : "pixelBreath 9s ease-in-out infinite",
                     filter: flatCore
                       ? "none"
                       : theme.palette.mode === "light"
