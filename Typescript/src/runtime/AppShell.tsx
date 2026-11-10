@@ -7,10 +7,17 @@ import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from './DevToolsLauncher';
 import MeLauncher from '@/react/session/MeLauncher';
+import { useOptionalSessionSurface } from '@/react/session/SessionSurface';
+import { SeedSessionProvider, useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
+import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
 import { useMeAction } from '@/react/useMeAction';
 import { useMeValue } from '@/react/useMeValue';
 import { CompactAt, FloatingMark, IdentityText, LeftBarPosition, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
+import Box from '@/gui/Atoms/Box/Box';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import CleakerQrMenu, { panelPositionFor } from '@/gui/All.This/Cleaker/Corner/CleakerQrMenu';
+import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
 import type { MeLike } from '@/react/types';
 import { NamespaceRoutePanel, type NamespaceRouteItem, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 import { SelectionProvider } from './selection';
@@ -22,6 +29,18 @@ import type { AppDeclaration } from './mountApp';
 import { SpecBoundary } from './SpecBoundary';
 import type { RuntimeAdapter } from './adapter';
 import { writeMeValue } from './run-me';
+
+
+function readQrValue(node: React.ReactNode): string | undefined {
+  if (!React.isValidElement(node)) return undefined;
+  const props = node.props as { value?: unknown; children?: React.ReactNode };
+  if (typeof props.value === 'string' && props.value) return props.value;
+  for (const child of React.Children.toArray(props.children)) {
+    const found = readQrValue(child);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 export interface AppShellNavItem {
   route: string;
@@ -142,16 +161,70 @@ function ActiveView({ app }: { app: AppDeclaration }) {
   );
 }
 
+
+function namespaceEndpoint(namespace: string): string {
+  const host = namespace.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const local = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) || /\.local(?::\d+)?$/i.test(host) || host.includes('localhost');
+  return `${local ? 'http' : 'https'}://${host}`;
+}
+
+/** When the page is not the namespace, AppShell still needs a session so Sign in can happen in the QR panel. */
+function AppShellSession({ namespace, children }: { namespace?: string; children: React.ReactNode }) {
+  const existing = useOptionalSeedSessionContext();
+  if (existing || !namespace) return <>{children}</>;
+  return (
+    <SeedSessionProvider transportOrigin={namespaceEndpoint(namespace)} sessionBackend="cleaker">
+      {children}
+    </SeedSessionProvider>
+  );
+}
+
 function AppShellNav({ app, navItems, footerElements, position, brand, identity, identityCorner = 'top-left', identityUsername, namespace, namespaceRoutes, namespacePages }: Pick<AppShellProps, 'app' | 'navItems' | 'footerElements' | 'position' | 'brand' | 'identity' | 'identityCorner' | 'identityUsername' | 'namespace' | 'namespaceRoutes' | 'namespacePages'>) {
   const route = useMeValue<string>(`${app.namespace}.route`) ?? 'home';
   const setRoute = useMeAction(`${app.namespace}.route`);
   // The theme launcher's gear opens the GUI's theme page (GUI/themes), as in netget's shell; not a dialog.
   const openThemeSettings = useCallback(() => setRoute('GUI/themes'), [setRoute]);
+  // MeLauncher renders nothing without a session provider, but LeftBar still
+  // wraps it in a padded row — that empty row sat between Theme and Dev Tools.
+  const session = useOptionalSeedSessionContext();
+  const showMeLauncher = Boolean(useOptionalSessionSurface() || session);
+  const authenticated = Boolean(session?.authenticated);
 
   // The namespace route open over the app's view, if any (the app's own route is unchanged under it).
   const [openRoute, setOpenRoute] = React.useState<{ route: string; label?: string } | null>(null);
   const goRoute = useCallback((r: string) => setOpenRoute({ route: r }), []);
   const closeRoute = useCallback(() => setOpenRoute(null), []);
+  const [corner, setCorner] = React.useState<MarkCorner>(identityCorner);
+  React.useEffect(() => { setCorner(identityCorner); }, [identityCorner]);
+  const [qrMenuOpen, setQrMenuOpen] = React.useState(false);
+  const [qrSignIn, setQrSignIn] = React.useState(false);
+  // One QR, one status: the bar mark and the panel are the same identity QR.
+  // On a page that is not the namespace, that mark is already connected; the
+  // panel must not open a second channel just to colour it.
+  const identityQrStatus = 'confirmed' as const;
+  const qrCellRef = React.useRef<HTMLElement>(null);
+  const qrValue = React.useMemo(() => readQrValue(identity), [identity]);
+  React.useEffect(() => {
+    if (!qrMenuOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setQrMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [qrMenuOpen]);
+  React.useEffect(() => {
+    if (!qrMenuOpen || authenticated) setQrSignIn(false);
+  }, [qrMenuOpen, authenticated]);
+  const identityMark = React.useMemo(() => {
+    if (!identity || !React.isValidElement(identity)) return identity;
+    const prev = identity as React.ReactElement<Record<string, unknown>>;
+    return React.cloneElement(prev, {
+      ref: qrCellRef,
+      onClick: (event: React.MouseEvent) => {
+        const inherited = prev.props.onClick as ((e: React.MouseEvent) => void) | undefined;
+        inherited?.(event);
+        setQrMenuOpen((open) => !open);
+      },
+    } as Partial<typeof prev.props>);
+  }, [identity]);
 
   const elements = [
     // the app's own views: choosing one shows it (and closes a namespace route open over it)
@@ -181,18 +254,22 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
   // leads the left bar, as it always has.
   const narrow = useNarrowBars();
   const placement = identity
-    ? placeMarks({ identity: identityCorner, bars: { top: Boolean(position), left: true }, narrow, brand: Boolean(brand) })
+    ? placeMarks({ identity: corner, bars: { top: Boolean(position), left: true }, narrow, brand: Boolean(brand) })
     : { identity: 'none' as const, brand: brand ? ('left.brand' as const) : ('none' as const) };
   // With the person's mark, the position is split between the marks (who beside the QR, @where beside the brand); with
   // no brand the place stays with the QR, and the whole position stays in the top bar as before.
   const parts = splitPosition(position ?? '');
   const who = whoLines(parts.who, identityUsername);
   const split = Boolean(identity && brand && parts.where);
+  const brandMark = React.useMemo(() => {
+    if (!brand || !React.isValidElement(brand) || placement.brand === 'left.brand') return brand;
+    return React.cloneElement(brand as React.ReactElement<{ compact?: boolean }>, { compact: true });
+  }, [brand, placement.brand]);
   const marks = marksInBars(
     placement,
     {
-      identity,
-      brand,
+      identity: identityMark,
+      brand: brandMark,
       identityText: identity && parts.who ? <IdentityText title={position} primary={who.primary} secondary={who.secondary} extra={brand ? null : atWhere(parts.where)} /> : undefined,
       brandText: identity && brand && parts.where ? <WhereText title={position} where={atWhere(parts.where)} /> : undefined,
     },
@@ -221,9 +298,10 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
         footerElements: [
           // tooltip: false — each of these already opens its own hover
           // popper (see LeftSidebarAction's `tooltip` prop doc).
+          // Theme and Dev Tools stay adjacent, same as Namespace.
           { type: 'action', props: { element: <ThemeLauncher />, tooltip: false } },
-          { type: 'action', props: { element: <MeLauncher />, tooltip: false } },
           { type: 'action', props: { element: <DevToolsLauncher />, tooltip: false } },
+          ...(showMeLauncher ? [{ type: 'action' as const, props: { element: <MeLauncher />, tooltip: false } }] : []),
           ...(footerElements ?? []).map((element) => ({ type: 'action' as const, props: { element } })),
           ...marks.leftFooter,
         ],
@@ -232,6 +310,53 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
       <ActiveView app={app} />
     </Layout>
     {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
+    {qrMenuOpen && identity ? (
+      <ClickAwayListener
+        onClickAway={(event) => {
+          const target = event.target;
+          if (qrCellRef.current && target instanceof Node && qrCellRef.current.contains(target)) return;
+          setQrMenuOpen(false);
+        }}
+      >
+        <Box sx={{ position: 'fixed', zIndex: (theme: any) => (theme.zIndex?.modal ?? 1300) + 1, ...panelPositionFor(placement.identity, corner) }}>
+          <CleakerQrMenu
+            fullPosition={position ?? ''}
+            showNamespaceForm={false}
+            corner={corner}
+            onMoveTo={setCorner}
+            onClose={() => setQrMenuOpen(false)}
+            layout={{ address: position, brand: undefined }}
+          >
+            {qrSignIn && namespace ? (
+              <QRConnect
+                compact
+                qrStatus={identityQrStatus}
+                cleakerEndpoint={namespaceEndpoint(namespace)}
+                username={identityUsername}
+                data-gui-node-id="GUI.window.layout.marks.identity.menu"
+              />
+            ) : (
+              <MeLoginStatus
+                nodeId="GUI.window.layout.marks.identity.menu"
+                authenticated={authenticated}
+                qr={{
+                  value: qrValue || (namespace ? `https://${namespace}/?at=${encodeURIComponent(window.location.origin)}` : (position || window.location.origin)),
+                  username: authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : identityUsername,
+                  status: identityQrStatus,
+                  statusLabel: "Connected",
+                  perimeterLabel: position,
+                  perimeterRootLabel: namespace,
+                }}
+                identityHash={session?.identityHash}
+                onNavigate={(to) => { setQrMenuOpen(false); goRoute(to); }}
+                onLogout={() => { session?.logout(); setQrMenuOpen(false); }}
+                onSignIn={() => setQrSignIn(true)}
+              />
+            )}
+          </CleakerQrMenu>
+        </Box>
+      </ClickAwayListener>
+    ) : null}
     <NamespaceRoutePanel
       route={openRoute?.route ?? null}
       label={openRoute?.label}
@@ -268,9 +393,11 @@ export function AppShell({ app, me, runtime, navItems, devtools = true, footerEl
   }, []);
 
   const body = (
-    <Me me={me} runtime={runtime}>
-      <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} identityUsername={identityUsername} namespace={namespace} namespaceRoutes={namespaceRoutes} namespacePages={namespacePages} />
-    </Me>
+    <AppShellSession namespace={namespace}>
+      <Me me={me} runtime={runtime}>
+        <AppShellNav app={app} navItems={navItems} footerElements={footerElements} position={position} brand={brand} identity={identity} identityCorner={identityCorner} identityUsername={identityUsername} namespace={namespace} namespaceRoutes={namespaceRoutes} namespacePages={namespacePages} />
+      </Me>
+    </AppShellSession>
   );
 
   return (

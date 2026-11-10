@@ -3,9 +3,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Typography, IconButton, Avatar, Tooltip } from "@/gui/Atoms";
 import { Table, TableBody, TableCell, TableHead, TableRow } from "@/gui/Molecules";
 import Icon from "@/gui/Atoms/Icon/Icon";
-import { useGuiTheme } from "@/gui-internals/Hooks";
 import { selectionStore } from "@/runtime/selectionStore";
-import QR from "../../../me/QR";
+import QRme from "@/gui/All.This/me/QR/QR.me";
+import QR from "@/gui/All.This/me/QR";
+import PixelWordmark from "@/gui/All.This/me/QR/PixelWordmark";
+import { ME_WORDMARK_EMBED_BITMAP } from "@/gui/All.This/me/QR/meMark";
+import { useGuiTheme } from "@/gui-internals/Hooks";
 import { buildCleakerNamespaceUrl } from "../../namespaceExpression";
 
 export interface UsersTableProps {
@@ -73,6 +76,20 @@ async function copyToClipboard(text: string) {
   }
 }
 
+// Row thumbnail: a plain .me QR. Square, no frame, no glow: just the code with
+// the .me wordmark on top. Too small to scan; the tooltip holds the scannable one.
+const THUMB_QR_SIZE = 40;
+const WORDMARK_ASPECT = 1.8;
+const WORDMARK_COLS = Math.max(...ME_WORDMARK_EMBED_BITMAP.map((row) => row.length));
+// The wordmark spans about 45% of the code's width.
+const THUMB_WORDMARK_PIXEL = (THUMB_QR_SIZE * 0.45) / (WORDMARK_COLS * WORDMARK_ASPECT);
+
+function getProfileImg(row: UserEntry): string | null {
+  const r = row as any;
+  const img = r?.profileImg ?? r?.profile?.img ?? r?.profile?.pic ?? r?.profilePic ?? null;
+  return img ? String(img) : null;
+}
+
 export default function UsersTable({
   endpoint,
   namespaceLabel = '',
@@ -86,7 +103,6 @@ export default function UsersTable({
   const [error, setError] = useState<string | null>(null);
   // The advanced columns have no toggle (the gear was removed): they stay off until something asks for them.
   const [showTech] = useState(false);
-  // QR modal state removed. Only 'copied' remains.
   const [copied, setCopied] = useState(false);
   const parentNodeId = String(dataGuiNodeId || "UsersTable");
   const parentNodeType = String(dataGuiComponent || "UsersTable");
@@ -135,6 +151,18 @@ export default function UsersTable({
     if (!base) return '';
     try {
       return buildCleakerNamespaceUrl(base, u);
+    } catch {
+      return '';
+    }
+  }, [endpoint, namespaceRootUrl]);
+
+  // The root every handle in this table hangs off (e.g. "cleaker.me"). QR.me
+  // draws it bold after the handle on its perimeter: "suign.cleaker.me".
+  const rootLabel = useMemo(() => {
+    const base = String(namespaceRootUrl || endpoint || '').trim();
+    if (!base) return '';
+    try {
+      return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(base) ? base : `https://${base}`).hostname.toLowerCase();
     } catch {
       return '';
     }
@@ -203,12 +231,7 @@ export default function UsersTable({
       const rowSegment = getRowSegment(row.username, index);
       const rowUserUrl = getUserHostUrl(row.username);
       const hasPublicKey = Boolean(String(row.publicKey || "").trim());
-      const profileImg =
-        (row as any)?.profileImg ??
-        (row as any)?.profile?.img ??
-        (row as any)?.profile?.pic ??
-        (row as any)?.profilePic ??
-        null;
+      const profileImg = getProfileImg(row);
 
       registerNode(nodeId(rowSegment), nodePath(rowSegment), `${parentNodeType}.Row`, {
         index,
@@ -234,9 +257,8 @@ export default function UsersTable({
         nodePath(`${rowSegment}.qr.button`),
         `${parentNodeType}.RowQrActionButton`,
         {
-          username: row.username,
-          namespaceUrl: rowUserUrl,
           disabled: !rowUserUrl,
+          label: rowUserUrl ? "Show .me QR" : "No namespace link",
         }
       );
       registerNode(
@@ -405,31 +427,33 @@ export default function UsersTable({
             <TableBody>
               {rows.map((r, index) => {
                 const rowSegment = getRowSegment(r.username, index);
+                const userUrl = getUserHostUrl(r.username);
+                const img = getProfileImg(r);
+                const handle = String(r.username || '').trim().toLowerCase();
                 return (
                 <TableRow
                   key={r.username}
                   hover
                   {...nodeAttrs(rowSegment, `${parentNodeType}.Row`)}
                 >
-                  {/* Mini QR cell */}
-                                   {/* Scan / QR tooltip trigger (low-noise) */}
                   <TableCell
                     {...nodeAttrs(`${rowSegment}.qr`, `${parentNodeType}.RowQrAction`)}
-                    sx={{ width: 34, px: 0.5 }}
+                    sx={{ width: 48, px: 0.5 }}
                   >
                     {(() => {
-                      const userUrl = getUserHostUrl(r.username);
                       const hasUserUrl = userUrl.length > 0;
 
                       const trigger = (
                         <IconButton
                           {...nodeAttrs(`${rowSegment}.qr.button`, `${parentNodeType}.RowQrActionButton`)}
                           size="small"
+                          disableRipple
                           disabled={!hasUserUrl}
                           aria-label={hasUserUrl ? 'Show .me QR' : 'No namespace link'}
                           sx={{
-                            width: 36,
-                            height: 36,
+                            width: 44,
+                            height: 44,
+                            p: 0,
                             borderRadius: 2,
                             bgcolor: 'transparent',
                             border: 'none',
@@ -439,7 +463,37 @@ export default function UsersTable({
                             '& .material-symbols-rounded': { fontSize: 22 },
                           }}
                         >
-                          <Icon name="fingerprint" fontSize={22 as any} />
+                          {hasUserUrl ? (
+                            <Box
+                              component="span"
+                              sx={{ position: 'relative', display: 'inline-flex', lineHeight: 0 }}
+                            >
+                              <QR
+                                value={userUrl}
+                                size={THUMB_QR_SIZE}
+                                ecc="H"
+                                quietZone={1}
+                                cornerRadius={0}
+                                bg={theme.palette.background.paper}
+                                fg={theme.palette.primary.main}
+                              />
+                              <PixelWordmark
+                                bitmap={ME_WORDMARK_EMBED_BITMAP}
+                                pixelSize={THUMB_WORDMARK_PIXEL}
+                                pixelAspect={WORDMARK_ASPECT}
+                                fg={theme.palette.primary.main}
+                                style={{
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  filter: `drop-shadow(0 0 1px ${theme.palette.background.paper}) drop-shadow(0 0 1px ${theme.palette.background.paper})`,
+                                }}
+                              />
+                            </Box>
+                          ) : (
+                            <Icon name="fingerprint" fontSize={22 as any} />
+                          )}
                         </IconButton>
                       );
 
@@ -453,12 +507,18 @@ export default function UsersTable({
                           leaveDelay={80}
                           slotProps={{
                             tooltip: {
+                              // The tooltip is the only surface. QR.me draws the
+                              // namespace outside the code itself, so it needs a
+                              // page background behind it, not the table.
                               sx: {
-                                bgcolor: 'transparent',
+                                bgcolor: 'background.default',
                                 color: 'text.primary',
-                                border: 'none',
-                                boxShadow: 'none',
-                                p: 0,
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                borderRadius: 2,
+                                boxShadow: 8,
+                                p: 1.25,
+                                maxWidth: 'none',
                                 '& .MuiTooltip-arrow': {
                                   color: 'background.default',
                                 },
@@ -466,90 +526,19 @@ export default function UsersTable({
                             },
                           }}
                           title={
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 1,
-                                alignItems: 'center',
-                                p: 1.25,
-                                borderRadius: 2,
-                                bgcolor: 'background.default',
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                boxShadow: 8,
-                              }}
-                            >
-                              {(() => {
-                                return (
-                                  <Box
-                                    sx={{
-                                      color: 'primary.main',
-                                      p: 1,
-                                      borderRadius: 2,
-                                      bgcolor: 'background.paper',
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      boxShadow: 4,
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      alignItems: 'center',
-                                      gap: 0.75,
-                                      minWidth: 180,
-                                    }}
-                                  >
-                                    <Box
-                                      sx={{
-                                        width: 96,
-                                        height: 96,
-                                        borderRadius: 2,
-                                        overflow: 'hidden',
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                        bgcolor: 'background.default',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                      }}
-                                    >
-                                      <QR
-                                        value={userUrl}
-                                        size={96}
-                                        bg={theme.palette.background.paper}
-                                        fg={theme.palette.primary.main}
-                                        ecc="H"
-                                        embedMode="positive-overlay"
-                                        embedScale={0.32}
-                                      />
-                                    </Box>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{
-                                        color: 'text.primary',
-                                        fontWeight: 700,
-                                        letterSpacing: 0.2,
-                                      }}
-                                    >
-                                      {`@${r.username}`}
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{
-                                        maxWidth: 180,
-                                        color: 'text.secondary',
-                                        fontFamily: 'monospace',
-                                        fontSize: '0.62rem',
-                                        lineHeight: 1.3,
-                                        textAlign: 'center',
-                                        wordBreak: 'break-all',
-                                      }}
-                                    >
-                                      {userUrl}
-                                    </Typography>
-                                  </Box>
-                                );
-                              })()}
-                            </Box>
+                            <QRme
+                              value={userUrl}
+                              username={r.username}
+                              avatarSrc={img ?? undefined}
+                              perimeterLabel={rootLabel ? `${handle}.${rootLabel}` : handle}
+                              perimeterRootLabel={rootLabel || undefined}
+                              perimeterHandleHref={userUrl}
+                              // Hovering already opened the tooltip; a hover flip
+                              // would turn the code into the avatar the moment the
+                              // pointer reaches it. Click still flips.
+                              hoverFlip={false}
+                              data-gui-node-id={nodeId(`${rowSegment}.qr.code`)}
+                            />
                           }
                         >
                           {trigger}
@@ -562,15 +551,8 @@ export default function UsersTable({
                     sx={{ fontSize: 12, color: 'text.primary', pl: 0.25 }}
                   >
                     {(() => {
-                      const img =
-                        (r as any)?.profileImg ??
-                        (r as any)?.profile?.img ??
-                        (r as any)?.profile?.pic ??
-                        (r as any)?.profilePic ??
-                        null;
-
                       const fallback = String(r.username || '?').slice(0, 1).toUpperCase();
-                      const href = getUserHostUrl(r.username);
+                      const href = userUrl;
 
                       return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

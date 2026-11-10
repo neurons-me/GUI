@@ -123,6 +123,56 @@ export function findGuiDocumentEntry(
   return flattenGuiDocument(doc).find((e) => e.id === id) ?? null;
 }
 
+/** The declared `props` of a part, or `{}` if it has none. */
+export function guiDocumentProps(
+  id: string,
+  doc: GuiDocument = GUI_DOCUMENT
+): Record<string, unknown> {
+  return findGuiDocumentEntry(id, doc)?.props ?? {};
+}
+
+const BOX_SX_KEYS = ['maxWidth', 'minWidth', 'width', 'height', 'maxHeight', 'minHeight'] as const;
+
+/** Size props of a part, as MUI `sx` (gutter and other non-box keys stay out). */
+export function documentBoxSx(
+  id: string,
+  doc: GuiDocument = GUI_DOCUMENT
+): Record<string, unknown> {
+  const props = guiDocumentProps(id, doc);
+  const sx: Record<string, unknown> = {};
+  for (const key of BOX_SX_KEYS) {
+    if (props[key] !== undefined) sx[key] = props[key];
+  }
+  return sx;
+}
+
+export type LeftBarLayoutProps = {
+  on: boolean;
+  view: 'rail' | 'expanded' | 'mobile';
+  railWidth: number;
+  expandedWidth: number;
+};
+
+/** The left bar's declared layout (`props.on`, `view`, `railWidth`, `expandedWidth`). */
+export function leftBarLayoutProps(doc: GuiDocument = GUI_DOCUMENT): LeftBarLayoutProps {
+  const props = guiDocumentProps(barId('left'), doc);
+  const view = props.view;
+  return {
+    on: props.on === true,
+    view: view === 'expanded' || view === 'rail' || view === 'mobile' ? view : 'rail',
+    railWidth: typeof props.railWidth === 'number' ? props.railWidth : 72,
+    expandedWidth: typeof props.expandedWidth === 'number' ? props.expandedWidth : 220,
+  };
+}
+
+/** Whether the namespace layout mounts this bar, as the document declares. */
+export function barDeclaredOn(
+  side: 'top' | 'sticky' | 'left' | 'right' | 'bottom',
+  doc: GuiDocument = GUI_DOCUMENT
+): boolean {
+  return guiDocumentProps(barId(side), doc).on === true;
+}
+
 /**
  * Renders a page the document declares, through the SAME renderer mount(spec)
  * uses (renderNode): the document entry becomes a spec node

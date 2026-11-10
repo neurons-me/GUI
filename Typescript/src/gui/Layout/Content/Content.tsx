@@ -2,7 +2,7 @@ import React from 'react';
 import type { SxProps, Theme } from '@mui/system';
 import { Box } from '@/gui/Atoms';
 import { useInsets } from '@/gui-internals/Hooks';
-import { CONTENT_GUTTER_PX } from './contentGutter';
+import { CONTENT_GUTTER_PX, CONTENT_MAX_WIDTH_PX, CONTENT_MIN_WIDTH, CONTENT_HEIGHT } from './contentGutter';
 
 export type ContentProps = {
   children?: React.ReactNode;
@@ -23,6 +23,8 @@ const Content: React.FC<ContentProps> = ({ children, sx, disableInsetPadding = f
   const leftInset = disableInsetPadding ? 0 : Math.max(0, Number(insets?.left ?? 0));
   const rightInset = disableInsetPadding ? 0 : Math.max(0, Number(insets?.right ?? 0));
   const contentGutter = CONTENT_GUTTER_PX;
+  const leftPad = leftInset + contentGutter;
+  const rightPad = rightInset + contentGutter;
   return (
     <Box
       id="content"
@@ -39,8 +41,8 @@ const Content: React.FC<ContentProps> = ({ children, sx, disableInsetPadding = f
         overflow: 'hidden',
         paddingTop: `${topInset + contentGutter}px`,
         paddingBottom: `${bottomInset + contentGutter}px`,
-        paddingLeft: `${leftInset + contentGutter}px`,
-        paddingRight: `${rightInset + contentGutter}px`,
+        paddingLeft: `${leftPad}px`,
+        paddingRight: `${rightPad}px`,
         boxSizing: 'border-box',
         backgroundColor: 'background.default',
         transition: 'padding 0.3s ease',
@@ -52,6 +54,14 @@ const Content: React.FC<ContentProps> = ({ children, sx, disableInsetPadding = f
           flex: 1,
           minHeight: 0,
           width: '100%',
+          maxWidth: CONTENT_MAX_WIDTH_PX,
+          minWidth: CONTENT_MIN_WIDTH,
+          height: CONTENT_HEIGHT,
+          position: 'relative',
+          // Keep the column centered on the window. When a fixed sidebar grows,
+          // only yield if it would overlap; do not stretch edge-to-edge.
+          left: `clamp(0px, calc((100vw - min(100%, ${CONTENT_MAX_WIDTH_PX}px)) / 2 - ${leftPad}px), calc(100% - min(100%, ${CONTENT_MAX_WIDTH_PX}px)))`,
+          transition: 'left 0.3s ease',
           display: 'flex',
           flexDirection: 'column',
           overflowY: 'auto',

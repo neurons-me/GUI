@@ -110,8 +110,11 @@ function Layout({
         );
 
   // The parts come from the GUI document (runtime/GUI.document.json), not
-  // from a list written here: the document declares WHAT exists, Layout only
-  // resolves which bars are actually on (enabled: false = declared, off).
+  // from a list written here: the document declares WHAT exists and, in each
+  // bar's `props.on`, which the namespace layout is meant to mount. A host
+  // can still pass bars here (Namespace does, with the elements the document
+  // and the namespace layer together). `enabled` below is what is actually
+  // on in this render (enabled: false = declared, off).
   const barOn: Record<string, boolean> = {
     top: Boolean(topBarChild) || hasTopBar,
     sticky: Boolean(stickyOptionsChild) || hasStickyOptions,

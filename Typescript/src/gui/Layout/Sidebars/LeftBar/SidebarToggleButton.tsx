@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, IconButton } from '@mui/material';
 import { SxProps, Theme } from '@mui/material/styles';
+import { leftBarLayoutProps } from '@/runtime/guiDocument';
 
 export interface SidebarToggleButtonProps {
   expanded: boolean;
@@ -15,7 +16,7 @@ export interface SidebarToggleButtonProps {
 const SidebarToggleButton: React.FC<SidebarToggleButtonProps> = ({
   expanded,
   onToggle,
-  collapsedWidth = 72,
+  collapsedWidth = leftBarLayoutProps().railWidth,
   style,
   location,
   sx,

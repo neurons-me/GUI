@@ -286,8 +286,7 @@ export default function MainServerView({ endpoint, namespaceRootUrl, pollInterva
       data-gui-node-id={nodeId}
       data-gui-component="MainServerView"
       sx={{
-        maxWidth: 720,
-        mx: 'auto',
+        width: '100%',
         p: { xs: 2, sm: 3 },
         display: 'flex',
         flexDirection: 'column',

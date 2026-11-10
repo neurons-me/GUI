@@ -18,6 +18,11 @@ import { GuiNodeIdBase } from '@/runtime/guiNodeId';
 import { buildLeftSidebarElementMeta, getSidebarRootPath } from './leftBarIds';
 import type { ResolvedNodeRecord } from '@/runtime/renderer';
 import { mergeLeftSidebarCollections } from '@/gui/Layout/Sidebars/Collections/resolveCollections';
+import { leftBarLayoutProps } from '@/runtime/guiDocument';
+
+const LEFT_BAR_LAYOUT = leftBarLayoutProps();
+const RAIL_WIDTH_PX = LEFT_BAR_LAYOUT.railWidth;
+const EXPANDED_WIDTH_PX = LEFT_BAR_LAYOUT.expandedWidth;
 
 // Shared, module-level — not object literals inlined at each use below.
 // selectionStore's registerNode bail-out (isSameRecord) compares
@@ -66,7 +71,7 @@ const LeftSidebar = ({
   className,
   id,
   style,
-  initialView = 'rail',
+  initialView = LEFT_BAR_LAYOUT.view,
   footerElements = [],
   footerCollections = [],
   header,
@@ -149,7 +154,7 @@ const LeftSidebar = ({
   const toggleControl = (expanded: boolean, onToggle: () => void, viewForApp: LeftSidebarView, placement: 'inline' | 'edge') =>
     customToggle ? (
       // Flush with the corner and as tall as the header: the control is the whole cell, not the glyph inside it.
-      <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: view === 'rail' ? '100%' : '72px', height: '100%' }}>
+      <Box data-gui-node-id={toggleButtonNodeId} data-gui-component="toggle" sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: view === 'rail' ? '100%' : `${RAIL_WIDTH_PX}px`, height: '100%' }}>
         {customToggle({ view: viewForApp, toggle: onToggle })}
       </Box>
     ) : (
@@ -173,7 +178,7 @@ const LeftSidebar = ({
         key="brand"
         data-gui-node-id={`${adminNodeId}.brand`}
         data-gui-component="brand"
-        sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: viewForApp === 'rail' ? '100%' : '72px', height: '100%' }}
+        sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: viewForApp === 'rail' ? '100%' : `${RAIL_WIDTH_PX}px`, height: '100%' }}
       >
         {brand}
       </Box>
@@ -185,7 +190,7 @@ const LeftSidebar = ({
 
   useEffect(() => {
     if (typeof setInsets !== 'function') return;
-    const desired = view === 'expanded' ? 220 : view === 'rail' ? 72 : 0;
+    const desired = view === 'expanded' ? EXPANDED_WIDTH_PX : view === 'rail' ? RAIL_WIDTH_PX : 0;
     setInsets({ left: desired }, 'left-sidebar');
     return () => setInsets({ left: 0 }, 'left-sidebar');
   }, [setInsets, view]);
@@ -365,11 +370,11 @@ const LeftSidebar = ({
           height: '100vh',
           display: 'flex',
           flexDirection: 'column',
-          width: '72px',
+          width: `${RAIL_WIDTH_PX}px`,
           overflow: 'visible',
           borderRight: '1px solid',
           borderColor: 'divider',
-          '--gui-rail-width': '72px',
+          '--gui-rail-width': `${RAIL_WIDTH_PX}px`,
           zIndex: (theme) => theme.zIndex.drawer + 2,
           backgroundColor: 'background.nav',
         }}
@@ -474,7 +479,7 @@ const LeftSidebar = ({
           }}
           sx={{
             '& .MuiDrawer-paper': {
-              width: 220,
+              width: EXPANDED_WIDTH_PX,
               // A temporary drawer sits over everything, dimmed page included: it starts at the top of the window and covers
               // the top bar's own left end, so there is one header (the drawer's, `headerHeight` tall = the top bar's row)
               // and not a second one under the top bar with its label repeated.
@@ -508,7 +513,7 @@ const LeftSidebar = ({
           </Box>
           {/* A destination chosen in the temporary drawer closes it: the place it opens is what the person wants to see. */}
           <Box
-            sx={{ flexGrow: 1, overflowY: 'auto' }}
+            sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto' }}
             onClick={(e) => { if ((e.target as HTMLElement).closest?.('[data-gui-component="link"]')) setMobileOpen(false); }}
           >
             {renderElements()}
@@ -550,11 +555,11 @@ const LeftSidebar = ({
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        width: '220px',
+        width: `${EXPANDED_WIDTH_PX}px`,
         overflow: 'visible',
         borderRight: '1px solid',
         borderColor: 'divider',
-        '--gui-expanded-width': '220px',
+        '--gui-expanded-width': `${EXPANDED_WIDTH_PX}px`,
         backgroundColor: 'background.nav',
         zIndex: (theme) => theme.zIndex.drawer + 2,
       }}
@@ -579,7 +584,8 @@ const LeftSidebar = ({
       >
         {headerContent(true, () => setView('rail'), 'expanded')}
       </Box>
-      <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
+      {/* Grow 0: leftover space stays below Theme/Dev Tools, not between the last nav item and the footer. Shrink if the list overflows so the footer stays on screen. The rail view still grows (footer docked to the bottom). */}
+      <Box sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto' }}>{renderElements()}</Box>
       {hasFooterElements && (
         <Box
           component="footer"

@@ -8,14 +8,17 @@
         "children": {
           "layout": {
             "label": "Layout",
-            "note": "The window's structure: bars around the content.",
+            "note": "The window's structure: bars around the content. Each part's box and whether a bar is on live in `props`, so a host (this .GUI or cleaker.js) just loads the tree.",
             "children": {
               "bars": {
-                "note": "The edge bars around the content. All five are declared; which are on is resolved at runtime.",
+                "note": "The edge bars around the content. All five are declared. `props.on` is whether the namespace layout mounts the bar. cleaker.js uses `props.state` (open | icons | closed) and defaults to closed, so a foreign page stays unchanged until someone unfolds a bar.",
                 "children": {
                   "top": {
                     "note": "Top bar.",
                     "label": "Top bar",
+                    "props": {
+                      "on": true
+                    },
                     "children": {
                       "search": {
                         "label": "Search",
@@ -31,11 +34,20 @@
                   },
                   "sticky": {
                     "note": "Sticky options strip under the top bar.",
-                    "label": "Sticky options"
+                    "label": "Sticky options",
+                    "props": {
+                      "on": false
+                    }
                   },
                   "left": {
                     "note": "Left sidebar. Its elements are declared here; what the namespace adds is layered around them.",
                     "label": "Left bar",
+                    "props": {
+                      "on": true,
+                      "view": "rail",
+                      "railWidth": 72,
+                      "expandedWidth": 220
+                    },
                     "children": {
                       "home": {
                         "label": "Home",
@@ -75,17 +87,43 @@
                   },
                   "right": {
                     "note": "Right sidebar.",
-                    "label": "Right bar"
+                    "label": "Right bar",
+                    "props": {
+                      "on": false
+                    }
                   },
                   "bottom": {
                     "note": "Bottom bar (the Footer component).",
-                    "label": "Bottom bar"
+                    "label": "Bottom bar",
+                    "props": {
+                      "on": false
+                    }
                   }
                 },
                 "label": "Bars"
               },
+              "qr": {
+                "label": "QR",
+                "note": "The person's QR mark in this window.",
+                "children": {
+                  "position": {
+                    "label": "QR.Position",
+                    "note": "Which corner the QR occupies: top-left, top-right, bottom-left, or bottom-right.",
+                    "props": {
+                      "value": "top-left"
+                    }
+                  }
+                }
+              },
               "content": {
-                "note": "Where the current page renders. Each child is a page: `component` implements it, `route` serves it.",
+                "note": "Where the current page renders. Each child is a page: `component` implements it, `route` serves it. The shared column (maxWidth, minWidth, height, gutter) is declared here; pages inherit it.",
+                "label": "Content",
+                "props": {
+                  "maxWidth": 1120,
+                  "minWidth": 0,
+                  "height": "100%",
+                  "gutter": 1.618
+                },
                 "children": {
                   "landing": {
                     "component": "Landing",
@@ -540,8 +578,7 @@
                       }
                     }
                   }
-                },
-                "label": "Content"
+                }
               }
             }
           }

@@ -1,6 +1,6 @@
 // QRConnect — the real, production ".me" identity card: QR +
 // namespace label + username/secret sign-in fields + a ".me"-style submit
-// button, plus "New here? Register" / "Recover Account" links, and (once
+// button, plus "Register" / "Recover Account" links, and (once
 // authenticated) the signed-in identity readout + Sign out.
 //
 // Extracted verbatim (2026-09-29) from `CleakerLandingHome`, the inline
@@ -24,7 +24,7 @@
 // `QRConnect` on purpose — it is not itself the public `Cleaker`
 // entry point, it's the identity-flow UI `Cleaker` reaches via `Namespace`.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { useInsets } from '@/gui-internals/Hooks';
 import Box from '@/gui/Atoms/Box/Box';
 import Icon from '@/gui/Atoms/Icon/Icon';
@@ -44,9 +44,7 @@ import { useMeLauncherView } from '@/react/session/MeLauncher';
 import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { hasIdentityVault } from '@/core/identity/localIdentityVault';
-import { listSavedServices, type ServiceId } from '@/gui/All.This/Cleaker/Keychain/serviceKeyVault';
 import IdentityIconRow from './IdentityIconRow';
-import { SERVICE_KEYS_CHANGED_EVENT } from '@/gui/All.This/Cleaker/Keychain/ServiceKeysSection';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -146,6 +144,36 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // context's OWN in-flight/settled status, so the QR can wait for that
 // re-verification instead of reporting success the instant Beatle's own
 // (weaker) mesh resolution does.
+
+function AfterSignInNext({
+  authenticated,
+  mode,
+  registrationComplete,
+  recoveryComplete,
+}: {
+  authenticated: boolean;
+  mode: 'signin' | 'register' | 'recover' | 'link';
+  registrationComplete: boolean;
+  recoveryComplete: boolean;
+}) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const registrationSettled = mode !== 'register' || registrationComplete;
+    const recoverySettled = mode !== 'recover' || recoveryComplete;
+    if (!authenticated || !registrationSettled || !recoverySettled) return;
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (!next) return;
+    try {
+      const target = new URL(next, window.location.origin);
+      if (target.origin !== window.location.origin) return;
+      navigate(`${target.pathname}${target.search}${target.hash}`, { replace: true });
+    } catch {
+      // Malformed `next` -- stay put rather than navigating somewhere unintended.
+    }
+  }, [authenticated, mode, registrationComplete, recoveryComplete, navigate]);
+  return null;
+}
+
 export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   /** Another host answered for the selected namespace: the shell shows it as selected (useQRConnect's onRemoteResolved). */
@@ -175,9 +203,17 @@ export type QRConnectProps = DocumentPageProps & {
   doorChecking?: boolean;
   /** Reads the door's layers now (the same reading that decides doorOff), for executing the QR's expression. */
   probeDoor?: () => Promise<DoorLayers>;
+  /** Tight layout for the QR panel on a page that is not the namespace. */
+  compact?: boolean;
+  /**
+   * Pin the QR to this status and do not open a second connection just to
+   * colour it. Used when this card is the same mark already shown in the
+   * bar (AppShell): one QR, one status.
+   */
+  qrStatus?: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -348,15 +384,6 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   if (!view) return null;
 
   const { authenticated, label, pending, error, onEnter, onLogout, credentialsForm, semanticNamespace } = view;
-  // Which third-party services have keys in this identity's keychain (presence only -- no secret is read).
-  const [savedServices, setSavedServices] = useState<ServiceId[]>([]);
-  useEffect(() => {
-    const read = () => setSavedServices(semanticNamespace ? listSavedServices(semanticNamespace) : []);
-    read();
-    window.addEventListener(SERVICE_KEYS_CHANGED_EVENT, read);
-    window.addEventListener('storage', read);
-    return () => { window.removeEventListener(SERVICE_KEYS_CHANGED_EVENT, read); window.removeEventListener('storage', read); };
-  }, [semanticNamespace]);
 
   // Me no longer remounts this tree when a session
   // completes (see its own doc comment), so `mode`/`registrationComplete`
@@ -391,30 +418,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // get past. Only ever a same-app continuation link someone else on
   // this origin constructed — never acted on if it's not a well-formed,
   // same-origin URL.
-  const navigate = useNavigate();
-  useEffect(() => {
-    // Same gate the render logic below already uses to decide when the
-    // authenticated view is safe to show instead of Claim/
-    // RecoverAccount -- `authenticated` alone flips true the instant a
-    // claim/recovery is ACCEPTED, well before Claim's own backup step
-    // writes the local encrypted vault (registrationComplete, set via its
-    // onRegistered prop). Navigating on `authenticated` alone would unmount
-    // Claim mid-flow the same way the render logic already guards
-    // against, silently skipping the vault write -- exactly the gap that
-    // later makes Sign in fail for this identity (it has no vault to open).
-    const registrationSettled = mode !== 'register' || registrationComplete;
-    const recoverySettled = mode !== 'recover' || recoveryComplete;
-    if (!authenticated || !registrationSettled || !recoverySettled) return;
-    const next = new URLSearchParams(window.location.search).get('next');
-    if (!next) return;
-    try {
-      const target = new URL(next, window.location.origin);
-      if (target.origin !== window.location.origin) return;
-      navigate(`${target.pathname}${target.search}${target.hash}`, { replace: true });
-    } catch {
-      // Malformed `next` -- stay put rather than navigating somewhere unintended.
-    }
-  }, [authenticated, mode, registrationComplete, recoveryComplete]);
+  const inRouter = useInRouterContext();
 
   // Strip the root suffix off semanticNamespace to get just the handle
   // (same derivation SessionSurface.tsx already uses for its own `handle`)
@@ -505,11 +509,18 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     onLocalResolved: onBeatleNamespaceResolved,
     onRemoteResolved: onSelectedNamespaceAnswered,
     channelExpression: beatleExpression,
-    channelEnabled: qrActive && secureContextOk,
+    channelEnabled: !qrStatus && qrActive && secureContextOk,
     // Once a session is open the namespace is whatever it claimed/opened: no way around to offer.
-    failureEnabled: !authenticated,
+    failureEnabled: !qrStatus && !authenticated,
   });
   const remoteRoot = conn.remoteRoot;
+  const shownStatus = qrStatus ?? conn.status;
+  const shownStatusLabel = qrStatus === 'confirmed' ? 'Connected'
+    : qrStatus === 'error' ? 'Could not connect'
+    : qrStatus === 'off' ? 'No .me here'
+    : qrStatus === 'checking' ? 'Checking…'
+    : qrStatus === 'idle' ? ''
+    : conn.statusLabel;
 
   // The username field takes the focus when the form is shown (it used to be `autoFocus`, which focuses synchronously
   // while the form is being committed: after a click that is also what showed the form, that crashed under Storybook's
@@ -531,7 +542,19 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     await onEnter({ ...(remoteRoot ? { transportOrigin: `https://${remoteRoot}` } : {}), namespace: namespaceRootLabel });
   };
 
+
+  const afterSignInNext = inRouter ? (
+    <AfterSignInNext
+      authenticated={authenticated}
+      mode={mode}
+      registrationComplete={registrationComplete}
+      recoveryComplete={recoveryComplete}
+    />
+  ) : null;
+
   return (
+    <>
+    {afterSignInNext}
     <Box
       data-gui-node-id={nodeId}
       data-gui-component={nodeComponent}
@@ -610,8 +633,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
             hoverFlip={false}
             clickFlip={false}
             cursor="pointer"
-            status={conn.status}
-            statusLabel={conn.statusLabel}
+            status={shownStatus}
+            statusLabel={shownStatusLabel}
             perimeterLabel={perimeterLabel}
             perimeterRootLabel={namespaceRootLabel}
             perimeterHandleHref={perimeterHandleHref}
@@ -642,7 +665,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
       {doorChecking && !remoteRoot ? null : qrActive && conn.failureShown ? (
         // The "Unable to connect" card is QRConnect's, right under the QR: nothing else is offered meanwhile.
         null
-      ) : (remoteRoot ? conn.status !== 'confirmed' : doorOff) ? (
+      ) : (remoteRoot ? shownStatus !== 'confirmed' : doorOff) ? (
         // Grey QR (or one still connecting to another host), nothing else: it is the way in. Clicking it executes its
         // expression. Once another host answers, the person is offered "Hello, I am…" there, whether or not this
         // page's own door is up.
@@ -661,21 +684,17 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
            likes seeing that public, checkable fingerprint next to their
            name, not just the name alone -- it just no longer repeats the
            name alongside it. */
-        <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-          {/* Between the name (on the QR's perimeter) and the fingerprint: the two things this identity holds.
-              Keys opens the keychain (its signing keys). Wallet is shown but off: a wallet credential (a
-              secp256k1/EIP-191 key a dApp can verify) is not built -- `.wallet` is a separate Ethereum-only
-              package with no link to `.me` -- so it opens nothing rather than a page that does not exist. */}
-          {/* mt: the container's own gap puts 20px under the QR; the icons sit closer to it than that so the
-              air above them matches the air below (icons to fingerprint). */}
-          <IdentityIconRow nodeId={nodeId} savedServices={savedServices} onNavigate={navigate} />
-          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+        <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+          {/* Card-mode root of this username's tree: keys, wallet, profile, contacts.
+              Service icons live on the keys screen; expanded .GUI puts more icons in the sidebars. */}
+          <IdentityIconRow nodeId={nodeId} onNavigate={navigate} />
+          <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id={`${nodeId}.identityHash`}>
             {label}
           </Typography>
           {activeSession && ownUsername && (
             <LiveOwnProfile session={activeSession} username={ownUsername} />
           )}
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, mt: '8px' }}>
             {/* Keychain moved to the shared sidebar (GUI in Namespace.tsx,
                 shown only once authenticated -- same condition as before,
                 just relocated) instead of living inline here. Sign out stays
@@ -742,14 +761,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               addressing"), this answers for an identity root ("which root
               am I claiming into"). Pre-auth only now — see the
               authenticated branch above for why. */}
-          <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mb: -2 }}>
-            {/* No trailing ".me" here — the .me submit button below is now
-                the answer to this sentence, not a repeat of it. The page
-                reads as one continuous line: "Hello, I am…" [namespace]
-                [username] [secret] ".me". */}
-            <Typography variant="h4" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
-              Hello, I am…
-            </Typography>
+          {(!namespaceReady || !secureContextOk) && (
+          <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
             {!namespaceReady && (
               <Typography variant="body2" data-gui-node-id={`${nodeId}.resolving`} sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
                 {sharedRootStatus === 'error'
@@ -809,12 +822,14 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               </Box>
             )}
           </Box>
+          )}
 
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {credentialsForm && (
-            <>
+            <Box sx={{ width: compact ? '100%' : '66%', alignSelf: 'center', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <TextField
-                label="Username"
+                placeholder="Username"
+                inputProps={{ 'aria-label': 'Username' }}
                 data-gui-node-id={`${nodeId}.username`}
                 value={credentialsForm.username}
                 onChange={(e) => credentialsForm.setUsername(e.target.value)}
@@ -823,7 +838,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
                 fullWidth
               />
               <TextField
-                label="Secret"
+                placeholder="Secret"
+                inputProps={{ 'aria-label': 'Secret' }}
                 data-gui-node-id={`${nodeId}.secret`}
                 type="password"
                 value={credentialsForm.password}
@@ -832,7 +848,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
                 onKeyDown={(e) => { if (e.key === 'Enter') handleEnter(); }}
                 fullWidth
               />
-            </>
+            </Box>
           )}
           {credentialsForm && credentialsForm.username.trim() && namespaceReady && (
             // BEFORE anything is signed: which key this sign-in will use, and where it comes from. A saved key in this
@@ -897,6 +913,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
               alignItems: 'center',
               justifyContent: 'center',
               gap: 1,
+              width: compact ? '100%' : '66%',
+              alignSelf: 'center',
               p: 1.25,
               border: '1px solid',
               borderColor: 'primary.main',
@@ -932,7 +950,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
                 p: 0,
               }}
             >
-              New here? Register
+              Register
             </Box>
             <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>
               ·
@@ -979,6 +997,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
         </>
       )}
     </Box>
+    </>
   );
 };
 

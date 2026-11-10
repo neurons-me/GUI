@@ -67,14 +67,19 @@ const TOP_POSITION_SX: SxProps<Theme> = {
   textDecoration: 'none',
 };
 
+// The mark stays centered in the rail-width cell; the label hangs over that cell's empty side so it sits a few
+// pixels from the mark (the username beside the QR, @where beside the brand) instead of from the cell edge.
+const BESIDE_RAIL_MARK_SX = {
+  ml: `calc((var(--gui-rail-width, 72px) - ${RAIL_BADGE_SIZE}px) / -2 + 1px)`,
+  position: 'relative' as const,
+  zIndex: 1,
+  minWidth: 0,
+};
+
 const LEFT_POSITION_SX: SxProps<Theme> = {
   display: 'block',
   minWidth: 0,
-  // Pulled in over the brand cell's empty right margin so it hangs ~6px from the mark instead of ~25px; the mark itself
-  // stays exactly where it is in the rail (its cell is as wide as the rail).
-  ml: '-10px',
-  position: 'relative',
-  zIndex: 1,
+  ...BESIDE_RAIL_MARK_SX,
   fontFamily: 'monospace',
   fontSize: '0.74rem',
   fontWeight: 600,
@@ -140,9 +145,9 @@ const BRAND_CELL_SX: SxProps<Theme> = {
  * The cell around a bar's badge (LeftBar's `brand` slot): the whole cell is the shell's link or button -- to the identity
  * page, to a panel -- and nothing else; expanding the bar is the bar's own arrow.
  */
-export function BarBrandCell({ sx, ...rest }: PositionProps) {
-  return <Box {...rest} sx={withSx(BRAND_CELL_SX, sx)} />;
-}
+export const BarBrandCell = React.forwardRef<HTMLElement, PositionProps>(function BarBrandCell({ sx, ...rest }, ref) {
+  return <Box ref={ref} {...rest} sx={withSx(BRAND_CELL_SX, sx as BoxProps['sx'])} />;
+});
 
 export { placeMarks, isMarkCorner, MARK_CORNERS } from './placeMarks';
 export { splitPosition, atWhere, whoLines } from './positionText';
@@ -188,7 +193,7 @@ export function WhereText({ where, title }: { where: string; title?: string }) {
 }
 
 const markRow = (mark: React.ReactNode, text: React.ReactNode) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>{mark}{text}</Box>
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375, minWidth: 0 }}>{mark}{text}</Box>
 );
 
 /**
@@ -212,7 +217,10 @@ export function marksInBars(
   };
   const put = (slot: string, element: React.ReactNode, text: React.ReactNode) => {
     if (element == null || slot === 'none' || slot === 'corner') return;
-    if (slot === 'left.brand') { out.leftBrand = element; out.leftHeader = text ?? undefined; }
+    if (slot === 'left.brand') {
+      out.leftBrand = element;
+      out.leftHeader = text == null ? undefined : <Box sx={BESIDE_RAIL_MARK_SX}>{text}</Box>;
+    }
     else if (slot === 'top.start') out.topStart.push({ type: 'action', props: { element: opts.topText && text ? markRow(element, text) : element } });
     else if (slot === 'top.end') out.topEnd.push({ type: 'action', props: { element: opts.topText && text ? markRow(element, text) : element } });
     else if (slot === 'left.footer') out.leftFooter.push({ type: 'action', props: { element: text ? markRow(element, <OnlyWhenLeftBarExpanded>{text}</OnlyWhenLeftBarExpanded>) : element, tooltip: false } });
@@ -249,7 +257,7 @@ export function SiteBrand({ label, href, to, logo, icon, glyph, compact = false 
       aria-label={label}
       data-gui-node-id="GUI.window.layout.bars.brand"
       data-gui-component="brand"
-      sx={{ fontWeight: 700, fontSize: glyph ? '1.5rem' : '1.25rem', color: 'primary.main', ...(compact ? { width: 48, height: 48, minWidth: 48, flex: 'none' } : {}), ...(to || href ? {} : { cursor: 'default', '&:hover': {} }) }}
+      sx={{ fontWeight: 700, fontSize: glyph ? '1.5rem' : '1.25rem', color: 'primary.main', ...(compact ? { width: 'auto', height: 48, minWidth: 0, px: 0, flex: 'none' } : {}), ...(to || href ? {} : { cursor: 'default', '&:hover': {} }) }}
     >
       {logo ? <Box component="img" src={logo} alt="" sx={{ width: 28, height: 28, objectFit: 'contain' }} /> : icon ? <Icon name={icon} fontSize={28} /> : glyph || initial}
     </BarBrandCell>

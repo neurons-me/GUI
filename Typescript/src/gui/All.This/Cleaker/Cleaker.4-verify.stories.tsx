@@ -245,7 +245,7 @@ IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement })
   const fullNamespace = `${username}.${DISPOSABLE_ROOT_LABEL}`;
 
   // ---- Register ----
-  await user.click(await canvas.findByRole('button', { name: 'New here? Register' }));
+  await user.click(await canvas.findByRole('button', { name: 'Register' }));
 
   // fireEvent.change, not userEvent.type: in this environment userEvent's
   // per-keystroke dispatch left the raw <input>.value updated but never
@@ -287,7 +287,7 @@ IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement })
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
-    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    () => expect(canvas.getByRole('button', { name: 'Register' })).toBeInTheDocument(),
     { timeout: 8000 },
   );
 
@@ -335,7 +335,7 @@ IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement })
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
-    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    () => expect(canvas.getByRole('button', { name: 'Register' })).toBeInTheDocument(),
     { timeout: 8000 },
   );
 
@@ -361,7 +361,7 @@ IdentityJourney.play = async ({ canvasElement }: { canvasElement: HTMLElement })
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
-    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    () => expect(canvas.getByRole('button', { name: 'Register' })).toBeInTheDocument(),
     { timeout: 8000 },
   );
 };
@@ -416,13 +416,13 @@ IdentityJourneyThroughGateway.play = async ({ canvasElement }: { canvasElement: 
   // The arrow expands the bar and goes nowhere: the welcome page is still the page.
   await user.click(arrow);
   await waitFor(() => expect(canvas.getByRole('button', { name: 'Collapse sidebar' })).toHaveAttribute('aria-expanded', 'true'));
-  expect(canvas.queryByRole('button', { name: 'New here? Register' })).toBeNull();
+  expect(canvas.queryByRole('button', { name: 'Register' })).toBeNull();
   await user.click(canvas.getByRole('button', { name: 'Collapse sidebar' }));
   await waitFor(() => expect(canvas.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument());
   // The brand goes to the identity page and does not expand the bar.
   await user.click(canvas.getByRole('link', { name: 'Open .me' }));
   expect(canvas.queryByRole('button', { name: 'Collapse sidebar' })).toBeNull();
-  await user.click(await canvas.findByRole('button', { name: 'New here? Register' }, { timeout: 8000 }));
+  await user.click(await canvas.findByRole('button', { name: 'Register' }, { timeout: 8000 }));
   fireEvent.change(await canvas.findByLabelText('Username'), { target: { value: username } });
   fireEvent.change(canvas.getByLabelText('Secret'), { target: { value: password } });
   fireEvent.change(canvas.getByLabelText('Confirm Secret'), { target: { value: password } });
@@ -451,7 +451,7 @@ IdentityJourneyThroughGateway.play = async ({ canvasElement }: { canvasElement: 
   // ---- Sign out ----
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
-    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    () => expect(canvas.getByRole('button', { name: 'Register' })).toBeInTheDocument(),
     { timeout: 8000 },
   );
 
@@ -470,7 +470,7 @@ IdentityJourneyThroughGateway.play = async ({ canvasElement }: { canvasElement: 
 
   await user.click(canvas.getByRole('button', { name: /Sign out/i }));
   await waitFor(
-    () => expect(canvas.getByRole('button', { name: 'New here? Register' })).toBeInTheDocument(),
+    () => expect(canvas.getByRole('button', { name: 'Register' })).toBeInTheDocument(),
     { timeout: 8000 },
   );
 };

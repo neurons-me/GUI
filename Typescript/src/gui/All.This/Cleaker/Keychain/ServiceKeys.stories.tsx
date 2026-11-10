@@ -84,19 +84,8 @@ export const InKeychainList = () => (
 
 export const QrIconRow = () => (
   <Box440>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center', paddingTop: 16 }}>
-      <IdentityIconRow nodeId="story.qr" savedServices={[]} onNavigate={() => {}} />
-      <IdentityIconRow nodeId="story.qr" savedServices={['twitch']} onNavigate={() => {}} />
-      <IdentityIconRow nodeId="story.qr" savedServices={['openai', 'linkedin']} onNavigate={() => {}} />
-      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'paypal', 'meta', 'google', 'openai', 'linkedin']} onNavigate={() => {}} />
-    </div>
-  </Box440>
-);
-
-export const QrIconRowAllVisible = () => (
-  <Box440>
     <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
-      <IdentityIconRow nodeId="story.qr" savedServices={['twitch', 'google', 'linkedin', 'grok', 'github', 'whatsapp']} maxServiceIcons={99} onNavigate={() => {}} />
+      <IdentityIconRow nodeId="story.qr" onNavigate={() => {}} />
     </div>
   </Box440>
 );

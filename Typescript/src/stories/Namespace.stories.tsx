@@ -4,6 +4,8 @@ import Theme from "@/gui/Theme/Theme";
 import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
 import Namespace from "@/react/session/Namespace";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
+import { ConnectionSeamsContext } from "@/gui/All.This/Cleaker/useQRConnect";
+import { demoNamespaceFetch, demoNamespaceSeams } from "./demoNamespaceDoor";
 import { mountCleakerGui } from '@/gui/All.This/Cleaker/Corner/CleakerCornerGui';
 import type { CleakerCorner } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 import { flattenGuiDocument, GUI_DOCUMENT } from '@/runtime/guiDocument';
@@ -25,18 +27,20 @@ import { BarBrandCell, MARK_CORNERS, QrBadge, SiteBrand, type MarkCorner } from 
 // duplicates none of that logic, it just gives the root document a front
 // door in the nav that matches its real role.
 //
-// Resolved as the real page does it, nothing written in by hand: the address is only a draft
-// (namespaceSource "address"), and the `.me` is named only once a monad answers for it. It is asked through this
-// machine's own door (http://localhost, nginx). Until something answers, the top bar says `? @ localhost:6006`.
-// (local.cleaker / local.netget were retired on 2026-10-07.)
+// This Storybook page IS the namespace (case 1): the host is the name, login stays here.
+// Asking cleaker.me from localhost:6006 is refused ("did not accept this sign-in from here").
+// The demo door answers as this host so the form is offered and claim/sign-in are accepted locally.
+const PAGE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
 const PAGE_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 setActiveNamespaceRoot(PAGE_HOST);
 
 const Root = () => (
   <Theme>
-    <SeedSessionProvider transportOrigin="http://localhost/apps/netget" sessionBackend="cleaker">
-      <Namespace namespaceSource="address" cleakerEndpoint="http://localhost" netgetMonadOrigin="http://localhost/apps/netget" />
-    </SeedSessionProvider>
+    <ConnectionSeamsContext.Provider value={demoNamespaceSeams}>
+      <SeedSessionProvider transportOrigin={PAGE_ORIGIN} sessionBackend="cleaker" fetchImpl={demoNamespaceFetch}>
+        <Namespace namespaceSource="declared" cleakerEndpoint={PAGE_ORIGIN} netgetMonadOrigin={PAGE_ORIGIN} />
+      </SeedSessionProvider>
+    </ConnectionSeamsContext.Provider>
   </Theme>
 );
 
@@ -150,17 +154,20 @@ type OnAPageArgs = {
   corner: CleakerCorner;
   namespace: string;
   brand: string;
+  username: string;
   top: 'open' | 'icons' | 'closed';
   left: 'open' | 'icons' | 'closed';
 };
 
-function CleakerOnAPage({ corner, namespace, brand, top, left }: OnAPageArgs) {
+function CleakerOnAPage({ corner, namespace, brand, username, top, left }: OnAPageArgs) {
   const ref = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (!ref.current) return undefined;
     const handle = mountCleakerGui({
       corner,
       namespace: namespace || null,
+      username: username || undefined,
+      qrStatus: 'confirmed',
       container: ref.current,
       storage: null,
       probe: async () => true,
@@ -176,7 +183,7 @@ function CleakerOnAPage({ corner, namespace, brand, top, left }: OnAPageArgs) {
       },
     });
     return () => handle.unmount();
-  }, [corner, namespace, brand, top, left]);
+  }, [corner, namespace, brand, username, top, left]);
   return (
     <div ref={ref} style={{ minHeight: '100vh', background: '#fbfaf7', color: '#222', font: '17px/1.6 Georgia, serif' }}>
       <main style={{ maxWidth: 640, margin: '0 auto', padding: '96px 20px' }}>
@@ -195,11 +202,12 @@ const BAR_STATES = ['open', 'icons', 'closed'];
 
 export const CleakerOnAnyPage: StoryObj<any> = {
   name: '3 · Namespace + site without .GUI',
-  args: { corner: 'top-left', namespace: 'cleaker.me', brand: 'Neurons', top: 'open', left: 'icons' } satisfies OnAPageArgs,
+  args: { corner: 'top-left', namespace: 'cleaker.me', brand: 'Neurons', username: 'jabellae', top: 'open', left: 'icons' } satisfies OnAPageArgs,
   argTypes: {
     corner: { control: 'inline-radio', options: ['top-left', 'top-right', 'bottom-left', 'bottom-right'] },
     namespace: { control: 'text' },
     brand: { control: 'text', description: "the page's brand (the author's); empty: none" },
+    username: { control: 'text' },
     top: { control: 'inline-radio', options: BAR_STATES },
     left: { control: 'inline-radio', options: BAR_STATES },
   },

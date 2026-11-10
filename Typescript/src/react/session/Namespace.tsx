@@ -19,6 +19,7 @@ import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
 import Dialog from '@mui/material/Dialog';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
 import { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
@@ -66,6 +67,10 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
+import CleakerQrMenu, { panelPositionFor } from '@/gui/All.This/Cleaker/Corner/CleakerQrMenu';
+import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
+import { documentBarModes, readBarModes, writeBarMode, type BarMode, type LayoutBarId } from '@/gui/Layout/Position/barMode';
+import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
 import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 import { GuiPage, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
@@ -1336,7 +1341,7 @@ const CleakerNetgetView: React.FC<DocumentPageProps & { netget: { endpoint: stri
 
   if (!netget.available) {
     return (
-      <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, maxWidth: 560 }}>
+      <Box data-gui-node-id={nodeId} data-gui-component={nodeComponent} sx={{ p: 3, width: '100%' }}>
         <Typography variant="h5" data-gui-node-id={`${nodeId}.heading`} sx={{ fontWeight: 700, mb: 1 }}>Netget</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           No Netget gateway is available in this context yet.
@@ -1461,10 +1466,36 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const openThemeSettings = useCallback(() => navigate(GUI_THEMES_ROUTE), [navigate]);
   // Where the address starts in the top bar: the axis the page under it starts on too (addressAxis.ts).
   const axis = useAddressAxis();
-  // The identity (the QR, the sign-in/register/recover card) is a PAGE of the namespace, at `/.me`: it has an address,
-  // survives a refresh, and Back returns to where you were. It used to open as a dialog over whatever page you were on;
-  // that is gone. `/` stays the namespace's home.
+  // On the namespace, Sign in goes to its root (`/`), where the document already serves the Landing (QR + form).
+  // `/.me` is the same identity page at its own address (the top-bar / "Open your .me" links still use it).
+  // Both are content, not a modal: the rail QR must not open a panel there, because Sign in would only close it.
+  // Other namespace routes still open the identity panel (status, corners). Sidebar options that go to the
+  // namespace render in the content area. On an app, those same options open as a modal (AppShell).
   const IDENTITY_ROUTE = '/.me';
+  const isNamespaceLanding = location.pathname === '/' || location.pathname === IDENTITY_ROUTE;
+  const [qrMenuOpen, setQrMenuOpen] = useState(false);
+  const qrCellRef = useRef<HTMLElement>(null);
+  const [identityCorner, setIdentityCorner] = useState<MarkCorner>(() => (
+    readQrMePosition(undefined, props.identityCorner ?? 'top-left')
+  ));
+  const moveIdentityCorner = useCallback((corner: MarkCorner) => {
+    writeQrMePosition(corner);
+    setIdentityCorner(corner);
+  }, []);
+  const [barModes, setBarModes] = useState(() => readBarModes(undefined, documentBarModes()));
+  const chooseBarMode = useCallback((id: LayoutBarId, mode: BarMode) => {
+    writeBarMode(id, mode);
+    setBarModes((prev) => ({ ...prev, [id]: mode }));
+  }, []);
+  useEffect(() => {
+    if (!qrMenuOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setQrMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [qrMenuOpen]);
+  useEffect(() => {
+    if (isNamespaceLanding) setQrMenuOpen(false);
+  }, [isNamespaceLanding]);
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
   // The namespace the person SELECTED and that actually connected (the card's typed root, promoted by
   // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
@@ -1667,6 +1698,13 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // element is shown.
   const barSlots = leftBarSlots(doc, { authenticated, capabilities: capabilityResolution.states });
   const hiddenBarItems = useMemo(() => new Set((props.hideBarItems ?? []).map(String)), [props.hideBarItems]);
+  const layoutLeftIcons = useMemo(() => (
+    [...barSlots.start, ...resolved.map((r) => r.element), ...barSlots.end]
+      .filter((el) => !hiddenBarItems.has(String((el as any)?.props?.id ?? '')))
+      .filter((el) => !(el.type === 'link' && el.props.to === '/'))
+      .filter((el) => el.type === 'link' && el.props.icon)
+      .map((el) => ({ icon: String(el.props.icon), label: String(el.props.label ?? '') }))
+  ), [barSlots, resolved, hiddenBarItems]);
 
   // Routes whose page needs a layer that is off right now: their sidebar link is dimmed (still a link; the page it
   // opens says which layer is missing).
@@ -1757,20 +1795,32 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // the way back to it as well as the connection state. Only the search field stays in the top bar.
   // The badge draws at the one whole-pixel size its QR allows (`positionBadgeSize`); the rail wants it a little larger
   // than that, so it is scaled as a whole and given the same breathing room above and below.
-  // The QR is this app's brand in the left bar (LeftBar's `brand` slot, the same one any other app fills with its logo):
-  // a link to the identity page, and nothing else. Expanding and contracting the bar is the bar's own arrow, so the QR is
+  // The QR is this app's brand in the left bar (LeftBar's `brand` slot, the same one any other app fills with its logo).
+  // On the landing (`/` or `/.me`) the content already is that QR, so the rail mark does not open a panel.
+  // On other namespace routes, clicking it opens the Cleaker panel (login status + corners). Expanding and contracting the bar is the bar's own arrow, so the QR is
   // never that control. On a narrow screen the corner control is the bar's standard "Open navigation" button and the QR
   // leads the drawer.
   // The two marks (Roles-and-Territories.md §3). With an app's brand, the QR is the person's mark at their corner and
   // the brand takes the other end; without one, placeMarks() puts the QR where it always was (the left bar's head).
   const narrowBars = useNarrowBars();
-  const marksPlacement = placeMarks({ identity: props.identityCorner ?? 'top-left', bars: { top: true, left: true }, narrow: narrowBars, brand: Boolean(props.brand) });
+  const marksPlacementRaw = placeMarks({
+    identity: identityCorner,
+    bars: { top: barModes.top !== 'off', left: barModes.left !== 'off' },
+    narrow: narrowBars,
+    brand: Boolean(props.brand),
+  });
+  const marksPlacement = marksPlacementRaw.identity === 'corner'
+    ? { ...marksPlacementRaw, identity: `float:${identityCorner}` as const }
+    : marksPlacementRaw;
   const positionBrand = (
     <BarBrandCell
-      component={Link}
-      to={IDENTITY_ROUTE}
-      aria-label="Open .me"
-      aria-current={location.pathname === IDENTITY_ROUTE ? 'page' : undefined}
+      ref={qrCellRef}
+      component={isNamespaceLanding ? 'div' : 'button'}
+      type={isNamespaceLanding ? undefined : 'button'}
+      onClick={isNamespaceLanding ? undefined : () => setQrMenuOpen((open) => !open)}
+      aria-label={isNamespaceLanding ? undefined : 'Open .me'}
+      aria-expanded={isNamespaceLanding ? undefined : qrMenuOpen}
+      aria-haspopup={isNamespaceLanding ? undefined : 'dialog'}
       aria-description={`${positionExpressionFull} — ${linkFacts}`}
       title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
@@ -1787,7 +1837,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         perimeterRootLabel={namespaceRootLabel}
         clickFlip={false}
         hoverFlip={false}
-        cursor="pointer"
+        cursor={isNamespaceLanding ? 'default' : 'pointer'}
         data-gui-node-id="GUI.window.layout.bars.top.position"
       />
       {/* A session is open through this link: its own mark, apart from the ring (which says only that the service answered). */}
@@ -1886,8 +1936,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       <Layout
         // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
         // the top bar's first pixels; the location label starts past it, with a gap, instead of under it.
-        TopBar={{ elementsLeft: [...marks.topStart, ...topBarLeftElements], elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: `${TOP_BAR_TOOLBAR_PL_PX}px` }, elementsLeftSx: { pl: `${axis.addressPl}px` } }}
-        LeftBar={{
+        TopBar={barModes.top === 'off' ? false : { elementsLeft: [...marks.topStart, ...topBarLeftElements], elementsRight: topBarRightElements, noBorder: true, hideBrand: true, toolbarSx: { pl: `${TOP_BAR_TOOLBAR_PL_PX}px` }, elementsLeftSx: { pl: `${axis.addressPl}px` } }}
+        LeftBar={barModes.left === 'off' ? false : {
+          initialView: barModes.left === 'expanded' ? 'expanded' : 'rail',
           brand: marks.leftBrand,
           // Shown while the bar is open: with a brand, the text of the mark in the bar's head (who, or @where); without
           // one, where you are written out, and the way to the identity page.
@@ -1947,6 +1998,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             ...marks.leftFooter,
           ],
         }}
+        RightBar={barModes.right === 'off' ? false : { initialView: barModes.right === 'expanded' ? 'expanded' : 'rail' }}
       >
         <ThemeKernelMirror session={session} />
         <Routes>
@@ -1964,6 +2016,51 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         </Routes>
       </Layout>
       {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
+      {qrMenuOpen && (
+        <ClickAwayListener
+          onClickAway={(event) => {
+            const target = event.target;
+            if (qrCellRef.current && target instanceof Node && qrCellRef.current.contains(target)) return;
+            setQrMenuOpen(false);
+          }}
+        >
+          <Box sx={{ position: 'fixed', zIndex: (theme: any) => (theme.zIndex?.modal ?? 1300) + 1, ...panelPositionFor(marksPlacement.identity, identityCorner) }}>
+            <CleakerQrMenu
+              fullPosition={positionExpressionFull}
+              statusText={positionStatusLabel}
+              showNamespaceForm={false}
+              corner={identityCorner}
+              onMoveTo={moveIdentityCorner}
+              barModes={barModes}
+              onChooseBarMode={chooseBarMode}
+              onClose={() => setQrMenuOpen(false)}
+              layout={{
+                left: layoutLeftIcons,
+                search: true,
+                address: positionExpression || undefined,
+                brand: props.brand ? { label: props.brand.label, icon: typeof props.brand.icon === 'string' ? props.brand.icon : undefined } : undefined,
+              }}
+            >
+              <MeLoginStatus
+                nodeId="GUI.window.layout.marks.identity.menu"
+                authenticated={authenticated}
+                qr={{
+                  value: positionQrValue,
+                  username: authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : undefined,
+                  status: positionStatus,
+                  statusLabel: positionStatusLabel,
+                  perimeterLabel: positionExpression,
+                  perimeterRootLabel: namespaceRootLabel,
+                }}
+                identityHash={ctx?.identityHash}
+                onNavigate={(to) => { setQrMenuOpen(false); navigate(to); }}
+                onLogout={() => { ctx?.logout(); setQrMenuOpen(false); }}
+                onSignIn={() => { setQrMenuOpen(false); if (location.pathname !== '/') navigate('/'); }}
+              />
+            </CleakerQrMenu>
+          </Box>
+        </ClickAwayListener>
+      )}
     </Box>
     </ThemeSettingsContext.Provider>
     </GuiCapabilitiesContext.Provider>

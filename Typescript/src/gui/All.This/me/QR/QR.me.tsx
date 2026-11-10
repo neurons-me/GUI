@@ -70,6 +70,12 @@ export type QRmeProps = {
   variant?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'topbar';
   diameter?: number;
   size?: number;
+  /**
+   * Stay within `diameter` (whole-pixel modules), instead of growing so
+   * each module is at least 4px. The login-status card uses this to match
+   * the landing QR's 125px scan size.
+   */
+  fitDiameter?: boolean;
   bg?: string;
   fg?: string;
   defaultFace?: 'qr' | 'avatar';
@@ -237,6 +243,7 @@ export default function QRme({
   variant = 'md',
   diameter,
   size = 112,
+  fitDiameter = false,
   bg,
   fg,
   defaultFace = 'qr',
@@ -333,9 +340,17 @@ export default function QRme({
     const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
     const inset = Math.max(2, Math.round(resolvedDiameter * QR_INSET_RATIO));
     const requestedQrSize = resolvedDiameter - inset * 2;
+    if (fitDiameter) {
+      // Nearest whole-pixel cell that fills the requested diameter, without
+      // the 4px scan-floor growing the badge past it (a longer URL would
+      // otherwise jump from ~125px to ~172px).
+      const cell = Math.max(1, Math.round(requestedQrSize / Math.max(1, totalModules)));
+      const size = cell * totalModules;
+      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
+    }
     const { size } = snapQrCellSize(totalModules, requestedQrSize, MIN_PX_PER_MODULE);
     return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
-  }, [value, resolvedDiameter, isTopbar]);
+  }, [value, resolvedDiameter, isTopbar, fitDiameter]);
   // The embedded wordmark's pixel cell size floor is NOT scaled to
   // `qrSize` in practice: `qrSize / 100` is below 1.4 at every size this
   // component actually renders (even the ~124px default case), so the

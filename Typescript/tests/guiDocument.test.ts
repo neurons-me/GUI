@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { barId, contentId, GUI_BARS_ID, GUI_CONTENT_ID, GUI_LAYOUT_ID, GUI_WINDOW_ID, migrateLegacyGuiDocument, migrateLegacyGuiId } from '../src/runtime/guiIds';
-import { flattenGuiDocument, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT } from '../src/runtime/guiDocument';
+import { barId, contentId, GUI_BARS_ID, GUI_CONTENT_ID, GUI_LAYOUT_ID, GUI_QR_ID, GUI_QR_POSITION_ID, GUI_WINDOW_ID, migrateLegacyGuiDocument, migrateLegacyGuiId } from '../src/runtime/guiIds';
+import { flattenGuiDocument, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, guiDocumentProps, documentBoxSx, leftBarLayoutProps, barDeclaredOn } from '../src/runtime/guiDocument';
 
 const entries = flattenGuiDocument();
 const ids = entries.map((e) => e.id);
@@ -101,6 +101,20 @@ assert.equal(GUI_WINDOW_ID, 'GUI.window');
 assert.equal(GUI_LAYOUT_ID, 'GUI.window.layout');
 assert.equal(GUI_BARS_ID, 'GUI.window.layout.bars');
 assert.equal(GUI_CONTENT_ID, 'GUI.window.layout.content');
+assert.equal(GUI_QR_ID, 'GUI.window.layout.qr');
+assert.equal(GUI_QR_POSITION_ID, 'GUI.window.layout.qr.position');
+assert.ok(ids.includes(GUI_QR_ID) && ids.includes(GUI_QR_POSITION_ID), 'qr.position is declared');
+
+// Layout box and which bars are on live in the document, not in component constants.
+assert.deepEqual(guiDocumentProps(GUI_CONTENT_ID), { maxWidth: 1120, minWidth: 0, height: '100%', gutter: 1.618 });
+assert.deepEqual(documentBoxSx(GUI_CONTENT_ID), { maxWidth: 1120, minWidth: 0, height: '100%' });
+assert.equal(barDeclaredOn('top'), true);
+assert.equal(barDeclaredOn('left'), true);
+assert.equal(barDeclaredOn('right'), false);
+assert.equal(barDeclaredOn('bottom'), false);
+assert.equal(barDeclaredOn('sticky'), false);
+assert.deepEqual(leftBarLayoutProps(), { on: true, view: 'rail', railWidth: 72, expandedWidth: 220 });
+assert.ok(!ids.includes('GUI.window.layout.qr.me'), 'qr has no .me child');
 assert.equal(barId('left'), 'GUI.window.layout.bars.left');
 assert.equal(contentId('users'), 'GUI.window.layout.content.users');
 for (const side of ['left', 'right', 'top', 'bottom', 'sticky']) assert.ok(ids.includes(barId(side as any)), `${side} bar is declared`);

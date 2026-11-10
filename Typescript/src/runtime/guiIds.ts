@@ -8,6 +8,7 @@ import type { GuiDocument, GuiDocumentNode } from './guiDocument';
  *   └── window            the surface the GUI is presented on
  *       └── layout        the window's structure
  *           ├── bars      left, right, top, bottom (and sticky)
+ *           ├── qr        the person's QR mark (qr.position is its corner)
  *           └── content   the pages
  *
  * `bottom` is a side, like the others; `footer` is a role and stays where a bar has one (`bars.left.footer`).
@@ -20,6 +21,8 @@ export const GUI_WINDOW_ID = `${GUI_ROOT_ID}.window`;
 export const GUI_LAYOUT_ID = `${GUI_WINDOW_ID}.layout`;
 export const GUI_BARS_ID = `${GUI_LAYOUT_ID}.bars`;
 export const GUI_CONTENT_ID = `${GUI_LAYOUT_ID}.content`;
+export const GUI_QR_ID = `${GUI_LAYOUT_ID}.qr`;
+export const GUI_QR_POSITION_ID = `${GUI_QR_ID}.position`;
 
 export type BarSide = 'left' | 'right' | 'top' | 'bottom';
 

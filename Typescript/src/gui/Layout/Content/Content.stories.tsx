@@ -16,6 +16,7 @@ const meta: Meta<typeof Layout> = {
 ## What it does
 - Shows the main page content.
 - Adds padding automatically when bars are present.
+- Keeps a shared page column centered on the window (maxWidth, minWidth and height come from \`GUI.window.layout.content\` in the document), so expanding a rail does not stretch the page edge-to-edge.
 - Works with \`TopBar\`, \`LeftBar\`, \`RightBar\`, and \`Footer\`.
 
 ## What to pass

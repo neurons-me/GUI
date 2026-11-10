@@ -11,7 +11,14 @@ import createCache from '@emotion/cache';
 import { CacheProvider } from '@emotion/react';
 import { ThemeProvider, useTheme, type Theme as MuiTheme } from '@mui/material/styles';
 import Theme from '@/gui/Theme/Theme';
-import { Box, Button, Paper, TextField, Typography } from '@/gui/Atoms';
+import { Box } from '@/gui/Atoms';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
+import CleakerQrMenu, { panelPositionFor } from './CleakerQrMenu';
+import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
+import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
+import { SeedSessionProvider, useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
+import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
+import { barModeFromCleaker, barModeToCleaker, readStoredBarModes, writeBarMode } from '@/gui/Layout/Position/barMode';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
@@ -22,7 +29,6 @@ import { ThemeSettingsContext } from '@/runtime/themeSettings';
 import { NamespaceRoutePanel, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
 import {
-  CLEAKER_BAR_STATES,
   barStates,
   isBarState,
   readBars,
@@ -38,13 +44,12 @@ import {
   cornerLabel,
   defaultProbe,
   isNamespaceName,
+  namespaceEndpoint,
   positionQrValue,
   type CleakerCorner,
 } from './cleakerCorner';
 
-const STORE_CORNER = 'cleaker:corner';
 const STORE_NAMESPACE = 'cleaker:namespace';
-const STORE_BARS = 'cleaker:bars';
 const DRAWN_BARS: readonly CleakerBarId[] = ['top', 'left'];
 const QR_DIAMETER = 76;
 
@@ -73,6 +78,13 @@ export type CleakerGuiOptions = {
    * and offers the namespace's own door, where the route renders in the content area.
    */
   pages?: Record<string, React.ComponentType<CleakerRouteProps>>;
+  /**
+   * Pin the QR status for the bar and the panel together. When set, the mark
+   * does not open a second probe just to colour itself (same as AppShell).
+   */
+  qrStatus?: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
+  /** Handle shown with the QR (same role as AppShell's identityUsername). */
+  username?: string;
 };
 
 export type CleakerGuiHandle = { host: HTMLElement; unmount(): void };
@@ -87,15 +99,69 @@ const QR_STATUS: Record<ProbeState, 'idle' | 'checking' | 'confirmed' | 'off'> =
 /** What a view of a namespace route is given when it opens over a page. */
 export type CleakerRouteProps = NamespaceRouteProps;
 
+function CleakerIdentityMenu({
+  namespace,
+  username,
+  qrStatus,
+  qr,
+  onClose,
+  goRoute,
+}: {
+  namespace: string | null;
+  username?: string;
+  qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
+  qr: React.ComponentProps<typeof MeLoginStatus>['qr'];
+  onClose: () => void;
+  goRoute: (route: string) => void;
+}) {
+  const session = useOptionalSeedSessionContext();
+  const authenticated = Boolean(session?.authenticated);
+  const [qrSignIn, setQrSignIn] = React.useState(false);
+  React.useEffect(() => {
+    if (authenticated) setQrSignIn(false);
+  }, [authenticated]);
+  if (qrSignIn && namespace) {
+    return (
+      <QRConnect
+        compact
+        qrStatus={qrStatus}
+        cleakerEndpoint={namespaceEndpoint(namespace)}
+        username={username}
+        data-gui-node-id="GUI.window.layout.marks.identity.menu"
+      />
+    );
+  }
+  return (
+    <MeLoginStatus
+      nodeId="GUI.window.layout.marks.identity.menu"
+      authenticated={authenticated}
+      qr={qr}
+      identityHash={session?.identityHash}
+      onNavigate={(to) => { onClose(); goRoute(to); }}
+      onLogout={() => { session?.logout(); onClose(); }}
+      onSignIn={() => setQrSignIn(true)}
+    />
+  );
+}
+
+function CornerSession({ namespace, children }: { namespace: string | null; children: React.ReactNode }) {
+  const existing = useOptionalSeedSessionContext();
+  if (existing || !namespace) return <>{children}</>;
+  return (
+    <SeedSessionProvider transportOrigin={namespaceEndpoint(namespace)} sessionBackend="cleaker">
+      {children}
+    </SeedSessionProvider>
+  );
+}
+
 function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: Storage | null }) {
   const page = window.location;
   const pageAddress = page.protocol === 'file:' ? `file://${page.pathname}` : page.origin;
   const probe = options.probe ?? defaultProbe;
 
-  const [corner, setCornerState] = React.useState<CleakerCorner>(() => {
-    const stored = read(storage, STORE_CORNER);
-    return isCorner(stored) ? stored : isCorner(options.corner) ? options.corner : 'bottom-right';
-  });
+  const [corner, setCornerState] = React.useState<CleakerCorner>(() => (
+    readQrMePosition(storage, isCorner(options.corner) ? options.corner : 'bottom-right')
+  ));
   const [namespace, setNamespaceState] = React.useState<string | null>(() => {
     const stored = read(storage, STORE_NAMESPACE);
     if (stored !== null) return isNamespaceName(stored) ? stored : null;
@@ -109,17 +175,21 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   );
   const [chosenBars, setChosenBars] = React.useState<Partial<Record<CleakerBarId, CleakerBarState>>>(() => {
     const out: Partial<Record<CleakerBarId, CleakerBarState>> = {};
-    try {
-      const raw = JSON.parse(read(storage, STORE_BARS) ?? 'null');
-      if (raw && typeof raw === 'object') for (const [k, v] of Object.entries(raw)) if (isBarState(v)) out[k as CleakerBarId] = v;
-    } catch { /* nothing chosen */ }
+    const stored = readStoredBarModes(storage);
+    for (const [k, v] of Object.entries(stored)) out[k as CleakerBarId] = barModeToCleaker(v);
     return out;
   });
   const states = barStates(bars, chosenBars);
   const chooseBar = (id: CleakerBarId, state: CleakerBarState) => {
     const next = { ...chosenBars, [id]: state };
-    write(storage, STORE_BARS, JSON.stringify(next));
+    writeBarMode(id, barModeFromCleaker(state), storage);
     setChosenBars(next);
+  };
+  const cornerBarModes = {
+    top: barModeFromCleaker(states.top ?? chosenBars.top ?? 'closed'),
+    left: barModeFromCleaker(states.left ?? chosenBars.left ?? 'closed'),
+    right: barModeFromCleaker(chosenBars.right ?? 'closed'),
+    bottom: barModeFromCleaker(chosenBars.bottom ?? 'closed'),
   };
   const [probeState, setProbeState] = React.useState<ProbeState>('none');
   // The namespace route open over the page (a modal), if any; its item's label is the modal's title.
@@ -135,14 +205,16 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   const [draft, setDraft] = React.useState('');
   const [message, setMessage] = React.useState('');
 
+  const qrCellRef = React.useRef<HTMLElement>(null);
   React.useEffect(() => {
-    if (!namespace) { setProbeState('none'); return; }
+    if (options.qrStatus) return undefined;
+    if (!namespace) { setProbeState('none'); return undefined; }
     let live = true;
     setProbeState('checking');
     probe(namespace).then((ok) => { if (live) setProbeState(ok ? 'ok' : 'off'); }, () => { if (live) setProbeState('off'); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace]);
+  }, [namespace, options.qrStatus]);
 
   const choose = (raw: string) => {
     const next = raw.trim().toLowerCase();
@@ -151,13 +223,16 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     write(storage, STORE_NAMESPACE, next);   // '' remembers "none"
     setNamespaceState(next || null);
   };
-  const moveTo = (c: CleakerCorner) => { write(storage, STORE_CORNER, c); setCornerState(c); };
+  const moveTo = (c: CleakerCorner) => { writeQrMePosition(c, storage); setCornerState(c); };
 
   const top = corner.startsWith('top');
   const right = corner.endsWith('right');
   const label = cornerLabel(namespace, page);
   const value = namespace ? positionQrValue(namespace, pageAddress) : pageAddress;
   const statusText = probeState === 'ok' ? `${namespace} answered` : probeState === 'off' ? `${namespace} did not answer` : probeState === 'checking' ? `asking ${namespace}…` : undefined;
+  const identityQrStatus = options.qrStatus ?? QR_STATUS[probeState];
+  const identityStatusLabel = options.qrStatus === 'confirmed' ? 'Connected' : statusText;
+  const identityUsername = options.username;
 
   const siteBrand = React.useMemo(() => readBrand(options.document, page.href), [options.document, page.href]);
   const narrow = useNarrowBars();
@@ -168,8 +243,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   const qr = (props: Partial<React.ComponentProps<typeof QRme>>) => (
     <QRme
       value={value}
-      status={QR_STATUS[probeState]}
-      statusLabel={statusText}
+      status={identityQrStatus}
+      statusLabel={identityStatusLabel}
       perimeterLabel={label}
       perimeterRootLabel={namespace ?? undefined}
       clickFlip={false}
@@ -185,6 +260,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   // The badge opens Cleaker's panel; the left bar's own arrow expands and contracts the bar.
   const badge = (where: 'left' | 'top' | 'float') => (
     <BarBrandCell
+      ref={qrCellRef}
       component="button"
       type="button"
       onClick={toggle}
@@ -198,8 +274,9 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     >
       <QrBadge
         value={value}
-        status={QR_STATUS[probeState]}
-        statusLabel={statusText}
+        username={identityUsername}
+        status={identityQrStatus}
+        statusLabel={identityStatusLabel}
         perimeterLabel={label}
         perimeterRootLabel={namespace ?? undefined}
         clickFlip={false}
@@ -217,7 +294,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   // whole position in the top bar as before). Icons only: the marks alone; the whole position is the tooltip and the
   // panel's first line.
   const parts = namespace ? splitPosition(label) : { who: '', where: label };
-  const who = whoLines(parts.who);
+  const who = whoLines(parts.who, identityUsername);
   const marks = marksInBars(
     placement,
     {
@@ -231,47 +308,52 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     { topText: states.top === 'open' && !narrow },
   );
   // The panel opens beside the QR, wherever the QR is.
-  const panelAt: Record<string, string | number> =
-    placement.identity === 'left.brand' ? { top: 8, left: 72 }
-      : placement.identity === 'top.start' ? { top: 52, left: 8 }
-      : placement.identity === 'top.end' ? { top: 52, right: 8 }
-      : placement.identity === 'left.footer' ? { bottom: 8, left: 72 }
-      : { [corner.startsWith('top') ? 'top' : 'bottom']: 64, [corner.endsWith('right') ? 'right' : 'left']: 8 };
+  const panelAt = panelPositionFor(placement.identity, corner);
 
+  const identityQr = {
+    value,
+    username: identityUsername,
+    status: identityQrStatus,
+    statusLabel: identityStatusLabel,
+    perimeterLabel: label,
+    perimeterRootLabel: namespace ?? undefined,
+  };
+  const closePanel = () => setOpen(false);
   const panel = open && (
-    <Paper elevation={6} sx={{ p: 1.5, width: 280, display: 'flex', flexDirection: 'column', gap: 1 }} data-cleaker-panel="">
-      {/* the whole position, selectable: what the marks split */}
-      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, userSelect: 'all', wordBreak: 'break-all' }} data-cleaker-full="">{namespace ? `${namespace} @ ${pageAddress}` : pageAddress}</Typography>
-      <Box component="form" sx={{ display: 'flex', gap: 1 }} onSubmit={(e: React.FormEvent) => { e.preventDefault(); choose(draft); }}>
-        <TextField size="small" fullWidth value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="namespace (e.g. cleaker.me)" inputProps={{ 'aria-label': 'Namespace', spellCheck: false, autoCapitalize: 'off' }} />
-        <Button type="submit" variant="contained" size="small">Use</Button>
+    <ClickAwayListener
+      onClickAway={(event) => {
+        const target = event.target;
+        if (qrCellRef.current && target instanceof Node && qrCellRef.current.contains(target)) return;
+        setOpen(false);
+      }}
+    >
+      <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }} data-cleaker-qr-menu="">
+        <CleakerQrMenu
+          fullPosition={namespace ? `${namespace} @ ${pageAddress}` : pageAddress}
+          statusText={message || identityStatusLabel || label}
+          showNamespaceForm={!namespace}
+          draft={draft}
+          onDraftChange={setDraft}
+          onUseNamespace={choose}
+          corner={corner}
+          onMoveTo={moveTo}
+          onClose={closePanel}
+          layout={{
+            address: label,
+            brand: siteBrand ? { label: siteBrand.label } : undefined,
+          }}
+        >
+          <CleakerIdentityMenu
+            namespace={namespace}
+            username={identityUsername}
+            qrStatus={identityQrStatus}
+            qr={identityQr}
+            onClose={closePanel}
+            goRoute={goRoute}
+          />
+        </CleakerQrMenu>
       </Box>
-      <Typography variant="caption" color="text.secondary" data-cleaker-status="">{message || statusText || label}</Typography>
-      {/* the person's corner: where their QR sits (in a bar when bars show, else the corner itself) */}
-      {(
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.5 }}>
-          {CLEAKER_CORNERS.map((c) => (
-            <Button key={c} size="small" variant={c === corner ? 'contained' : 'outlined'} onClick={() => moveTo(c)} data-corner-choice={c}>
-              {c.replace('-', ' ')}
-            </Button>
-          ))}
-        </Box>
-      )}
-      {bars.length > 0 && (
-        <Box role="group" aria-label="Bars" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pt: 1, borderTop: 1, borderColor: 'divider' }}>
-          {bars.map((bar) => (
-            <Box key={bar.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} data-bar-choice={bar.id}>
-              <Typography variant="caption" sx={{ flex: 1 }}>{bar.label}</Typography>
-              {CLEAKER_BAR_STATES.map((st) => (
-                <Button key={st} size="small" sx={{ minWidth: 0, px: 1 }} variant={states[bar.id] === st ? 'contained' : 'text'} onClick={() => chooseBar(bar.id, st)} data-bar-state={st}>
-                  {st}
-                </Button>
-              ))}
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Paper>
+    </ClickAwayListener>
   );
 
   const layout = (leftBar || topBar) && (
@@ -345,16 +427,19 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
 
   if (leftBar || topBar) {
     return (
+      <CornerSession namespace={namespace}>
       <ThemeSettingsContext.Provider value={openThemeSettings}>
         {layout}
         {routeDialog}
         {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
-        {panel && <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }}>{panel}</Box>}
+        {panel}
       </ThemeSettingsContext.Provider>
+      </CornerSession>
     );
   }
 
   return (
+    <CornerSession namespace={namespace}>
     <>
       {layout}
       <Box
@@ -364,12 +449,13 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           display: 'flex', flexDirection: top ? 'column' : 'column-reverse', alignItems: right ? 'flex-end' : 'flex-start', gap: 1,
         }}
       >
-        <Box onClick={toggle} sx={{ cursor: 'pointer', lineHeight: 0 }} data-cleaker-qr={value}>
+        <Box ref={qrCellRef} onClick={toggle} sx={{ cursor: 'pointer', lineHeight: 0 }} data-cleaker-qr={value}>
           {qr({ diameter: QR_DIAMETER })}
         </Box>
         {panel}
       </Box>
     </>
+    </CornerSession>
   );
 }
 

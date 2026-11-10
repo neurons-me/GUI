@@ -69,7 +69,7 @@ const identityOf = (scope: HTMLElement) => /\b[0-9a-f]{10}\b/.exec(text(scope))?
 async function register(scope: HTMLElement, username: string, password: string) {
   const q = within(scope);
   const user = userEvent.setup();
-  await user.click(await q.findByRole("button", { name: "New here? Register" }, { timeout: 20000 }));
+  await user.click(await q.findByRole("button", { name: "Register" }, { timeout: 20000 }));
   fireEvent.change(await q.findByLabelText("Username"), { target: { value: username } });
   fireEvent.change(q.getByLabelText("Secret"), { target: { value: password } });
   fireEvent.change(q.getByLabelText("Confirm Secret"), { target: { value: password } });
@@ -130,7 +130,7 @@ TwoLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
   expect(qb.queryByRole("button", { name: "Use my identity from another link" })).not.toBeNull();
   // A itself offers it for nothing: the only identity held is already linked here
   await user.click(qa.getByRole("button", { name: /Sign out/i }));
-  await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  await waitFor(() => expect(qa.getByRole("button", { name: "Register" })).toBeInTheDocument(), { timeout: 15000 });
   // with A closed there is nothing held, so B has nothing to use
   await waitFor(() => expect(qb.queryByRole("button", { name: "Use my identity from another link" })).toBeNull(), { timeout: 5000 });
 
@@ -146,13 +146,13 @@ TwoLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
 
   // leaving A leaves B open with the same identity
   await user.click(qa.getByRole("button", { name: /Sign out/i }));
-  await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  await waitFor(() => expect(qa.getByRole("button", { name: "Register" })).toBeInTheDocument(), { timeout: 15000 });
   expect(open(qb)).not.toBeNull();
   expect(identityOf(b)).toBe(inA);
 
   // B signs out and comes back through its own form, by name and secret, as the same identity
   await user.click(qb.getByRole("button", { name: /Sign out/i }));
-  await waitFor(() => expect(qb.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  await waitFor(() => expect(qb.getByRole("button", { name: "Register" })).toBeInTheDocument(), { timeout: 15000 });
   await reopenByPassword(b, username, password);
   expect(identityOf(b)).toBe(inA);
 };
@@ -177,7 +177,7 @@ IndependentLinks.play = async ({ canvasElement }: { canvasElement: HTMLElement }
 
   // leaving A leaves B open, with its identity
   await user.click(qa.getByRole("button", { name: /Sign out/i }));
-  await waitFor(() => expect(qa.getByRole("button", { name: "New here? Register" })).toBeInTheDocument(), { timeout: 15000 });
+  await waitFor(() => expect(qa.getByRole("button", { name: "Register" })).toBeInTheDocument(), { timeout: 15000 });
   expect(open(qb)).not.toBeNull();
   expect(identityOf(b)).toBe(inB);
 
