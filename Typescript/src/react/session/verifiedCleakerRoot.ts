@@ -14,6 +14,11 @@ export type CleakerRootSeed = {
    * against the answer, not assumed from the name.
    */
   expectNamespace?: string;
+  /**
+   * How the probes reach the transport. Production passes nothing (the browser's fetch); a story or a test gives
+   * its own door (ConnectionSeams), and then the root is checked against THAT door, not the real network.
+   */
+  fetchImpl?: typeof fetch;
 };
 export type CleakerRootStatus = 'checking' | 'confirmed' | 'error';
 
@@ -187,7 +192,7 @@ export type CleakerRootProbeResult = { ok: boolean; via: 'direct' | 'netget' | n
  */
 export async function probeCleakerRoot(
   cleakerEndpoint: string,
-  options: { expectNamespace?: string } = {},
+  options: { expectNamespace?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<CleakerRootProbeResult> {
   // When a namespace is expected, a transport that answers for a different one is not this root's transport.
   const answersFor = (check: CleakerRootCheck) => !options.expectNamespace || namespaceIsServed(check.namespace, options.expectNamespace);
@@ -195,13 +200,14 @@ export async function probeCleakerRoot(
   // honors it answers for that namespace through any door; one that does not answers for the door's, and is
   // not confirmed above.
   const expected = options.expectNamespace;
+  const base = options.fetchImpl;
   const fetchImpl = expected
     ? ((input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url);
         const named = url.replace(/(\/__surface)(\?.*)?$/, `$1?namespace=${encodeURIComponent(expected)}`);
-        return fetch(named, init);
+        return (base ?? fetch)(named, init);
       }) as typeof fetch
-    : undefined;
+    : base;
   const direct = await probeMonadSurface({ endpoint: cleakerEndpoint, sources: ['manual'], timeoutMs: 4000, fetchImpl });
   if (direct.monad) {
     const check = await checkMonadSurfaceClaim(direct.endpoint.surface?.raw);
@@ -239,9 +245,9 @@ export type NetgetGatewayCheck = { available: boolean; gatewayId: string | null 
  * never assumed as a rule. A 200 with the wrong content-type or a missing
  * gatewayId is treated the same as unreachable, not "close enough."
  */
-export async function probeNetgetGateway(cleakerEndpoint: string): Promise<NetgetGatewayCheck> {
+export async function probeNetgetGateway(cleakerEndpoint: string, fetchImpl?: typeof fetch): Promise<NetgetGatewayCheck> {
   try {
-    const res = await fetch(`${cleakerEndpoint.replace(/\/+$/, '')}/gateway-identity`, {
+    const res = await (fetchImpl ?? fetch)(`${cleakerEndpoint.replace(/\/+$/, '')}/gateway-identity`, {
       cache: 'no-store',
       credentials: 'same-origin',
       signal: AbortSignal.timeout(4000),
@@ -287,8 +293,8 @@ export async function verifyCleakerRootGeneration(
 ): Promise<GenerationCheckedResult> {
   const generation = ++guard.current;
   const [result, netgetCheck] = await Promise.all([
-    probeCleakerRoot(seed.cleakerEndpoint, { expectNamespace: seed.expectNamespace }),
-    probeNetgetGateway(seed.cleakerEndpoint),
+    probeCleakerRoot(seed.cleakerEndpoint, { expectNamespace: seed.expectNamespace, fetchImpl: seed.fetchImpl }),
+    probeNetgetGateway(seed.cleakerEndpoint, seed.fetchImpl),
   ]);
   return { stale: guard.current !== generation, result, netget: netgetCheck };
 }
@@ -314,7 +320,11 @@ export function bindingFactsAfter(
   prev: RootBindingFacts,
   attempt: { label: string; ok: boolean; answeredNamespace: string | null },
 ): RootBindingFacts {
-  if (attempt.ok) return { confirmedLabel: attempt.label, answeredNamespace: attempt.answeredNamespace, lastAttemptFailed: false };
+  // What was confirmed is the namespace the transport ANSWERED for, not the label the check was addressed with: that
+  // label may be the page's address (`localhost`, `fulltrailer.com.mx`), and the monad there says which namespace it
+  // is. Keeping the address would leave the answered namespace "outside" its own confirmation and never collapse
+  // `namespace @ surface` at the very origin that answered. Without an answer, the label is all there is.
+  if (attempt.ok) return { confirmedLabel: attempt.answeredNamespace || attempt.label, answeredNamespace: attempt.answeredNamespace, lastAttemptFailed: false };
   return { ...prev, lastAttemptFailed: true };
 }
 
@@ -379,6 +389,29 @@ export type VerifiedCleakerRoot = {
  * handle an unreachable/empty root gracefully, so this never blocks
  * rendering.
  */
+/**
+ * A re-check that asks the SAME transport about a namespace it already confirmed (the page's own door, after the
+ * channel resolved that namespace locally) is not a new question: the binding it had stays while the answer comes, and
+ * only a failed answer drops it (lastAttemptFailed). Without this, every such re-check passes through 'checking' and
+ * `namespace` flickers to `namespace @ surface` for as long as the request takes. A different transport, or a namespace
+ * outside the confirmed one, is a new question and goes through 'checking' as before.
+ */
+export function keepsBindingDuringRecheck(
+  current: { status: CleakerRootStatus | string; cleakerEndpoint: string; facts: RootBindingFacts },
+  seed: { label: string; cleakerEndpoint: string },
+): boolean {
+  if (current.status !== 'confirmed' || current.facts.lastAttemptFailed) return false;
+  const confirmed = String(current.facts.confirmedLabel || '').trim().toLowerCase();
+  const label = String(seed.label || '').trim().toLowerCase();
+  if (!confirmed || !label) return false;
+  if (label !== confirmed && !label.endsWith(`.${confirmed}`)) return false;
+  return originOfEndpoint(current.cleakerEndpoint) === originOfEndpoint(seed.cleakerEndpoint) && !!originOfEndpoint(seed.cleakerEndpoint);
+}
+
+function originOfEndpoint(url: string): string {
+  try { return new URL(String(url || '').trim()).origin.toLowerCase(); } catch { return ''; }
+}
+
 export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleakerRoot {
   const [status, setStatus] = React.useState<CleakerRootStatus>('checking');
   const [transportOrigin, setTransportOrigin] = React.useState(`${initial.cleakerEndpoint}/apps/netget`);
@@ -389,9 +422,14 @@ export function useVerifiedCleakerRoot(initial: CleakerRootSeed): VerifiedCleake
   const [bindingFacts, setBindingFacts] = React.useState<RootBindingFacts>(NO_ROOT_BINDING);
   const guardRef = React.useRef<GenerationGuard>({ current: 0 });
   const everConfirmedRef = React.useRef(false);
+  // what verify() compares a re-check against (it is created once, so it reads the latest values through a ref)
+  const currentRef = React.useRef({ status, cleakerEndpoint, facts: bindingFacts });
+  currentRef.current = { status, cleakerEndpoint, facts: bindingFacts };
 
-  const verify = React.useCallback((seed: CleakerRootSeed) => {
-    setStatus('checking');
+  const verify = React.useCallback((given: CleakerRootSeed) => {
+    if (!keepsBindingDuringRecheck(currentRef.current, given)) setStatus('checking');
+    // a later promote() checks through the same door the first check used (a story's or test's own fetch)
+    const seed = given.fetchImpl || !initial.fetchImpl ? given : { ...given, fetchImpl: initial.fetchImpl };
     verifyCleakerRootGeneration(seed, guardRef.current).then(({ stale, result, netget: netgetCheck }) => {
       if (stale) return; // superseded by a newer promote() -- discard
       if (result.ok) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace, cardNamespace } from '../src/react/positionExpression';
-import { bindingFactsAfter, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
+import { bindingFactsAfter, keepsBindingDuringRecheck, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
 import { parseNRPExpression } from '../src/gui/All.This/NRP/Beatle/NRPExpression';
 
 const confirmed = (cleakerEndpoint: string, answeredNamespace: string | null, extra: object = {}) => ({ status: 'confirmed', cleakerEndpoint, answeredNamespace, ...extra });
@@ -126,6 +126,25 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   // a confirmation of ANOTHER label does not cover a namespace outside it, even if the names look related
   const other = bindingFactsAfter(NO_ROOT_BINDING, { label: 'acme.test', ok: true, answeredNamespace: 'acme.test' });
   assert.equal(isBoundToPage({ namespace: 'cleaker.me', pageOrigin: 'https://acme.test', root: { status: 'confirmed', cleakerEndpoint: 'https://acme.test', answeredNamespace: 'acme.test', confirmedLabel: other.confirmedLabel, lastAttemptFailed: false } }), false);
+  // the check was ADDRESSED to the page's own host (the label is the address), and the monad there answered which
+  // namespace it is: that namespace is what was confirmed, so at that origin it collapses (the live path, through
+  // bindingFactsAfter, not only a hand-built root)
+  const atDoor = bindingFactsAfter(NO_ROOT_BINDING, { label: 'localhost', ok: true, answeredNamespace: 'namespace' });
+  const doorRoot = { status: 'confirmed', cleakerEndpoint: 'http://localhost:6006', ...atDoor };
+  const atPage = positionExpression({ namespace: 'namespace', page: page('http://localhost:6006/'), root: doorRoot });
+  assert.equal(atPage.bound, true);
+  assert.equal(atPage.compact, 'namespace');
+  // the same confirmation does not cover a namespace the monad did not answer for
+  assert.equal(isBoundToPage({ namespace: 'cleaker.me', pageOrigin: 'http://localhost:6006', root: doorRoot }), false);
+  // re-checking that namespace at that same door keeps the binding while it waits (no `namespace @ surface` flicker);
+  // another door, another namespace, a failed or unconfirmed state: a new question, it goes through 'checking'
+  const cur = { status: 'confirmed', cleakerEndpoint: 'http://localhost:6006', facts: atDoor };
+  assert.equal(keepsBindingDuringRecheck(cur, { label: 'namespace', cleakerEndpoint: 'http://localhost:6006' }), true);
+  assert.equal(keepsBindingDuringRecheck(cur, { label: 'ana.namespace', cleakerEndpoint: 'http://localhost:6006/' }), true, 'a handle under it, same origin');
+  assert.equal(keepsBindingDuringRecheck(cur, { label: 'namespace', cleakerEndpoint: 'https://namespace' }), false, 'another transport');
+  assert.equal(keepsBindingDuringRecheck(cur, { label: 'cleaker.me', cleakerEndpoint: 'http://localhost:6006' }), false, 'another namespace');
+  assert.equal(keepsBindingDuringRecheck({ ...cur, status: 'checking' }, { label: 'namespace', cleakerEndpoint: 'http://localhost:6006' }), false);
+  assert.equal(keepsBindingDuringRecheck({ ...cur, facts: { ...atDoor, lastAttemptFailed: true } }, { label: 'namespace', cleakerEndpoint: 'http://localhost:6006' }), false);
 }
 
 
