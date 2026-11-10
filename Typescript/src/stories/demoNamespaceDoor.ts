@@ -2,6 +2,7 @@
 // (case 1). It answers its own /gateway-identity, /__surface, claim and sign-in
 // so login stays here instead of being sent to cleaker.me, which refuses this origin.
 import type { ConnectionSeams } from '@/gui/All.This/Cleaker/useQRConnect';
+import { mockChannel } from '@/gui/All.This/Cleaker/storyMocks';
 
 const STORE = 'gui:demo-namespace:claims';
 
@@ -50,7 +51,9 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-const DEMO_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+// The namespace this door answers for. Named `namespace` on purpose: the story shows the rule (the page IS the
+// namespace), not a particular host; the page's address (localhost:6006) is only the surface it is served from.
+export const DEMO_NAMESPACE = 'namespace';
 
 export const demoNamespaceFetch: typeof fetch = async (input, init) => {
   const url = urlOf(input);
@@ -63,9 +66,9 @@ export const demoNamespaceFetch: typeof fetch = async (input, init) => {
   if (/\/__surface(\?|$)/.test(url)) {
     return json({
       monadId: 'gui-demo',
-      namespace: DEMO_HOST,
+      namespace: DEMO_NAMESPACE,
       surfaceEntry: { monadId: 'gui-demo', resources: ['claims'] },
-      target: { namespace: { me: DEMO_HOST } },
+      target: { namespace: { me: DEMO_NAMESPACE } },
     });
   }
 
@@ -113,4 +116,11 @@ export const demoNamespaceFetch: typeof fetch = async (input, init) => {
   return fetch(input, init);
 };
 
-export const demoNamespaceSeams: ConnectionSeams = { fetchImpl: demoNamespaceFetch };
+// The channel too: this page's own door answers it (the namespace is here); any other host does not exist in the demo.
+// Without it the QR opens a real WebSocket to Storybook, which has no /nrp, and the root reads as an error.
+const PAGE_HOSTS = [DEMO_NAMESPACE, ...(typeof window !== 'undefined' ? [window.location.host, window.location.hostname] : ['localhost'])];
+
+export const demoNamespaceSeams: ConnectionSeams = {
+  fetchImpl: demoNamespaceFetch,
+  useChannel: mockChannel((host) => (PAGE_HOSTS.includes(host) ? 'connect' : 'error'), 300),
+};

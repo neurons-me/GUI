@@ -5,7 +5,7 @@ import { SeedSessionProvider } from "@/react/session/SeedSessionProvider";
 import Namespace from "@/react/session/Namespace";
 import { setActiveNamespaceRoot } from "@/gui/All.This/Cleaker/signedRequest";
 import { ConnectionSeamsContext } from "@/gui/All.This/Cleaker/useQRConnect";
-import { demoNamespaceFetch, demoNamespaceSeams } from "./demoNamespaceDoor";
+import { DEMO_NAMESPACE, demoNamespaceFetch, demoNamespaceSeams } from "./demoNamespaceDoor";
 import { mountCleakerGui } from '@/gui/All.This/Cleaker/Corner/CleakerCornerGui';
 import type { CleakerCorner } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 import { flattenGuiDocument, GUI_DOCUMENT } from '@/runtime/guiDocument';
@@ -27,18 +27,23 @@ import { BarBrandCell, MARK_CORNERS, QrBadge, SiteBrand, type MarkCorner } from 
 // duplicates none of that logic, it just gives the root document a front
 // door in the nav that matches its real role.
 //
-// This Storybook page IS the namespace (case 1): the host is the name, login stays here.
-// Asking cleaker.me from localhost:6006 is refused ("did not accept this sign-in from here").
-// The demo door answers as this host so the form is offered and claim/sign-in are accepted locally.
+// SIMULATION of case 1 (the page IS the namespace). Storybook is always localhost:6006 and serves no namespace, so a
+// demo door (demoNamespaceDoor.ts) stands in for a real one: at this page's own origin it answers /__surface as the
+// namespace `namespace`, /gateway-identity, claim/sign-in, and the /nrp channel. By the rule, a page IS a namespace when
+// its own origin answers for it (not when the name matches the host), so the shell collapses to `namespace` -- the real
+// rule, with a fake door. The real thing is a page served by the namespace's own door (cleaker.me/, or localhost/ with
+// a local monad); what such a door must answer, and how to verify it, is in packages/GUI/docs/Namespace.md.
+//
+// namespaceSource="address": the host (localhost) is NOT declared as the namespace; until the door answers, the shell
+// says it is resolving instead of naming the host.
 const PAGE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
-const PAGE_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-setActiveNamespaceRoot(PAGE_HOST);
+setActiveNamespaceRoot(DEMO_NAMESPACE);
 
 const Root = () => (
   <Theme>
     <ConnectionSeamsContext.Provider value={demoNamespaceSeams}>
       <SeedSessionProvider transportOrigin={PAGE_ORIGIN} sessionBackend="cleaker" fetchImpl={demoNamespaceFetch}>
-        <Namespace namespaceSource="declared" cleakerEndpoint={PAGE_ORIGIN} netgetMonadOrigin={PAGE_ORIGIN} />
+        <Namespace namespaceSource="address" cleakerEndpoint={PAGE_ORIGIN} netgetMonadOrigin={PAGE_ORIGIN} />
       </SeedSessionProvider>
     </ConnectionSeamsContext.Provider>
   </Theme>
@@ -58,8 +63,15 @@ export default meta;
 //   2 · a site that uses .GUI (AppShell)     -> SiteWithGui (the app's views + the namespace's routes over them)
 //   3 · a site without .GUI (any page)       -> CleakerOnAnyPage (Cleaker's bars + the namespace's routes over the page)
 export const Default: StoryObj<typeof meta> = {
-  name: '1 · Namespace only',
+  name: '1 · Namespace only (simulated door)',
   render: () => <Root />,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Simulated: a demo door at this page\'s own origin answers as the namespace `namespace`. The real case is a page served by the namespace\'s own door; see packages/GUI/docs/Namespace.md.',
+      },
+    },
+  },
 };
 
 // ── 2 · Namespace + a site with .GUI ─────────────────────────────────────────────────────────────────────────────────

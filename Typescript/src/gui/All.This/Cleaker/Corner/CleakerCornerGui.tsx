@@ -404,7 +404,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
           // beside the mark in the bar's head: its text (who, or @where); with neither mark there, the whole position
-          header: marks.leftHeader ?? (siteBrand ? undefined : <LeftBarPosition title={label} data-cleaker-position="">{label}</LeftBarPosition>),
+          header: marks.leftHeader ?? (siteBrand ? undefined : <LeftBarPosition besideMark={!!marks.leftBrand} title={label} data-cleaker-position="">{label}</LeftBarPosition>),
           elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { ...itemProps(it), 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >

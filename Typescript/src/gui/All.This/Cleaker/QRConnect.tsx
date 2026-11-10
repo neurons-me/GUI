@@ -174,6 +174,13 @@ function AfterSignInNext({
   return null;
 }
 
+/** The identity's icon row, navigating with the router. Only rendered inside one (see `inRouter`): outside a router
+ * (the QR menu on a page without routes) the routes it opens do not exist there. */
+function RoutedIdentityIconRow({ nodeId }: { nodeId: string }) {
+  const navigate = useNavigate();
+  return <IdentityIconRow nodeId={nodeId} onNavigate={navigate} />;
+}
+
 export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   /** Another host answered for the selected namespace: the shell shows it as selected (useQRConnect's onRemoteResolved). */
@@ -687,7 +694,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
         <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
           {/* Card-mode root of this username's tree: keys, wallet, profile, contacts.
               Service icons live on the keys screen; expanded .GUI puts more icons in the sidebars. */}
-          <IdentityIconRow nodeId={nodeId} onNavigate={navigate} />
+          {inRouter ? <RoutedIdentityIconRow nodeId={nodeId} /> : null}
           <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id={`${nodeId}.identityHash`}>
             {label}
           </Typography>

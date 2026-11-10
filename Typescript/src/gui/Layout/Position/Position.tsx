@@ -67,10 +67,12 @@ const TOP_POSITION_SX: SxProps<Theme> = {
   textDecoration: 'none',
 };
 
-// The mark stays centered in the rail-width cell; the label hangs over that cell's empty side so it sits a few
-// pixels from the mark (the username beside the QR, @where beside the brand) instead of from the cell edge.
+// The mark stays centered in the rail-width cell; the label hangs over that cell's empty side so it sits a short,
+// fixed gap from the mark (the username beside the QR, @where beside the brand) instead of from the cell edge.
+// The gap was 1px and read as glued to the QR.
+const BESIDE_MARK_GAP_PX = 8;
 const BESIDE_RAIL_MARK_SX = {
-  ml: `calc((var(--gui-rail-width, 72px) - ${RAIL_BADGE_SIZE}px) / -2 + 1px)`,
+  ml: `calc((var(--gui-rail-width, 72px) - ${RAIL_BADGE_SIZE}px) / -2 + ${BESIDE_MARK_GAP_PX}px)`,
   position: 'relative' as const,
   zIndex: 1,
   minWidth: 0,
@@ -97,9 +99,15 @@ export function TopBarPosition({ sx, ...rest }: PositionProps) {
   return <Box data-gui-node-id="GUI.window.layout.bars.top.namespace" {...rest} sx={withSx(TOP_POSITION_SX, sx)} />;
 }
 
-/** The position in the left bar's header, beside the brand, while the bar is expanded (wraps instead of cutting). */
-export function LeftBarPosition({ sx, ...rest }: PositionProps) {
-  return <Box data-gui-node-id="GUI.window.layout.bars.left.position" {...rest} sx={withSx(LEFT_POSITION_SX, sx)} />;
+/**
+ * The position in the left bar's header, beside the brand, while the bar is expanded (wraps instead of cutting).
+ * `besideMark`: a mark (the QR, a brand) occupies the bar's corner cell, so the label hangs over that cell's empty side
+ * to sit next to it. With the cell empty (the QR moved to another corner) there is nothing to sit next to, and the
+ * same pull would push the label past the bar's edge (`ocalhost`): it starts at the header's own padding instead.
+ */
+export function LeftBarPosition({ sx, besideMark = true, ...rest }: PositionProps & { besideMark?: boolean }) {
+  const face = besideMark ? LEFT_POSITION_SX : { ...(LEFT_POSITION_SX as object), ml: 0 } as SxProps<Theme>;
+  return <Box data-gui-node-id="GUI.window.layout.bars.left.position" {...rest} sx={withSx(face, sx)} />;
 }
 
 /** The top bar's left element for a position: shown only while the left bar is not expanded. */

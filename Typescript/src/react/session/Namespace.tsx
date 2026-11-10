@@ -1411,6 +1411,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // a user-facing switcher; Beatle above the credentials form already
   // owns "let the user explore/switch what's on screen." See
   // verifiedCleakerRoot.ts for what "verified" actually checks).
+  // A story or a test may give the reading its own fetch (ConnectionSeams); production passes nothing.
+  const connectionSeams = React.useContext(ConnectionSeamsContext);
   const rootSeed = useMemo<CleakerRootSeed>(() => {
     // The namespace (`namespaceRootLabel`) is a name; where its reads go is chosen separately. netget's
     // App.jsx passes cleakerEndpoint="http://local.cleaker" literally, regardless of the scheme the
@@ -1420,11 +1422,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     // this page's own origin -- never a https://<ns> built from the name, which from another door is a
     // different origin the gateway refuses -- and at a door other than the namespace's own host the choice
     // is checked against what the transport answers (see pickRootTransport / expectNamespace).
-    return pickRootTransport({
+    const picked = pickRootTransport({
       label: namespaceRootLabel,
       resolvedEndpoint,
       page: typeof window !== 'undefined' ? { origin: window.location.origin, hostname: window.location.hostname } : null,
     });
+    return connectionSeams.fetchImpl ? { ...picked, fetchImpl: connectionSeams.fetchImpl } : picked;
     // Intentionally NOT re-created when resolvedEndpoint/namespaceRootLabel
     // change across renders -- a one-time seed, not a live binding.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1434,8 +1437,6 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // What is behind this door, layer by layer. Distinct from verifiedRoot: that one answers "is the root confirmed",
   // this one answers WHICH layer (nginx / backend / monad) is missing when it is not, and tells "nothing there"
   // (off, grey) from "something answered and refused" (error, red) by who produced the response.
-  // A story or a test may give the reading its own fetch (ConnectionSeams); production passes nothing.
-  const connectionSeams = React.useContext(ConnectionSeamsContext);
   const doorLayers = useDoorLayers({
     origin: typeof window !== 'undefined' ? window.location.origin : '',
     monadTransport: verifiedRoot.transportOrigin,
@@ -1618,7 +1619,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   React.useEffect(() => {
     if (!pageOrigin) return undefined;
     let alive = true;
-    probeNetgetGateway(pageOrigin).then((check) => { if (alive) setOwnGateway(check); });
+    probeNetgetGateway(pageOrigin, connectionSeams.fetchImpl).then((check) => { if (alive) setOwnGateway(check); });
     return () => { alive = false; };
   }, [pageOrigin]);
   const netgetForView = ownGateway?.available
@@ -1683,8 +1684,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // drifting from whatever Beatle's own resolution shows in the QR.
   const handleBeatleNamespaceResolved = useCallback((namespace: string) => {
     setSelectedNamespace(namespace);
-    verifiedRoot.promote({ label: namespace, cleakerEndpoint: cleakerEndpointForNamespace(namespace, rootSeed) });
-  }, [verifiedRoot.promote, rootSeed]);
+    // A LOCAL resolution: if the transport this page already confirmed answered for this namespace (or one it is
+    // under), that transport is where it is read -- never an https://<name> built from the name, which from this page
+    // is another origin (and the reason `namespace @ surface` would stop collapsing at the very door that answered).
+    const answered = verifiedRoot.status === 'confirmed' && !verifiedRoot.lastAttemptFailed ? verifiedRoot.answeredNamespace : null;
+    const servedHere = !!answered && (namespace === answered || namespace.endsWith(`.${answered}`));
+    verifiedRoot.promote({
+      label: namespace,
+      cleakerEndpoint: servedHere ? verifiedRoot.cleakerEndpoint : cleakerEndpointForNamespace(namespace, rootSeed),
+    });
+  }, [verifiedRoot.promote, verifiedRoot.status, verifiedRoot.lastAttemptFailed, verifiedRoot.answeredNamespace, verifiedRoot.cleakerEndpoint, rootSeed]);
   // Another host answered for the namespace the card selected: the badge and the corner QR name it too, so the shell
   // shows ONE selected namespace. The page's own shared root is not promoted to it (only this page's gateway answers for
   // that), unlike a local resolution above.
@@ -1944,6 +1953,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           // one, where you are written out, and the way to the identity page.
           header: props.brand ? marks.leftHeader : (
             <LeftBarPosition
+              besideMark={!!marks.leftBrand}
               component={Link}
               to={IDENTITY_ROUTE}
               title={positionExpressionFull}

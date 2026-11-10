@@ -293,7 +293,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
         brand: marks.leftBrand,
         // Shown while the bar is open: where you are, written out (the top bar shows it only while the bar is closed).
         // the text of the mark in the bar's head (who, or @where); without the person's mark, the whole position as before
-        header: identity ? marks.leftHeader : position ? <LeftBarPosition title={position}>{position}</LeftBarPosition> : undefined,
+        header: identity ? marks.leftHeader : position ? <LeftBarPosition besideMark={!!marks.leftBrand} title={position}>{position}</LeftBarPosition> : undefined,
         elements,
         footerElements: [
           // tooltip: false — each of these already opens its own hover
