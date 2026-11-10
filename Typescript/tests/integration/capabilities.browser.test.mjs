@@ -94,7 +94,7 @@ async function open(browser, harness, monads, { ns = 'a.test', transport = 'http
 }
 
 async function signIn(page, username, secret) {
-  await page.fill('input[type=text]:not([placeholder])', username);
+  await page.fill('input[aria-label="Username"]', username);
   await page.fill('input[type=password]', secret);
   await page.click('button:has-text(".me"):not([disabled])', { timeout: 3000 });
 }

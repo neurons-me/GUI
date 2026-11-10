@@ -66,7 +66,7 @@ async function open(browser, harness, monads, { ns = 'a.test', transport = 'http
 }
 
 const fillCredentials = async (page, username, secret) => {
-  await page.fill('input[type=text]:not([placeholder])', username);
+  await page.fill('input[aria-label="Username"]', username);
   await page.fill('input[type=password]', secret);
 };
 const canSubmit = (page) => page.locator('button:has-text(".me"):not([disabled])').count().then((n) => n > 0);
@@ -264,9 +264,12 @@ async function main() {
       await page.waitForTimeout(250);
       const c1 = await corner();
       check('6.2 pointing at it does not change its face', !!c0 && !!c1 && c0.face === c1.face && /Show avatar/.test(c1.face || ''), `face before/after: ${c0 && c0.face} / ${c1 && c1.face}`);
-      await page.focus(BRAND);
-      const outline = await page.evaluate((brandSelector) => getComputedStyle(document.querySelector(brandSelector)).outlineStyle, BRAND);
-      check('6.3 keyboard focus on the brand is visible', outline !== 'none', `outline: ${outline}`);
+      // on the namespace's own landing the QR IS the page: the corner QR is not a control there (nothing to focus or press)
+      const atLanding = await page.evaluate((brandSelector) => {
+        const el = document.querySelector(brandSelector);
+        return { tag: el && el.tagName, focusable: !!el && (el.tabIndex >= 0), path: window.location.pathname };
+      }, BRAND);
+      check('6.3 on the landing the corner QR is not a control', atLanding.tag !== 'BUTTON' && atLanding.tag !== 'A' && !atLanding.focusable, JSON.stringify(atLanding));
 
       // three facts, kept apart
       check('6.4 service answered, no session, authority not verified are stated separately',
@@ -315,10 +318,21 @@ async function main() {
       await page.waitForTimeout(300);
       const afterArrow = await page.evaluate(() => ({ state: document.querySelector('button[aria-label="Collapse sidebar"]')?.getAttribute('aria-label') || null, path: window.location.pathname }));
       check('6.10 the arrow expands the bar and does not navigate', pathBeforeArrow === '/users' && afterArrow.state === 'Collapse sidebar' && afterArrow.path === '/users', `${afterArrow.state}, path ${pathBeforeArrow} -> ${afterArrow.path}`);
+      // away from the landing the corner QR is a control: keyboard focus on it is visible (a key first, so the browser
+      // treats the focus as a keyboard user's -- :focus-visible is not shown right after a mouse click)
+      await page.keyboard.press('Shift');
+      await page.focus(BRAND);
+      const outline = await page.evaluate((brandSelector) => getComputedStyle(document.querySelector(brandSelector)).outlineStyle, BRAND);
+      check('6.3b away from the landing, keyboard focus on the brand is visible', outline !== 'none', `outline: ${outline}`);
       await page.click(BRAND);
       await page.waitForTimeout(500);
-      const afterBrand = await page.evaluate(() => ({ state: document.querySelector('button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"]')?.getAttribute('aria-label') || null, path: window.location.pathname }));
-      check('6.11 the brand goes to the identity page and does not change the bar', afterBrand.path === '/.me' && afterBrand.state === 'Collapse sidebar', `${afterBrand.state}, path /users -> ${afterBrand.path}`);
+      const afterBrand = await page.evaluate((brandSelector) => ({
+        state: document.querySelector('button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"]')?.getAttribute('aria-label') || null,
+        path: window.location.pathname,
+        expanded: document.querySelector(brandSelector)?.getAttribute('aria-expanded') || null,
+        dialog: !!document.querySelector('[role="dialog"]'),
+      }), BRAND);
+      check('6.11 the brand opens the corner menu, does not navigate and does not change the bar', afterBrand.dialog && afterBrand.expanded === 'true' && afterBrand.path === '/users' && afterBrand.state === 'Collapse sidebar', JSON.stringify(afterBrand));
       check('6.8 nothing drawn claims verified authority', !/authority verified|Authority: verified/i.test(c2.title.replace(/Authority not verified/, '')) && /Authority not verified/.test(c2.title));
       await context.close();
     }
@@ -432,10 +446,10 @@ async function main() {
         await m.saveLocalIdentityVault('saved.a.test:8080', new Uint8Array(32).fill(0x77), 'a-long-secret-1');   // a legacy key
       }, { vaultModule });
       a.reset();
-      await page.fill('input[type=text]:not([placeholder])', 'nobody');
+      await page.fill('input[aria-label="Username"]', 'nobody');
       const none = await page.locator('[data-gui-node-id$=".mechanism"]').first().innerText().catch(() => '');
       check('10.1 no saved key: it says the derived identity will be used, before signing', /derived from your name and secret/.test(none), none);
-      await page.fill('input[type=text]:not([placeholder])', 'saved');
+      await page.fill('input[aria-label="Username"]', 'saved');
       const saved = await page.locator('[data-gui-node-id$=".mechanism"]').first().innerText().catch(() => '');
       check('10.2 a saved key (even under a legacy spelling): it says that one will be used', /saved key for this name/.test(saved) && !/derived/.test(saved), saved);
       check('10.3 saying it sent nothing', a.count(/POST \/claims\/signIn/) === 0);
