@@ -80,7 +80,6 @@ const BESIDE_RAIL_MARK_SX = {
 
 const LEFT_POSITION_SX: SxProps<Theme> = {
   display: 'block',
-  minWidth: 0,
   ...BESIDE_RAIL_MARK_SX,
   fontFamily: 'monospace',
   fontSize: '0.74rem',
