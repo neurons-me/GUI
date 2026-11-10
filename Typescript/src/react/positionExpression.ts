@@ -185,6 +185,25 @@ export function unresolvedPosition(page: { host: string; protocol: string; pathn
   return where || '?';
 }
 
+/**
+ * What is DRAWN for the position while the page's own door has not answered yet. A namespace known only from the
+ * declaration (the guess) is not yet checked against this origin, so composing it would draw `cleaker.me @ cleaker.me`
+ * on the namespace's own door for the moment it takes to answer, and then `cleaker.me`. Until something answered (an
+ * identity, a selected link that connected, or the root's own answer), and while the root is still being checked, only
+ * the surface is drawn: the same text the bound form will have on the namespace's own door, so nothing jumps. A root
+ * that failed or is off keeps the composed form (`x @ x` in red/grey says the door did not answer for it).
+ */
+export function drawnPosition(input: {
+  compact: string;
+  unresolved: string;
+  /** shownNamespace(...) with guessIsProvisional: true -- '' when only the guess names the namespace */
+  answered: string;
+  rootStatus: string;
+}): string {
+  const pending = input.rootStatus === 'checking' || input.rootStatus === 'idle';
+  return !input.answered && pending ? input.unresolved : input.compact;
+}
+
 /** The compact label (what is drawn). */
 export function positionLabel(input: Parameters<typeof positionExpression>[0]): string {
   return positionExpression(input).compact;

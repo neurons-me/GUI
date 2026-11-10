@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace, cardNamespace } from '../src/react/positionExpression';
+import { drawnPosition, isBoundToPage, positionExpression, positionLabel, originOf, shownNamespace, cardNamespace } from '../src/react/positionExpression';
 import { bindingFactsAfter, keepsBindingDuringRecheck, NO_ROOT_BINDING } from '../src/react/session/verifiedCleakerRoot';
 import { parseNRPExpression } from '../src/gui/All.This/NRP/Beatle/NRPExpression';
 
@@ -237,3 +237,17 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
 }
 
 console.log('positionExpression: ok');
+
+
+// ── what is DRAWN before the door answers: the surface, never `x @ x` on the namespace's own door ─────────────────────
+{
+  const c = { compact: 'cleaker.me @ cleaker.me', unresolved: 'cleaker.me' };
+  assert.equal(drawnPosition({ ...c, answered: '', rootStatus: 'checking' }), 'cleaker.me', 'declared only, still checking: the surface');
+  assert.equal(drawnPosition({ ...c, answered: '', rootStatus: 'idle' }), 'cleaker.me');
+  assert.equal(drawnPosition({ compact: 'cleaker.me', unresolved: 'cleaker.me', answered: 'cleaker.me', rootStatus: 'confirmed' }), 'cleaker.me');
+  // the door failed or is off: the composed form stays (it says the door did not answer for it)
+  assert.equal(drawnPosition({ ...c, answered: '', rootStatus: 'error' }), 'cleaker.me @ cleaker.me');
+  assert.equal(drawnPosition({ ...c, answered: '', rootStatus: 'off' }), 'cleaker.me @ cleaker.me');
+  // something already named it (an identity, a link that connected): the composed form, even while re-checking
+  assert.equal(drawnPosition({ compact: 'ana.cleaker.me @ localhost:6006', unresolved: 'localhost:6006', answered: 'ana.cleaker.me', rootStatus: 'checking' }), 'ana.cleaker.me @ localhost:6006');
+}

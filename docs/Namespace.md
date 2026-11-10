@@ -47,7 +47,7 @@ What is drawn:
 
 | State | Drawn |
 | --- | --- |
-| nothing has answered yet | the surface only (`localhost:6006`), or "resolving…" — a namespace is not guessed from the address (`namespaceSource="address"`) |
+| nothing has answered yet | the surface only (`localhost:6006`, `cleaker.me`) — also when the namespace is declared: it is not drawn as `x @ x` before the door answers (`drawnPosition`); with `namespaceSource="address"` the namespace is not even guessed |
 | answered, bound | `namespace` |
 | answered, not bound (read through another origin) | `namespace @ surface` |
 | the latest attempt failed | `namespace @ surface` (an older confirmation is kept for the rest of the app, but it does not abbreviate) |
@@ -99,10 +99,10 @@ Then open `https://cleaker.me/` in a browser:
 - the full form (`data-position-expression` on the label) is `cleaker.me @ "https://cleaker.me"`;
 - reloading never shows `cleaker.me @ cleaker.me` in between.
 
-**Status (2026-11-09).** The three `curl` checks pass at `https://cleaker.me` (interface HTML, `/__surface` answering
-`cleaker.me` with a monad id and resources, `/gateway-identity` with a `gatewayId`). The interface deployed there
-(release r20261108-3) predates the binding fixes described in *The load sequence* (steps 3–5); the browser checks are
-expected to hold once a release carries them.
+**Status (2026-11-10).** The interface built with this.gui 4.4.4 (`index-DwjEXdsx.js`) is served by both doors. The
+three `curl` checks pass at `https://cleaker.me`. In the browser cleaker.me settles to `cleaker.me` with no `@` and the QR
+connected, but for ~0.4 s before the root confirmed it drew `cleaker.me @ cleaker.me`: fixed afterwards (`drawnPosition`,
+the surface only until the door answers), not yet deployed.
 
 ## The Storybook story is a simulation
 

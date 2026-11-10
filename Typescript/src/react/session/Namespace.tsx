@@ -71,7 +71,7 @@ import CleakerQrMenu, { panelPositionFor } from '@/gui/All.This/Cleaker/Corner/C
 import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { documentBarModes, readBarModes, writeBarMode, type BarMode, type LayoutBarId } from '@/gui/Layout/Position/barMode';
 import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
-import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition } from '@/react/positionExpression';
+import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition, drawnPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 import { GuiPage, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
 import { ThemeSettingsContext } from '@/runtime/themeSettings';
@@ -1502,7 +1502,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
   // the badge cannot name a namespace nothing answered for.
   const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null);
-  const positionIdentity = shownNamespace({
+  const positionNaming = {
     authenticated: authenticated ? session?.semanticNamespace : null,
     selected: selectedNamespace,
     root: {
@@ -1513,8 +1513,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       lastAttemptFailed: verifiedRoot.lastAttemptFailed,
     },
     guess: namespaceRootLabel,
-    guessIsProvisional: props.namespaceSource === 'address',
-  });
+  };
+  const positionIdentity = shownNamespace({ ...positionNaming, guessIsProvisional: props.namespaceSource === 'address' });
+  // the same, without the guess: '' while nothing (identity, link, the root's answer) has named the namespace
+  const positionAnswered = shownNamespace({ ...positionNaming, guessIsProvisional: true });
   // Nothing has said which namespace this is yet (it was only the address): say so, do not name the hostname.
   const resolvingNamespace = !positionIdentity;
   // The position, written as the NRP writes it (`namespace/path @ surface`), abbreviated to `namespace/path` only when the
@@ -1534,10 +1536,16 @@ const GUI: React.FC<NamespaceProps> = (props) => {
       lastAttemptFailed: verifiedRoot.lastAttemptFailed,
     },
   });
-  // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included)
-  const positionExpression = positionComposed.compact;
   // nothing answered: only `where` (the surface is known; no `.me` is shown until one answers)
   const positionUnresolved = unresolvedPosition(typeof window !== 'undefined' ? window.location : null);
+  // what is drawn (short) and what is copied/executed (unambiguous: full origin, scheme included). While the door has not
+  // answered a declared namespace, only the surface is drawn (no `cleaker.me @ cleaker.me` before `cleaker.me`).
+  const positionExpression = drawnPosition({
+    compact: positionComposed.compact,
+    unresolved: positionUnresolved,
+    answered: positionAnswered,
+    rootStatus: monadOff ? 'off' : verifiedRoot.status,
+  });
   const positionExpressionFull = positionComposed.full;
   // The corner QR names the SELECTED link, the same one the card's QR names (endpointForRoot is shared): the page's own
   // address for its own roots, the chosen host for another root. The GUI route is not part of it (that is the surface;
