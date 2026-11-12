@@ -1,33 +1,83 @@
 # Identity access: sync, scan, recover (proposed design)
 
-**Status:** proposed design, 2026-11-12, agreed in direction with the owner. Nothing here is implemented by this
-document, and it authorizes no code change, deployment or new operation. It builds on, and does not restate:
-- `.me` Identity-Bound Secrets: `me/Typescript/typedocs/Identity-Bound-Secrets.md`, `me/Typescript/src/identity-root.ts`;
+**Status:** proposed design, revised twice 2026-11-12 after review. First cut: no rotation (see "First cut"). Sync / Scan / Recover stand as an **interface proposal**.
+Before anything is implemented, three things have to be closed: what material each flow custodies, how recovery works
+after a rotation, and what servers actually revoke (sections 2, 5, 6). Nothing here is implemented by this document, and
+it authorizes no code change, deployment or new operation.
+
+It builds on, and does not restate:
+- [Identity-Custody-Contract.md](Identity-Custody-Contract.md) (custody of keys, the isolated agent) and
+  [Identity-Proof-Migration.md](Identity-Proof-Migration.md) (proof formats, keychain revocation);
 - the identity vault design of 2026-09-20 (monad branch `design/identity-vault`,
   `Typescript/typedocs/architecture/identity-vault-design.md`);
-- [Identity-Custody-Contract.md](Identity-Custody-Contract.md) (custody of keys, the isolated agent) and
-  [Identity-Proof-Migration.md](Identity-Proof-Migration.md) (proof formats).
+- `.me` Identity-Bound Secrets (`me/Typescript/typedocs/Identity-Bound-Secrets.md`).
 
-## The problem it solves (observed 2026-11-12)
+## 1. The problem (observed 2026-11-12)
 
-A registered identity could be opened only in the browser, and at the address, where its key was saved. Chrome on
-`www.cleaker.me` held an old key the namespace rejects (403 `CLAIM_VERIFICATION_FAILED`); Chrome on `cleaker.me` held
-none, so the sign-in tried the identity derived from name + secret, which is not the registered one. The person's only
-way in was the 12-word phrase, and the screen explained this in a long red paragraph. Correct, but not usable.
+A registered identity could be opened only in the browser, and at the address, where it was saved. Chrome on
+`www.cleaker.me` held an old saved identity the namespace rejects (403 `CLAIM_VERIFICATION_FAILED`); Chrome on
+`cleaker.me` held none, so the sign-in tried the identity derived from name + secret, which is not the registered one.
+The only way in was the 12-word phrase, explained in a long red paragraph.
 
-## What `.me` already has
+## 2. The materials (two roots, not one)
 
-- **A random identity root.** 32 bytes from a CSPRNG (`generateIdentityRoot`), never derived from name and secret.
-  Branch keys derive from the root. The public key in the directory therefore says nothing about the secret.
-- **An envelope.** The root wrapped under a key derived from the secret (PBKDF2-HMAC-SHA256, 600,000 iterations,
-  AES-GCM; `wrapIdentityRoot` / `unwrapIdentityRoot`). Ciphertext, designed to be stored.
-- **Changing the secret re-wraps the envelope** (`changeIdentityRootPassword`); the root, and so the identity, stay.
+| Material | Where it comes from | What it is for | Where it is today |
+|---|---|---|---|
+| **Identity seed** | derived from the 12 words: BIP-39 seed (empty passphrase) -> HKDF -> 32 bytes (`core/identity/recoveryPhrase.ts`) | the `#seed` of `new ME(...)`: identityHash, the proof keys, everything signed as this identity | the local vault (`core/identity/localIdentityVault.ts`), wrapped with `wrapIdentityRoot` under the secret; the `rootId` there is a random label only |
+| **Kernel identity root** | CSPRNG (`me/Typescript/src/identity-root.ts` `generateIdentityRoot`) | encryption of branches inside a kernel (Identity-Bound Secrets) | the kernel's `identityRootEnvelope` |
 
-What is missing is where the envelope lives: today only in the browser that registered (the local vault).
+They are not the same material, and wrapping both with `wrapIdentityRoot` does not make them equivalent.
 
-## Three ways into an identity
+The **identity** is not the seed. The namespace claim **links a name to identifiers and keys** (identityHash, public
+keys); it does not by itself define the whole identity. The **GUI identity seed** is the secret material those keys are
+derived from. This document is about moving that
+seed (or authorizing keys derived from it), never about recovering the identity as a whole. The kernel root is out of
+scope.
 
-When this browser (at this address) has no key for the name, the form offers a choice instead of the error paragraph:
+- **Sync** would carry the **wrapped GUI identity seed** (the same envelope the local vault holds).
+- **Recover** rebuilds the **GUI identity seed** from the 12 words; it rebuilds nothing else.
+- **Scan** carries either the GUI identity seed or a device key (section 4); that choice is open.
+
+## First cut (scope)
+
+Sync, Scan and Recover keep the **existing** identity. **Rotation of the seed is out of the first cut** (section 5
+stays as analysis for later). Changing the secret only re-wraps the seed and revokes no earlier copy.
+
+**Decided (2026-11-12): the seed is unlocked only in the trusted agent.** No cut delivers it to the host page: that
+would gain portability while keeping exactly the exposure the custody contract removes. This leaves two distinct
+permissions:
+
+| Permission | Where | Status |
+|---|---|---|
+| **Obtain the encrypted envelope** | from the namespace | a delivery policy, to be defined |
+| **Unlock it and use the seed** | inside the agent only | the app receives only the result, or the proof, of an operation the agent authorized |
+
+**Order:** first choose the agent's origin and its trust mechanism (custody contract, decision 1); then design Sync to
+end there. No other unlock path is added to apps in the meantime.
+
+**Agent origin, decided by the owner (2026-11-12): `cleaker.me` itself.** The whole interface environment (.GUI, the
+netget front end and the rest of what `cleaker.me` serves today) **moves to `neurons.me/`**, and `cleaker.me` keeps
+only its own role: the namespace and the identity agent. This satisfies "a dedicated origin with nothing else" by
+emptying `cleaker.me` instead of adding a subdomain. Consequences, to be worked out before implementation:
+- **What stays on `cleaker.me`:** only the agent's code (minimal, reviewed, owner-signed releases, strict CSP, no
+  third-party scripts, `frame-ancestors 'none'` for approval screens) and the namespace's data endpoints (claims,
+  keychain, NRP), answered as data, never as executable pages of other apps.
+- **What moves to `neurons.me`:** the interface (today's netget front end bundle, Users, Blockchain, the panels) and
+  the apps built with .GUI. They reach the agent by opening `cleaker.me` explicitly and receive only results or proofs.
+- **Handles `<handle>.cleaker.me`:** separate origins; what they serve (nothing, a redirect, a public page without the
+  agent's storage) is to be decided. They must never run code that could be confused with the agent.
+- **`www.cleaker.me`:** redirect to the apex (one agent origin, one store).
+- **Reads from `neurons.me` to `cleaker.me`:** public data is cross-origin from now on; which reads are allowed (CORS
+  for public reads only) is to be decided, without opening CORS for signing or sign-in.
+- **`netget.site`:** whether the gateway admin stays there or moves to `neurons.me` is to be decided.
+- **Existing saved identities** live in `cleaker.me` and `www.cleaker.me` browser storage today; they stay usable by
+  the agent at `cleaker.me` (www via Recover or a one-time move), and stop being reachable from the interface pages.
+- **Deployment and updates:** whoever can change the code served at `cleaker.me` is inside the trust boundary; its
+  releases follow the hash-guarded kit and rollback procedure, activated only by the owner.
+
+## 3. Interface: a choice instead of the error paragraph
+
+When this browser (at this address) has no saved identity for the name, the form offers:
 
 ```
 This browser doesn't have your key yet.
@@ -40,61 +90,110 @@ This browser doesn't have your key yet.
 
 | | Sync | Scan | Recover |
 |---|---|---|---|
-| Needs | name + secret | a device with an open session | the 12 words |
-| What travels | the envelope (ciphertext), opened in this browser | the root, device to device | nothing: the root is rebuilt here |
-| Main risk | a weak secret against a stolen envelope (see limits) | none new | the phrase itself |
+| Needs | name + secret | a device with an open session, at hand | the 12 words |
+| What travels | the wrapped GUI identity seed (ciphertext), opened in the agent | the seed or a device key, device to device (landing in the agent) | nothing: the seed is rebuilt in the agent |
+| Main risks | offline guessing of the secret against any copy of the envelope (section 4) | binding to the right device, approval, expiry, replay (section 4) | the phrase itself |
+
+## 4. The flows, with what each still has to define
 
 ### Sync
 
-1. The envelope is stored in the person's namespace (the monad), written by the identity itself (signed), never by
-   anyone else.
-2. A new browser asks the namespace for the envelope **through an online step with rate limits** (per name and per
-   client), and opens it locally with the secret. The namespace never sees the secret or the root.
-3. The opened root is kept in this browser's local vault, as today; later sign-ins here need no download.
+1. **The envelope** (the wrapped identity seed) is stored in the person's namespace, written by the identity itself.
+   Stored with: the identityHash it belongs to, a version (monotonic), and a signature by the identity over
+   `{identityHash, version, envelope}`.
+2. **Reading it** is an online step. A rate limit on it limits downloads; it **does not prove identity** and does
+   **not protect a copy already obtained**. What the step proves (and to whom the envelope is served) is to be defined:
+   anyone who knows the name, or only after a challenge.
+3. **Opening it** happens only inside the trusted agent, with the secret. Before using the seed, the agent checks
+   that it derives the identityHash the claim links to the name and that the signature verifies under that identity.
+   **Freshness is not solved by a version number alone.** A new browser does not know the latest version, and an old
+   envelope carries a valid signature. A signed statement "current version = N" is not enough either if it can be
+   replayed later: it must be bound to a **fresh request** (a challenge the agent chooses) and checked against the
+   current state. **Trust stated:** the challenge stops a replayed old answer; it does **not** protect against a
+   compromised authority that signs false information (e.g. "N is current" for an old envelope). The agent trusts that
+   authority to report the current version honestly. Which authority, and how far it is trusted, is an open decision.
+   Until then a new browser can be served an old envelope (e.g. one wrapped under a secret the person changed because
+   it leaked).
+4. **Limits.** Anyone who obtains the envelope (from the namespace, a backup, a stolen snapshot) can guess the secret
+   offline; PBKDF2 makes each guess costly, a weak secret still falls.
+5. **These limits are properties of the current Sync** (a stored envelope). A future flow could be **OPAQUE (RFC 9807)**,
+   an aPAKE protocol whose guarantees come from the **whole protocol**, not from adding an OPRF to an envelope. If it
+   were chosen, its properties would be those of that flow (as stated in the RFC, which also considers dictionary
+   attacks after server compromise), not of the current Sync. Whether to adopt it is an open decision.
 
 ### Scan
 
-A signed-in device shows a QR; the new device scans it and the root (or a key the identity authorizes for that device)
-passes between them over a channel bound to both screens. The namespace is not involved and stores nothing new.
+New risks it introduces, each to be designed: binding to the right device (the code shown is consumed by the device
+that is meant to consume it), **visible approval** on the signed-in device, **expiry**, and **replay protection**.
+What is transferred changes the consequences:
+- **the identity seed itself**: every device holds the same secret, and no device can be cut off without rotation;
+- **a key the identity authorizes for that device**: revocable per device in the keychain, the seed never leaves.
+The second fits the keychain and the custody contract better; the choice is open.
 
 ### Recover
 
-Unchanged: the 12 words rebuild the root in this browser.
+Unchanged today: the 12 words rebuild the identity seed in this browser. Section 5 says what this means after a rotation.
 
-## Two separate actions on an identity
+## 5. Change secret and rotate: what each really does (rotation: not in the first cut)
 
-| | Change secret | Close all sessions and rotate the key |
-|---|---|---|
-| What changes | the envelope's wrapping only | a new random root |
-| The tree | nothing is re-encrypted | what is encrypted under keys derived from the root is re-encrypted |
-| Old copies of the envelope | still open with the old secret and still give the same root | useless: they hold the retired root |
-| Other devices / sessions | stay connected | disconnected: old keys revoked in the keychain (live revocation, already in the monad) |
-| Use it for | a secret that is not compromised | someone may have the old secret, an envelope, or a device |
-| Authorized by | the current secret | secret + 12 words, or a linked device; never the old root alone |
+### Change secret
 
-Rotation also has to settle:
-- **Continuity:** if `identityHash` and the public key come from the root, they change. Either the old root signs
-  "my successor is this key" before it retires, or the namespace claim is updated to the new key. The name must keep
-  pointing to the person.
-- **What was shared with others** under the old keys cannot be re-encrypted from this side.
-- **A compromised old root** must not be able to rotate first: rotation needs the phrase or a linked device.
+Re-wraps the envelope under a new secret. The identity seed does not change, nothing is re-encrypted, nothing is
+disconnected. Copies of the envelope wrapped under the **old** secret still open with it (hence the version check in
+Sync step 3, and why a suspected leak needs rotation, not this).
 
-## Limits, stated
+### Rotate (a new identity seed)
 
-- **Sync exposes the envelope to offline guessing** by whoever obtains it: from the namespace, or a stolen snapshot.
-  PBKDF2 makes each guess costly; a weak secret still falls. Rate limits on the online step stop guessing through the
-  namespace, not guessing against a stolen copy.
-- **The stronger form is OPRF/OPAQUE:** the namespace contributes an ingredient to the wrapping key that it gives only
-  online, so neither a stolen envelope nor the operator can guess offline. Proposed as the second stage of Sync.
+What rotation can and cannot do, kept apart:
+- **Old copies are not made useless.** Anyone holding the old seed (or an old envelope and its secret) can still
+  decrypt data that was encrypted under it, and can still produce signatures with it.
+- **Rejecting old signatures** requires every verifier to apply revocation of the old keys (keychain status, checked
+  live). A verifier that does not check revocation keeps accepting them.
+- **Closing existing sessions** is a third, separate operation: sessions already issued must be invalidated where they
+  are held (the monad's admin session already dies on its next use when its key is revoked; other session kinds must be
+  listed and checked).
+- **Re-encrypting data** under the new material is a fourth; data shared with others under old keys cannot be
+  re-encrypted from this side.
+
+### Recovery after a rotation (to design before rotation is offered)
+
+The 12 words rebuild **one** identity seed. If rotation generates a new random seed, the old words do not recover it.
+Options: rotation issues new words for the new seed (and the person must store them); or the new seed derives from the
+same words plus a rotation counter (then the words are a long-term master, and a leak of the words defeats rotation).
+Until this is chosen, rotation must not be offered.
+
+### "Secret + 12 words" is not two independent factors
+
+If the words rebuild the identity seed, anyone who has stolen the seed can produce proofs equivalent to having the
+words. Requiring "recovery" as an extra factor for rotation only means something if the server holds an **independent
+recovery authority** registered beforehand (a separate key, kept apart from the seed), and checks it.
+
+## 6. What servers revoke (to inventory)
+
+Before rotation is designed: per verifier (the verifier map of 2026-11-10 is the starting list), whether it checks key
+revocation live, which sessions it issues and how they end, and what it caches. This sets what "close all sessions"
+can honestly promise.
+
+## 7. Separate, small
+
 - **Address separation:** `cleaker.me` and `www.cleaker.me` are different browser stores. A redirect of www to the
-  apex removes that case (gateway configuration, separate change).
-- **This is identity access, not isolation.** Pages that receive the root can still use it. The isolated agent
-  (custody contract) is a separate track; when it exists, Sync and Scan land the root in the agent instead of the page.
+  apex removes that case (gateway configuration).
+- **This is identity access, not isolation.** Pages that receive the seed can still use it. When the isolated agent
+  exists, Sync / Scan / Recover land the material in the agent, not in the page.
 
-## Decisions still open
+## 8. Decisions still open
 
-1. Where exactly the envelope lives in the namespace and how its read is gated (path, who may read, rate-limit policy).
-2. Sync stage 1 (envelope + rate limits) first, or straight to OPRF.
-3. What Scan transfers: the root itself, or a device key the identity authorizes (revocable per device).
-4. Rotation continuity: signed succession, claim update, or both.
+Decided: the seed is unlocked only in the trusted agent (see "First cut").
+
+First cut, in order:
+1. **The agent's origin and its trust mechanism** (custody contract, decision 1). Sync is designed after this.
+2. The delivery policy for the encrypted envelope: what the online step proves, and to whom it is served.
+3. Envelope binding, and **which authority reports the current version**, answering a fresh challenge.
+4. What Scan transfers: the seed, or a device key authorized by the identity.
 5. The minimum secret strength for Sync, and what the form says about it.
+
+Later (rotation):
+6. Whether a future flow is OPAQUE, with its own stated properties.
+7. Recovery after rotation: new words, or words + counter.
+8. An independent recovery authority: whether to have one, where it is registered, who checks it.
+9. The revocation inventory per verifier (section 6).
