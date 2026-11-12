@@ -104,3 +104,5 @@ These do not depend on the agent, and each needs its own go-ahead:
 
 Related: [Identity-Access-Design.md](Identity-Access-Design.md) (how a person gets their identity into a new browser;
 rotation of the root, which ties into the keychain revocation used here).
+
+Protocol around these proofs (agent–app–server, registration, security state, recovery): [Agent-Protocol.md](Agent-Protocol.md).

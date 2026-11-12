@@ -278,6 +278,8 @@ Dated evidence for gates 2 and 5 (what the code does, not requirements):
   for binding the interface to `.me` operations; grants nothing and amends no gate here.
 - [Identity access design](Identity-Access-Design.md): proposed sync / scan / recover and
   change-secret vs rotate; identity access, not isolation.
+- [Agent protocol](Agent-Protocol.md): proposed agent–app–server protocol for section 10's
+  decisions 2–5, each requirement tied to a negative test.
 - [NRP v0.3.0](https://neurons-me.github.io/NRP/v.0.3.0.html): namespace/transport
   separation; this design does not amend the protocol.
 - [OAuth Security BCP — RFC 9700](https://www.rfc-editor.org/info/rfc9700/).

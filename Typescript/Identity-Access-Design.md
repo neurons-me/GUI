@@ -234,3 +234,5 @@ Later (rotation):
 7. Recovery after rotation: new words, or words + counter.
 8. An independent recovery authority: whether to have one, where it is registered, who checks it.
 9. The revocation inventory per verifier (section 6).
+
+The agent–app–server protocol these flows end in: [Agent-Protocol.md](Agent-Protocol.md).
