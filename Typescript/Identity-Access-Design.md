@@ -79,16 +79,38 @@ end there. No other unlock path is added to apps in the meantime.
 - **Deployment and updates of `cleaker.me`:** whoever can change the code served there is inside the trust boundary;
   releases follow the hash-guarded kit and rollback procedure, activated only by the owner.
 
+**In one sentence:** `cleaker.me` custodies and asks for approval; `neurons.me` presents the apps; each server
+verifies and authorizes.
+
+Precisions:
+- **`cleaker.me` is not the identity.** It is the namespace and the origin chosen to custody and use the identity's
+  material. The identity must not depend on that domain staying available: the 12 words allow rebuilding the seed
+  without depending on that domain, using a compatible and trusted implementation. In this design they are entered
+  only in the agent. Cryptographic independence does not mean entering them in any page, and it does not recover data,
+  the claim or the server's permissions.
+- **A minimal view does not create isolation by itself.** Isolation exists only when the apps no longer sign (their
+  signing paths retired) and the servers verify the new proofs, permissions and revocation. The agent prototype exists
+  (`src/agent`, `me-agent/1`); it still has to be integrated and hardened (proof format and migration:
+  [Identity-Proof-Migration.md](Identity-Proof-Migration.md)).
+- **Handles stay an open decision.** Redirecting `<handle>.cleaker.me` to `cleaker.me/@<handle>` is a proposal, not a
+  condition of isolation: a public view can live on another origin and ask the agent for signatures.
+- **Redirects do not move saved identities.** Before `www.cleaker.me -> cleaker.me` is activated, anyone whose only
+  saved copy is on `www` needs an explicit recovery or migration.
+
 Open, before implementation:
-- **Handles:** `jabellae.cleaker.me` is also a namespace seeing itself, but another origin and store. Proposed: its own
-  view lives at `cleaker.me/@jabellae` (the existing `/@handle/<path>` grammar, inside the agent's origin), and
-  `<handle>.cleaker.me` redirects there; the name grammar `<handle>.<root>` does not change.
+- **Handles:** where a handle's own view lives (the `/@handle` redirect above is one proposal); the name grammar
+  `<handle>.<root>` does not change either way.
 - **What exactly belongs to `cleaker.me`'s own view** and what stays in `neurons.me` (the namespace's directory and
   chain are the namespace's; gateway panels are the environment's).
 - **Reads from `neurons.me` to `cleaker.me`:** cross-origin from now on; CORS for public reads only, never for signing
   or sign-in.
-- **Existing saved identities** in `cleaker.me` storage stay usable by the agent; `www` ones via Recover or a one-time
-  move.
+
+**Order of execution:**
+1. Close the agent–app–server protocol and its security tests.
+2. Prepare the trusted view (`cleaker.me`) and the external environment (`neurons.me`), without activating them.
+3. Migrate existing access (saved identities, including `www`) and test it.
+4. Activate the new interfaces and the approved redirects.
+5. Add Sync / Scan / Recover according to their contracts.
 
 ## 3. Interface: a choice instead of the error paragraph
 
