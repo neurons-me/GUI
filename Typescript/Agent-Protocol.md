@@ -69,11 +69,39 @@ Requirements:
 | R11 | Registration of the first agent key and the switch to `agent-only` are **one operation**, atomic on the server: after it, every verifier refuses v1 for that identity (including `keychain-register` and recovery, R17). | N13, N14 |
 | R12 | An identity already `agent-only` accepts a new agent key only through an operation signed by an existing active agent key, or through recovery under R17–R18. | N14 |
 
-**Open:** how the server tells "the agent" from "an app pretending to be the agent" at first registration. The
-browser-verified origin protects the channel, not a non-browser client; with only the old authority available, a
-first-registration race cannot be closed by cryptography alone. Candidates: registration only from a session opened in
-the agent at `cleaker.me` plus a confirmation step outside the app (a second channel); or accepting the race as a
-stated limit for identities created before the agent exists, and closing it for identities created in the agent.
+**Why it cannot be closed by cryptography alone.** For an identity whose only authority today is the seed, anyone
+holding the seed (the person's agent, or an app that kept it) produces exactly the same proofs. A browser-verified
+origin protects the channel between pages; a non-browser client can claim any `Origin`. With only the old authority,
+the server cannot tell the agent from a copy.
+
+**Proposed resolution (first cut):** separate the two kinds of identity.
+
+| Identity | First cut | Race |
+|---|---|---|
+| **New, generated in the agent**: fresh material generated inside the agent; **not** an imported or rebuilt older seed (importing the 12 words of an existing identity does not remove copies that may exist) | The registration that creates the claim also registers the agent key and sets `agent-only`, in one atomic operation (R11). | No earlier v1 authority exists to race with |
+| **Existing (legacy)**: every identity that exists today, its seed typed into pages | **Not offered in the first cut.** Its first agent registration is a future migration. | Documented risk of that migration: an app that kept the seed can register first. Showing registered keys in the agent helps detect an attacker's key; it does not prevent the lock-out. |
+
+**The exact guarantee for a new identity:** it is registered from the start with its agent key and without
+accepting v1 proofs. Atomicity prevents partial states; it does **not** attest the software that created the identity:
+the server can guarantee that the claim is born bound to a key with `agent-only` on, not, from that signature alone,
+that the key was generated in the official agent. **Exclusive custody depends on the security of the agent and the
+device.**
+
+Options to close the legacy race in a future migration: a confirmation on a channel the app does not control (a
+second, previously registered device or authority); or moving the name to a new identity generated in the agent,
+accepting that the move is authorized by the old seed and needs the same out-of-band step.
+
+### Permission for the first-cut read (test only)
+
+The read has to be authorized without making the test identity a gateway owner and without real credentials:
+- **The resource is a test resource**, not the real gateway: a disposable verifier that serves a **fixture domain list**
+  (as `tests/integration/agentResource.mjs` does today).
+- **Its policy is test configuration**, set by the harness that starts it (operator-side), not granted by any
+  identity: `registered` (identityHash -> agent public key, from the atomic registration) and `allowed` (the
+  identityHashes that may read the list). A valid proof from an identity not in `allowed` is 403, not data.
+- Nothing touches the real gateway's authority (`daemon.gateways`, owner/admins/grants), its keychain or its domains.
+- **Later, on a real gateway (possible future integration, not a decided contract):** one option is an owner-signed
+  grant in the gateway authority, scoped to the read and to listed domains. Outside the first cut.
 
 ## 6. Security state on the server
 
@@ -148,11 +176,25 @@ current code and pass only when its requirement holds.
 | N25 (writes, later) | A retry with the same idempotency key and same bytes after a lost response | One execution, recorded outcome returned |
 | N26 (writes, later) | Same idempotency key, different signed bytes | Refused |
 
-## 10. Decisions to take (summary)
+## 10. First cut (scope)
+
+- **Proof return** (section 4, option A), limited to **reading the domain list** (custody contract §6).
+- **One verifier** for that resource, with its security state (nonce store, key status, `agent-only`) under its own
+  control and fail-closed (R13–R16); no multi-server state in this cut.
+- **Explicit first registration from the agent** only for **new identities generated in the agent** (no imported or
+  rebuilt seeds); legacy registration not offered (section 5).
+- **Permission for the read** comes from the test verifier's own configuration over a fixture domain list; no gateway
+  ownership, no real credentials (section 5, last part).
+- **Recovery out of the cut**, and no alternative path enabled in its place: an `agent-only` identity in this cut has
+  no recovery (test identities only), rather than a recovery that bypasses R17–R18.
+- **Implementation starts separately** from these documents: each requirement becomes an executable test (the N
+  rows), then the prototype moves to v2.
+
+## 11. Decisions to take (summary)
 
 1. **Proof or result** for the first cut (section 4; proposal: proof).
-2. **First registration** of the agent key and `agent-only`, and how the race with old credentials is closed or bounded
-   (section 5).
+2. **First registration** of the agent key and `agent-only`: proposed in section 5 (first cut: new identities generated in
+   the agent only; legacy registration not offered, its race a documented risk of a future migration).
 3. **Where the security state lives** (nonces, revocation, `agent-only`), its behaviour under concurrency, restarts and
    several servers; refuse when unverifiable (section 6).
 4. **Recovery** for `agent-only` identities without a back door; whether an independent recovery authority exists

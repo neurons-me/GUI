@@ -1,13 +1,16 @@
 // The identity agent's protocol (src/agent/protocol.ts): the canonical encoding matches the one the gateway already
-// verifies (signedRequest.ts), the challenge binds what an approval must be bound to, and malformed or overreaching
+// verifies (signedRequest.ts), the v2 bytes bind what an approval must be bound to, and malformed or overreaching
 // requests are refused before anything is shown or signed.
 import assert from 'node:assert/strict';
 import { canonicalJson as gatewayCanonicalJson, canonicalizeQuery as gatewayCanonicalizeQuery } from '../src/gui/All.This/Cleaker/signedRequest';
 import {
   AGENT_PROTOCOL,
   EMPTY_BODY_SHA256,
-  buildChallenge,
+  PROOF_V2_TAG,
+  buildReadFields,
+  buildV2Bytes,
   canonicalJson,
+  parseV2Bytes,
   canonicalizeQuery,
   isOrigin,
   parseRequest,
@@ -25,12 +28,23 @@ const qs = new URLSearchParams('b=2&a=1&a=0');
 assert.equal(canonicalizeQuery(qs), gatewayCanonicalizeQuery(qs));
 assert.equal(EMPTY_BODY_SHA256, createHash('sha256').update('').digest('hex'));
 
-// the challenge carries the gateway's fields plus origin, audience, expiry and version
-const challenge = JSON.parse(buildChallenge({ operation: op, requestingOrigin: 'http://host.test', nonce: 'abc', timestamp: 1000 }));
-assert.deepEqual(challenge, {
-  action: 'read', audience: op.audience, bodyHash: EMPTY_BODY_SHA256, expiresAt: 61_000, method: 'GET', nonce: 'abc',
-  origin: 'http://host.test', path: '/domains', query: '[]', timestamp: 1000, v: AGENT_PROTOCOL,
+// v2: what is signed starts with the tag and carries every bound field (Agent-Protocol.md R7)
+const fields = buildReadFields({ operation: op, requestingOrigin: 'http://host.test', identityHash: 'h'.repeat(64), keyId: 'k'.repeat(32), nonce: 'abc', issuedAt: 1000 });
+const bytes = buildV2Bytes(fields);
+assert.ok(bytes.startsWith(PROOF_V2_TAG));
+assert.deepEqual(parseV2Bytes(bytes), {
+  audience: op.audience, bodyHash: EMPTY_BODY_SHA256, expiresAt: 61_000, identityHash: 'h'.repeat(64), issuedAt: 1000, keyId: 'k'.repeat(32),
+  method: 'GET', nonce: 'abc', op: 'read', origin: 'http://host.test', path: '/domains', query: '[]', v: 'me-proof/2',
 });
+// a v2 message is not JSON, so a v1 verifier (which JSON.parses the message) cannot read it (N9)
+assert.throws(() => JSON.parse(bytes));
+// strict: no tag, a missing or an extra field, or a non-canonical encoding is not a v2 message
+assert.equal(parseV2Bytes(canonicalJson(fields as unknown as Record<string, unknown>)), null, 'no tag');
+const { keyId: _drop, ...missing } = fields;
+assert.equal(parseV2Bytes(PROOF_V2_TAG + canonicalJson(missing)), null, 'missing field');
+assert.equal(parseV2Bytes(PROOF_V2_TAG + canonicalJson({ ...fields, extra: 1 })), null, 'extra field');
+assert.equal(parseV2Bytes(PROOF_V2_TAG + JSON.stringify(fields)), null, 'not canonical');
+assert.equal(parseV2Bytes(PROOF_V2_TAG + canonicalJson({ ...fields, v: 'me-proof/3' })), null, 'unknown version');
 
 // operations: only the one read, exactly shaped
 assert.equal(validateOperation(op), null);
