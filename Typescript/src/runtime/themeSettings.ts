@@ -8,3 +8,11 @@ export const ThemeSettingsContext = React.createContext<(() => void) | null>(nul
 export function useThemeSettings(): (() => void) | null {
   return React.useContext(ThemeSettingsContext);
 }
+
+// Opens one of the GUI's own pages by route (`/GUI/layout`, the declared tree). The same shells that provide the
+// theme settings provide this; without one (no router), callers fall back to something local.
+export const GuiPageContext = React.createContext<((route: string) => void) | null>(null);
+
+export function useOpenGuiPage(): ((route: string) => void) | null {
+  return React.useContext(GuiPageContext);
+}

@@ -40,6 +40,7 @@ import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
 import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
+import NamespaceFavicon from './namespaceFavicon';
 import { useRegisterGuiNode, useRegisterGuiNodes } from '@/runtime/selection';
 import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlots, GUI_DOCUMENT, type GuiDocument } from '@/runtime/guiDocument';
 import { declaredCapabilities, evaluateRequirement, type CapabilityLink, type CapabilityResolvers } from '@/runtime/capabilities';
@@ -65,7 +66,6 @@ import GatewaySetup from '@/gui/All.This/netget/Setup/GatewaySetup';
 import { createNetgetSetupClient } from '@/gui/All.This/netget/Setup/netgetSetupClient';
 import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
-import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import CleakerQrMenu, { panelPositionFor } from '@/gui/All.This/Cleaker/Corner/CleakerQrMenu';
 import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
@@ -74,7 +74,7 @@ import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
 import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition, drawnPosition } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 import { GuiPage, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
-import { ThemeSettingsContext } from '@/runtime/themeSettings';
+import { ThemeSettingsContext, GuiPageContext } from '@/runtime/themeSettings';
 import { useAddressAxis, TOP_BAR_TOOLBAR_PL_PX } from '@/runtime/addressAxis';
 
 interface DirectoryUser {
@@ -128,6 +128,8 @@ export interface NamespaceProps {
    * Blockchain, URL) are not that app's navigation.
    */
   hideBarItems?: string[];
+  /** The tab's favicon becomes this namespace's QR while mounted (default). `false` keeps the page's own icon. */
+  favicon?: boolean;
   /**
    * The site's brand (the author's mark: whose page this is), apart from the person's QR (Roles-and-Territories.md §3).
    * With it, the QR is the person's mark placed at `identityCorner` and the brand takes the other end, linking to `/`;
@@ -1465,6 +1467,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const navigate = useNavigate();
   // The theme launcher's gear opens the theme settings as a page of this shell, not a dialog.
   const openThemeSettings = useCallback(() => navigate(GUI_THEMES_ROUTE), [navigate]);
+  const openGuiPage = useCallback((route: string) => navigate(route), [navigate]);
   // Where the address starts in the top bar: the axis the page under it starts on too (addressAxis.ts).
   const axis = useAddressAxis();
   // On the namespace, Sign in goes to its root (`/`), where the document already serves the Landing (QR + form).
@@ -1948,7 +1951,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
 
   return (
     <GuiCapabilitiesContext.Provider value={capabilityResolution}>
-    <ThemeSettingsContext.Provider value={openThemeSettings}>
+    <ThemeSettingsContext.Provider value={openThemeSettings}><GuiPageContext.Provider value={openGuiPage}>
     <Box data-gui-node-id={GUI_ROOT_ID} data-gui-component="GUI">
       <Layout
         // `elementsLeftSx.pl`: the left bar's expand tab hangs ~5px outside the bar (EDGE_OVERHANG in LeftSidebarToggleButton), over
@@ -1994,21 +1997,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 ? { ...el, props: { ...el.props, active: el.props.to === location.pathname, off: Boolean(el.props.off) || offRoutes.has(String(el.props.to ?? '')) } }
                 : el
           ),
-          // Same footer slot netget's own NetGetShell (App.jsx) uses for both
-          // of these exact components -- ThemeLauncher and DevToolsLauncher
-          // are real, already-built launchers (this.gui's own ThemeContext/
-          // ThemesCatalog, and the Semantic Inspector's on/off toggle),
-          // nothing new built for this page. `useLauncherPopover` degrades to
-          // local state with no provider (see runtime/launcherPopover.tsx's
-          // own doc comment), so both work standalone here, coordinating with
-          // each other the same way they already do in NetGetShell.
-          // DevToolsLauncher itself renders nothing (useOptionalSelection()
-          // returns null) unless the app's own mount() call actually
-          // requested the inspector infrastructure -- see main.jsx's own
-          // devtools option.
+          // Theme carries the dev tools too: Inspector and Layout Grid are options of its own hover card
+          // (shown only when the inspector infrastructure is mounted), so there is no separate Dev Tools bubble.
           footerElements: [
             { type: 'action', props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
-            { type: 'action', props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
             // An app's own footer action (netget's Frontend Mode toggle) -- not part of the document's
             // bars.left system (that's navigation, this is a control), so it stays a plain prop rather
             // than a document part. Kept last so Theme/Dev Tools stay in the same place everywhere.
@@ -2019,6 +2011,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         RightBar={barModes.right === 'off' ? false : { initialView: barModes.right === 'expanded' ? 'expanded' : 'rail' }}
       >
         <ThemeKernelMirror session={session} />
+        {/* The page is the namespace: the tab's icon is its QR. With an app's brand (app view) the brand is the icon
+            (SiteBrand sets it). props.favicon === false leaves the page's own. */}
+        <NamespaceFavicon value={positionQrValue} enabled={props.favicon !== false && !props.brand} />
         <Routes>
           {/* Every page is declared by the GUI document and rendered through the
               same renderer mount(spec) uses. */}
@@ -2080,7 +2075,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         </ClickAwayListener>
       )}
     </Box>
-    </ThemeSettingsContext.Provider>
+    </GuiPageContext.Provider></ThemeSettingsContext.Provider>
     </GuiCapabilitiesContext.Provider>
   );
 };

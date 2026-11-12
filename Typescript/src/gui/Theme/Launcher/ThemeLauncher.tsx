@@ -17,6 +17,22 @@ import { useLauncherPopover } from '@/runtime/launcherPopover';
 import { useGuiNodeId } from '@/runtime/guiNodeId';
 import { useThemeSettings } from '@/runtime/themeSettings';
 
+const DEV_ROW_SX = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 1,
+  p: 0.75,
+  border: '1px solid',
+  borderColor: 'divider',
+  borderRadius: 1,
+  background: 'transparent',
+  color: 'inherit',
+  cursor: 'pointer',
+  '&:hover': { bgcolor: 'action.hover' },
+};
+
 export interface ThemeLauncherProps {
   sx?: any;
 }
@@ -43,6 +59,9 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   // otherwise, with the sidebar expanded, the tooltip pops out far to the
   // right of the avatar+name instead of right next to it.
   const bubbleRef = useRef<HTMLDivElement>(null);
+  // The bubble as state too, so the card is drawn only once it has its anchor (a ref is still null on the render the
+  // avatar remounts in, and an unanchored Popper floats at the top-left of the page).
+  const [bubbleEl, setBubbleEl] = useState<HTMLDivElement | null>(null);
 
   // Optional: only present when a SelectionProvider is mounted (dev-tooling
   // contexts, e.g. Storybook with the Semantic Inspector wired in) — most
@@ -63,6 +82,8 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   useRegisterGuiNode(!expanded && !isRailView && `${base}.label`, 'label');
   useRegisterGuiNode(previewOpen && `${base}.settings`, 'settings');
   useRegisterGuiNode(previewOpen && `${base}.showall`, 'showall');
+  useRegisterGuiNode(previewOpen && !!optionalSelection && `${base}.inspector`, 'toggle');
+  useRegisterGuiNode(previewOpen && !!optionalSelection && `${base}.grid`, 'toggle');
   useEffect(() => {
     if (inspectorSelectedNodeId) {
       setExpanded(false);
@@ -95,6 +116,9 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
   // opening this catalog so it never overlaps the inspector's own panel.
   const openCatalog = () => {
     if (inspectorSelectedNodeId) optionalSelection?.clearSelection();
+    // The hover card closes as the catalog opens: left on, it came back by itself when the catalog closed, unanchored
+    // (the avatar had just remounted) and floating at the top of the page.
+    setHoverOpen(false);
     setExpanded(true);
   };
 
@@ -122,7 +146,7 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
               rail view it's also the only clickable target, since there's
               no label to click there. */}
           <Box
-            ref={bubbleRef}
+            ref={(el: HTMLDivElement | null) => { (bubbleRef as React.MutableRefObject<HTMLDivElement | null>).current = el; setBubbleEl(el); }}
             data-gui-node-id={`${base}.avatar`}
             data-gui-component="avatar"
             role={isRailView ? 'button' : undefined}
@@ -228,7 +252,7 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
           <IconButton
             size="small"
             aria-label="Collapse theme options"
-            onClick={() => setExpanded(false)}
+            onClick={() => { setHoverOpen(false); setExpanded(false); }}
             sx={{
               position: 'absolute',
               top: 2,
@@ -259,13 +283,14 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
       )}
 
       <Popper
-        open={hoverOpen && !expanded}
-        anchorEl={bubbleRef.current}
+        open={hoverOpen && !expanded && !!bubbleEl}
+        anchorEl={bubbleEl}
         placement="right-start"
         sx={{ zIndex: (theme: any) => theme.zIndex.drawer + 3 }}
       >
         <ClickAwayListener onClickAway={() => setHoverOpen(false)}>
           <Box
+            data-gui-inspector-control="true"
             sx={{
               ml: 1,
               p: 1.5,
@@ -327,6 +352,56 @@ const ThemeLauncher: React.FC<ThemeLauncherProps> = ({ sx }) => {
             >
               Show All
             </Box>
+            {/* Dev tools are options of this same card (they used to be their own footer bubble). Only with a
+                SelectionProvider: without one there is no inspector or grid state to toggle. */}
+            {optionalSelection && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 0.75 }}>
+                <Box
+                  component="button"
+                  type="button"
+                  data-gui-node-id={`${base}.inspector`}
+                  data-gui-component="toggle"
+                  aria-pressed={optionalSelection.inspectorEnabled}
+                  onClick={() => {
+                    const next = !optionalSelection.inspectorEnabled;
+                    optionalSelection.setInspectorEnabled(next);
+                    if (next) setHoverOpen(false);
+                  }}
+                  sx={DEV_ROW_SX}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Icon name="build" fontSize="1rem" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Inspector</Typography>
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: optionalSelection.inspectorEnabled ? 'primary.main' : 'text.secondary', fontWeight: 700 }}
+                  >
+                    {optionalSelection.inspectorEnabled ? 'On' : 'Off'}
+                  </Typography>
+                </Box>
+                <Box
+                  component="button"
+                  type="button"
+                  data-gui-node-id={`${base}.grid`}
+                  data-gui-component="toggle"
+                  aria-pressed={optionalSelection.gridEnabled}
+                  onClick={() => optionalSelection.setGridEnabled(!optionalSelection.gridEnabled)}
+                  sx={DEV_ROW_SX}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Icon name="grid_view" fontSize="1rem" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>Layout Grid</Typography>
+                  </Box>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: optionalSelection.gridEnabled ? 'primary.main' : 'text.secondary', fontWeight: 700 }}
+                  >
+                    {optionalSelection.gridEnabled ? 'On' : 'Off'}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
           </Box>
         </ClickAwayListener>
       </Popper>

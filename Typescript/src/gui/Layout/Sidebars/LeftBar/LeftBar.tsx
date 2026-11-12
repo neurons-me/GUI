@@ -584,8 +584,8 @@ const LeftSidebar = ({
       >
         {headerContent(true, () => setView('rail'), 'expanded')}
       </Box>
-      {/* Grow 0: leftover space stays below Theme/Dev Tools, not between the last nav item and the footer. Shrink if the list overflows so the footer stays on screen. The rail view still grows (footer docked to the bottom). */}
-      <Box sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto' }}>{renderElements()}</Box>
+      {/* Grows like the rail view: the footer (Theme) is docked to the bottom in both views. Shrinks if the list overflows so the footer stays on screen. */}
+      <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>{renderElements()}</Box>
       {hasFooterElements && (
         <Box
           component="footer"

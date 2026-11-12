@@ -23,9 +23,8 @@ import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
 import { MemoryRouter } from 'react-router-dom';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
-import DevToolsLauncher from '@/runtime/DevToolsLauncher';
 import { SelectionProvider } from '@/runtime/selection';
-import { ThemeSettingsContext } from '@/runtime/themeSettings';
+import { ThemeSettingsContext, GuiPageContext } from '@/runtime/themeSettings';
 import { NamespaceRoutePanel, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
 import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
 import {
@@ -197,6 +196,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   const goRoute = React.useCallback((route: string) => setOpenRoute({ route }), []);
   const closeRoute = React.useCallback(() => setOpenRoute(null), []);
   const openThemeSettings = React.useCallback(() => setOpenRoute({ route: '/GUI/themes' }), []);
+  const openGuiPage = React.useCallback((route: string) => setOpenRoute({ route }), []);
   // An item of a bar as the bar draws it: the author's link goes where it says; a route of the namespace opens over the page.
   const itemProps = (it: CleakerBarItem) => it.route
     ? { label: it.label, icon: it.icon ?? 'link', active: openRoute?.route === it.route, onClick: () => setOpenRoute((cur) => (cur?.route === it.route ? null : { route: it.route!, label: it.label })) }
@@ -398,7 +398,6 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           // The same foot as the shell's (Namespace.tsx): the theme and the dev tools, then a mark that sits at the foot.
           footerElements: [
             { type: 'action' as const, props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
-            { type: 'action' as const, props: { label: 'Dev Tools', element: <DevToolsLauncher />, tooltip: false } },
             ...marks.leftFooter,
           ],
           initialView: states.left === 'open' ? 'expanded' : 'rail',
@@ -428,12 +427,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   if (leftBar || topBar) {
     return (
       <CornerSession namespace={namespace}>
-      <ThemeSettingsContext.Provider value={openThemeSettings}>
+      <ThemeSettingsContext.Provider value={openThemeSettings}><GuiPageContext.Provider value={openGuiPage}>
         {layout}
         {routeDialog}
         {marks.float && <FloatingMark corner={marks.float.corner}>{marks.float.element}</FloatingMark>}
         {panel}
-      </ThemeSettingsContext.Provider>
+      </GuiPageContext.Provider></ThemeSettingsContext.Provider>
       </CornerSession>
     );
   }

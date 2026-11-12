@@ -18,6 +18,7 @@ import Icon from '@/gui/Atoms/Icon/Icon';
 import { useLeftSidebar, useGuiTheme, useGuiMediaQuery } from '@/gui-internals/Hooks';
 import type { MarksPlacement as _Placement, MarkCorner as _Corner } from './placeMarks';
 import QRme, { resolveTopbarQrSize, type QRmeProps } from '@/gui/All.This/me/QR/QR.me';
+import { brandFaviconSvg, svgElementFaviconHref, useFavicon } from '@/react/session/namespaceFavicon';
 import type { SxProps, Theme } from '@mui/material/styles';
 
 /** The size a QR badge is drawn at in a bar (the rail's mark size). */
@@ -253,13 +254,31 @@ export function FloatingMark({ corner, children }: { corner: _Corner; children: 
  * The site's brand (the author's mark: whose page this is), in its own cell: a logo image, or the label's first letter.
  * A link when the author gave one. It is never the person's QR and never shares its cell (placeMarks).
  */
-export function SiteBrand({ label, href, to, logo, icon, glyph, compact = false }: { label: string; href?: string | null; to?: string | null; logo?: string | null; icon?: string | null; glyph?: string | null; compact?: boolean }) {
+export function SiteBrand({ label, href, to, logo, icon, glyph, compact = false, favicon = true }: { label: string; href?: string | null; to?: string | null; logo?: string | null; icon?: string | null; glyph?: string | null; compact?: boolean; /** In app view the brand is also the tab's icon (default). `false` keeps the page's own. */ favicon?: boolean }) {
   const initial = Array.from(label.replace(/[^\p{L}\p{N}]/gu, ''))[0]?.toUpperCase() ?? '•';
+  const theme = useGuiTheme();
+  const fg = theme.palette.primary.main;
+  const bg = theme.palette.background.paper;
+  const cellRef = React.useRef<HTMLElement | null>(null);
+  const [iconHref, setIconHref] = React.useState<string | null>(null);
+  // An Icon is drawn first; its <svg> is then read back so the tab shows the same mark.
+  React.useEffect(() => {
+    if (!icon || logo) { setIconHref(null); return; }
+    const svg = cellRef.current?.querySelector('svg');
+    setIconHref(svg ? svgElementFaviconHref(svg as SVGSVGElement, fg) : null);
+  }, [icon, logo, fg]);
+  const faviconHref = React.useMemo(() => {
+    if (logo) return logo;
+    if (icon && iconHref) return iconHref;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(brandFaviconSvg(glyph || initial, { fg, bg }))}`;
+  }, [logo, icon, iconHref, glyph, initial, fg, bg]);
+  useFavicon(faviconHref, favicon);
   // `to`: a route of this app (no reload); `href`: an address; neither: the mark alone.
   const link = to ? { component: RouterLink, to } : href ? { component: 'a', href } : { component: 'div' };
   return (
     <BarBrandCell
       {...link}
+      ref={cellRef as any}
       title={label}
       aria-label={label}
       data-gui-node-id="GUI.window.layout.bars.brand"

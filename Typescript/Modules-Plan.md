@@ -43,6 +43,9 @@ Kept apart throughout (they were mixed while this was discussed):
 6. **Something must persist and serve what is published.** "It lives in a `.me`" means nothing until it is said who
    keeps it and who answers for it when the app is off.
 
+How declared parts bind to `.me` data and operations (proposed, not built):
+[Interface-Binding-Principle.md](Interface-Binding-Principle.md).
+
 ## Order
 
 ### 0. Before step 1 (isolated): live GUI source in netget's dev server

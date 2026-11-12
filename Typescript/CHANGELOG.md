@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 4.4.5
+
+- **LeftBar expanded view stretches like the rail.** The Theme footer docks to the bottom in both views, and shrinks if the list overflows so the footer stays on screen.
+- **Inspector and Layout Grid live in the Theme card.** They are no longer a separate footer bubble; they appear in the Theme hover card when a SelectionProvider is present. The card only opens once the avatar is anchored, so it no longer floats at the top-left after the catalog closes.
+- **The site brand is the tab's favicon** in app view (logo, icon, or letter/glyph in theme colours). Pass `favicon={false}` on `SiteBrand` to keep the page's own icon.
+- **A namespace left bar starts with Home, the Monad orb, and Theme.** Users, Blockchain, URL and Keychain stay as document routes and are not default bar items.
+
 ## 4.4.4
 
 - **QR.me avatars stay transparent.** The avatar face no longer paints a gradient plate, border, or shadow behind the image. Image avatars have no paper border and use contain sizing so transparent marks stay fully visible; the colored initials fallback remains.

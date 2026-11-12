@@ -263,12 +263,19 @@ revocation/recovery policy and independent security review appropriate to exposu
 No new signing service, CORS policy, nginx deployment or code change is authorized
 or implemented by this document.
 
+Dated evidence for gates 2 and 5 (what the code does, not requirements):
+[client inventory](evidence/2026-11-10-client-custody-inventory.md),
+[verifier map](evidence/2026-11-10-server-verifier-map.md); proposal built on them:
+[Identity-Proof-Migration.md](Identity-Proof-Migration.md).
+
 ## References
 
 - [Runtime Contract](Runtime-Contract.md): existing GUI runtime API, not a custody
   isolation guarantee.
 - [Modules Plan](Modules-Plan.md): local module composition; remote code and
   personal overlays remain separate stages.
+- [Interface binding principle](Interface-Binding-Principle.md): proposed principle
+  for binding the interface to `.me` operations; grants nothing and amends no gate here.
 - [NRP v0.3.0](https://neurons-me.github.io/NRP/v.0.3.0.html): namespace/transport
   separation; this design does not amend the protocol.
 - [OAuth Security BCP — RFC 9700](https://www.rfc-editor.org/info/rfc9700/).

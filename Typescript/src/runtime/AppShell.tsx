@@ -1,13 +1,10 @@
 import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { GuiPage, GuiNavProvider, type GuiNav } from '@/gui/All.This/GUI/GuiPages';
 import { flattenGuiDocument, renderGuiDocumentPage, GUI_DOCUMENT } from './guiDocument';
-import { ThemeSettingsContext } from './themeSettings';
+import { ThemeSettingsContext, GuiPageContext } from './themeSettings';
 import Theme from '@/gui/Theme/Theme';
 import Layout from '@/gui/Layout/Layout';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
-import DevToolsLauncher from './DevToolsLauncher';
-import MeLauncher from '@/react/session/MeLauncher';
-import { useOptionalSessionSurface } from '@/react/session/SessionSurface';
 import { SeedSessionProvider, useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
@@ -184,10 +181,8 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
   const setRoute = useMeAction(`${app.namespace}.route`);
   // The theme launcher's gear opens the GUI's theme page (GUI/themes), as in netget's shell; not a dialog.
   const openThemeSettings = useCallback(() => setRoute('GUI/themes'), [setRoute]);
-  // MeLauncher renders nothing without a session provider, but LeftBar still
-  // wraps it in a padded row — that empty row sat between Theme and Dev Tools.
+  const openGuiPage = useCallback((route: string) => setRoute(route.replace(/^\//, '')), [setRoute]);
   const session = useOptionalSeedSessionContext();
-  const showMeLauncher = Boolean(useOptionalSessionSurface() || session);
   const authenticated = Boolean(session?.authenticated);
 
   // The namespace route open over the app's view, if any (the app's own route is unchanged under it).
@@ -277,7 +272,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
   );
 
   return (
-    <ThemeSettingsContext.Provider value={openThemeSettings}>
+    <ThemeSettingsContext.Provider value={openThemeSettings}><GuiPageContext.Provider value={openGuiPage}>
     <Layout
       TopBar={position ? {
         hideBrand: true,
@@ -300,8 +295,6 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
           // popper (see LeftSidebarAction's `tooltip` prop doc).
           // Theme and Dev Tools stay adjacent, same as Namespace.
           { type: 'action', props: { element: <ThemeLauncher />, tooltip: false } },
-          { type: 'action', props: { element: <DevToolsLauncher />, tooltip: false } },
-          ...(showMeLauncher ? [{ type: 'action' as const, props: { element: <MeLauncher />, tooltip: false } }] : []),
           ...(footerElements ?? []).map((element) => ({ type: 'action' as const, props: { element } })),
           ...marks.leftFooter,
         ],
@@ -365,7 +358,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity,
       go={goRoute}
       onClose={closeRoute}
     />
-    </ThemeSettingsContext.Provider>
+    </GuiPageContext.Provider></ThemeSettingsContext.Provider>
   );
 }
 

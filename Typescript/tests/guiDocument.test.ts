@@ -33,24 +33,21 @@ assert.equal(home?.component, 'Landing', 'the namespace home ("/") is its QR (La
 assert.equal(entries.find((e) => e.route === '/.me')?.component, 'Landing', '/.me stays the identity page');
 
 // ── GUI.window.layout.bars.left declares its elements ────────────────────────────────────────────────────────────────
-// The left bar's elements are the document's, and for the root GUI they are exactly what the shell used to
-// hard-code (Home first, Users/Blockchain/URL as fallbacks the namespace may override, Keychain only with a
-// session, Netget last).
+// The left bar's elements are the document's. A namespace starts with only its QR (the bar's mark), the Monad orb and
+// Theme: Home first (the top bar's), then Monad at the end. The namespace's pages stay declared under content.
 const idsOf = (els: any[]) => els.map((e) => e.props.id);
 const anon = leftBarSlots(GUI_DOCUMENT, { authenticated: false });
 const authed = leftBarSlots(GUI_DOCUMENT, { authenticated: true });
 assert.deepEqual(idsOf(anon.start), ['home']);
-assert.deepEqual(idsOf(anon.defaults), ['users', 'blockchain', 'url']);
-assert.deepEqual(idsOf(anon.end), ['netget'], 'no Keychain without a session');
-assert.deepEqual(idsOf(authed.end), ['keychain', 'netget']);
+assert.deepEqual(idsOf(anon.defaults), []);
+assert.deepEqual(idsOf(anon.end), ['monad']);
+assert.deepEqual(idsOf(authed.end), ['monad'], 'signing in adds nothing to the bar');
+assert.deepEqual(anon.end[0].props.icon, 'orb:monad');
 assert.deepEqual(anon.start[0].props, { id: 'home', label: 'Home', to: '/', icon: 'home', 'data-gui-node-id': 'GUI.window.layout.bars.left.home' });
-assert.deepEqual(
-  anon.defaults.map((e: any) => [e.props.label, e.props.to, e.props.icon]),
-  [['Users', '/users', 'group'], ['Blockchain', '/blockchain', 'link'], ['URL', '/url', 'language']]
-);
 // every element leads somewhere the document serves
 const served = new Set(entries.filter((e) => e.route).map((e) => e.route));
-for (const el of [...anon.start, ...anon.defaults, ...authed.end]) {
+// (Monad's page, /monad, is the serving monad's own: netget declares it)
+for (const el of [...anon.start, ...anon.defaults, ...authed.end].filter((e: any) => e.props.id !== 'monad')) {
   assert.ok(served.has((el as any).props.to), `${(el as any).props.id}: "${(el as any).props.to}" is not a route of the document`);
 }
 
@@ -69,7 +66,7 @@ const mergedIds = flattenGuiDocument(merged).map((e) => e.id);
 assert.ok(mergedIds.includes('GUI.window.layout.content.domains') && mergedIds.includes('GUI.window.layout.bars.left.domains'));
 assert.ok(mergedIds.includes('GUI.window.layout.content.landing'), 'the base parts are still there');
 assert.equal(new Set(mergedIds).size, mergedIds.length, 'no duplicate ids after a merge');
-assert.deepEqual(idsOf(leftBarSlots(merged).defaults), ['users', 'blockchain', 'url', 'domains']);
+assert.deepEqual(idsOf(leftBarSlots(merged).defaults), ['domains']);
 // an extension cannot take over a part the base already serves
 const tried = mergeGuiDocument(GUI_DOCUMENT, { GUI: { children: { content: { children: { users: { component: 'Other', route: '/elsewhere' } } } } } });
 const users = flattenGuiDocument(tried).find((e) => e.id === 'GUI.window.layout.content.users')!;

@@ -23,8 +23,7 @@ import { createVeracruzKernel, tickVeracruz, veracruzMeSpec } from './OpenStreet
 //   runtime.action every second.
 // - Rendered with SpecBoundary, the renderer mount() uses, inside the story's
 //   own Theme and SelectionProvider, so the Mode and Inspector toolbars apply.
-//   See QuickStart.stories.tsx for why mount() itself does not fit in
-//   Storybook.
+//   mount() itself does not fit in Storybook.
 
 const SPEC_REGISTRY = {
   OpenStreetMap: OpenStreetMapResolver,

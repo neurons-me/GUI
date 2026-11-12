@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from 'react';
+import { INSPECTOR_SELECT_ROOT_EVENT } from './inspectorEvents';
 import { createPortal } from 'react-dom';
 import { RightSidebarContext } from '@/gui-internals/Contexts/RightSidebarContext';
 import { useSelection } from './selection';
@@ -1522,18 +1523,28 @@ export function RuntimeInspector({
   // after mount, never on initial load: an inspector that starts enabled
   // (mount()'s `inspector: true`) must not pop its panel open on every
   // page view.
-  const prevInspectorEnabledRef = React.useRef<boolean>(inspectorEnabled);
+  // "View all tree" (the Theme card's dev options) asks for this with an event: select the root and open the
+  // panel right away. "Select node" only turns the inspector on and waits for the click.
   React.useEffect(() => {
-    const wasEnabled = prevInspectorEnabledRef.current;
-    prevInspectorEnabledRef.current = inspectorEnabled;
-    if (!inspectorEnabled || wasEnabled) return;
-    if (selectedNodeId) return;
-
-    const topmost = Array.from(document.querySelectorAll<HTMLElement>('[data-gui-node-id]')).filter(
-      (el) => !el.parentElement?.closest('[data-gui-node-id]') && !el.closest('[data-gui-inspector-control="true"]')
-    );
-    if (topmost.length === 1) selectHostElement(topmost[0], topmost[0]);
-  }, [inspectorEnabled]);
+    const onSelectRoot = () => {
+      const topmost = Array.from(document.querySelectorAll<HTMLElement>('[data-gui-node-id]')).filter(
+        (el) => !el.parentElement?.closest('[data-gui-node-id]') && !el.closest('[data-gui-inspector-control="true"]')
+      );
+      // Several "topmost" nodes happen (a popper or a portal outside the page's tree): take the GUI root if it is
+      // on the page, else the one covering the most screen.
+      if (!topmost.length) return;
+      const area = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        return r.width * r.height;
+      };
+      const root =
+        topmost.find((el) => el.getAttribute('data-gui-node-id') === 'GUI') ??
+        topmost.reduce((best, el) => (area(el) > area(best) ? el : best), topmost[0]);
+      selectHostElement(root, root);
+    };
+    window.addEventListener(INSPECTOR_SELECT_ROOT_EVENT, onSelectRoot);
+    return () => window.removeEventListener(INSPECTOR_SELECT_ROOT_EVENT, onSelectRoot);
+  }, [selectHostElement]);
 
   const getSelectedHostElement = React.useCallback(() => {
     if (!selectedNodeId) return null;
@@ -2434,7 +2445,8 @@ export function RuntimeInspector({
         </button>
       )}
 
-      {open && createPortal(
+      {/* On opens the panel, Off closes it; with nothing in focus it asks for a node (or the whole tree). */}
+      {inspectorEnabled && createPortal(
         <aside
           data-gui-inspector-control="true"
           style={{
@@ -2547,6 +2559,29 @@ export function RuntimeInspector({
           </header>
 
           <div style={{ padding: 12, overflow: 'auto', fontSize: 12, lineHeight: 1.45 }}>
+            {!selectedNodeId ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: '8px 2px' }}>
+                <strong style={{ fontSize: 14 }}>Select node</strong>
+                <span style={{ opacity: 0.7 }}>Click any part of the page to inspect it.</span>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new Event(INSPECTOR_SELECT_ROOT_EVENT))}
+                  style={{
+                    border: `1px solid ${ui.lineStrong}`,
+                    background: 'transparent',
+                    color: ui.fg,
+                    borderRadius: 6,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  View all tree
+                </button>
+              </div>
+            ) : (
+            <>
             {treeView && (
               <div style={{ marginBottom: 12 }}>
                 {/* WHICH NODE this is, as the section's title: TREE › path to the
@@ -3298,6 +3333,8 @@ export function RuntimeInspector({
                   ))}
                 </div>
               </div>
+            )}
+            </>
             )}
           </div>
         </aside>,

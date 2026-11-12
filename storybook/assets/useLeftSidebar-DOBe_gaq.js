@@ -1,0 +1,1 @@
+import{r as e}from"./iframe-D0caXraM.js";import{L as r}from"./LeftSidebarContext-B_lKXPeO.js";const a=()=>{const t=e.useContext(r);if(!t)throw new Error("useLeftSidebar must be used within a LeftBarProvider");return t};export{a as u};
