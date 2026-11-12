@@ -1,0 +1,95 @@
+{%- comment -%}
+  Local override of the remote theme's _layouts/readme.html (neurons-me/neurons-me):
+  identical to the theme's file on origin/main plus the Meta Pixel / ViewContent
+  includes before </head>, so every layout: readme page (including /GUI/) carries
+  them without dropping the theme's .GUI topbar. If the theme's layout changes,
+  re-copy it and keep the include lines.
+{%- endcomment -%}
+<!doctype html>
+<html lang="{{ page.lang | default: site.lang | default: 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  {% assign page_title = page.title | default: site.title | escape %}
+  {% assign page_description = page.description | default: site.description | escape %}
+  {% assign social_image = page.image | default: site.me_theme.social_image | default: site.image %}
+  {% if social_image %}
+    {% unless social_image contains "://" %}
+      {% assign social_image = social_image | absolute_url %}
+    {% endunless %}
+  {% endif %}
+  {% assign page_url = page.url | absolute_url %}
+  <title>{{ page_title }}</title>
+  <meta name="description" content="{{ page_description }}" />
+  {% comment %}
+    Every "layout: readme" page inherits real Open Graph/Twitter Card tags
+    from here — this is the ONE place that decides them, not per-page front
+    matter alone (page.image/page.description just override the site-wide
+    default when a page sets them; most won't need to). Before this, a page
+    with no image/description explicitly hand-authored as a standalone
+    .html file (bypassing this layout entirely) was the only way to get a
+    working social preview — confirmed live for
+    neurons-me.github.io/.me/docs/Splitting-your-Bill.html, which rendered
+    a bare <title> and nothing else. Site-wide fallback comes from
+    site.me_theme.social_image / site.description in _config.yml.
+  {% endcomment %}
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="{{ page_title }}" />
+  <meta property="og:description" content="{{ page_description }}" />
+  <meta property="og:url" content="{{ page_url }}" />
+  {% if social_image %}
+  <meta property="og:image" content="{{ social_image }}" />
+  <meta property="og:image:secure_url" content="{{ social_image }}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="neurons.me beetle" />
+  {% endif %}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="{{ page_title }}" />
+  <meta name="twitter:description" content="{{ page_description }}" />
+  {% if social_image %}
+  <meta name="twitter:image" content="{{ social_image }}" />
+  {% endif %}
+  {% assign favicon_url = site.me_theme.favicon | default: "https://res.cloudinary.com/dkwnxf6gm/image/upload/v1760629064/neurons.me_b50f6a.png" %}
+  <link rel="icon" type="image/png" href="{{ favicon_url }}">
+  <link rel="apple-touch-icon" href="{{ favicon_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/me-theme.css' | relative_url }}">
+  <!-- .GUI topbar (this.gui@4.4.3) via assets/readme-gui.js; the header below stays as the no-JS / CDN-failure fallback.
+       Page-scoped theme keys; default mode follows the stored choice or prefers-color-scheme. -->
+  <script>
+    window.__thisGuiThemeScope = { scopeId: "neurons-me-readme", themeModeKey: "neurons-me-readme.themeMode", themeIdKey: "neurons-me-readme.themeId", defaultMode: "dark" };
+    try {
+      if (!localStorage.getItem("neurons-me-readme.themeId")) localStorage.setItem("neurons-me-readme.themeId", "neurons.me");
+      var storedMode = localStorage.getItem("neurons-me-readme.themeMode");
+      var prefDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.guiMode = storedMode || (prefDark ? "dark" : "light");
+    } catch (e) {}
+    document.documentElement.classList.add("gui-boot");
+  </script>
+  <style>.material-symbols-rounded,.material-symbols-outlined,.material-icons{display:none!important}</style>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/this.gui@4.4.3/dist/this.gui.umd.js" integrity="sha384-wRWfsrm3Q+C292/CaFor9OWipKwSuG+Nqi23QUqiZCq/maOmZ59XRggcRUchGP80" crossorigin="anonymous"></script>
+  {% include meta-pixel.html %}
+  {% include view-content.html %}
+</head>
+<body>
+  <div id="gui-root"></div>
+  <header class="topbar" id="static-topbar">
+    <a class="logo" href="https://neurons-me.github.io/" title="neurons.me"><img src="https://res.cloudinary.com/dkwnxf6gm/image/upload/v1760629064/neurons.me_b50f6a.png" alt="neurons.me" width="28" height="28" /></a>
+    <div class="mepath"><a href="https://neurons-me.github.io/.me/" title=".me">me://</a></div>
+    <span class="spacer"></span>
+    <a class="act" data-topbar="docs" href="https://neurons-me.github.io/.me/docs/">Docs</a>
+    <a class="gh" href="https://github.com/neurons-me">GitHub</a>
+  </header>
+
+  <main class="markdown-body">
+    {{ content }}
+  </main>
+
+  <script src="{{ '/assets/readme-gui.js' | relative_url }}"></script>
+  <script src="{{ '/assets/whatever-live.js' | relative_url }}"></script>
+</body>
+</html>
+
