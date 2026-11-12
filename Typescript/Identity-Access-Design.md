@@ -55,25 +55,40 @@ permissions:
 **Order:** first choose the agent's origin and its trust mechanism (custody contract, decision 1); then design Sync to
 end there. No other unlock path is added to apps in the meantime.
 
-**Agent origin, decided by the owner (2026-11-12): `cleaker.me` itself.** The whole interface environment (.GUI, the
-netget front end and the rest of what `cleaker.me` serves today) **moves to `neurons.me/`**, and `cleaker.me` keeps
-only its own role: the namespace and the identity agent. This satisfies "a dedicated origin with nothing else" by
-emptying `cleaker.me` instead of adding a subdomain. Consequences, to be worked out before implementation:
-- **What stays on `cleaker.me`:** only the agent's code (minimal, reviewed, owner-signed releases, strict CSP, no
-  third-party scripts, `frame-ancestors 'none'` for approval screens) and the namespace's data endpoints (claims,
-  keychain, NRP), answered as data, never as executable pages of other apps.
-- **What moves to `neurons.me`:** the interface (today's netget front end bundle, Users, Blockchain, the panels) and
-  the apps built with .GUI. They reach the agent by opening `cleaker.me` explicitly and receive only results or proofs.
-- **Handles `<handle>.cleaker.me`:** separate origins; what they serve (nothing, a redirect, a public page without the
-  agent's storage) is to be decided. They must never run code that could be confused with the agent.
-- **`www.cleaker.me`:** redirect to the apex (one agent origin, one store).
-- **Reads from `neurons.me` to `cleaker.me`:** public data is cross-origin from now on; which reads are allowed (CORS
-  for public reads only) is to be decided, without opening CORS for signing or sign-in.
-- **`netget.site`:** whether the gateway admin stays there or moves to `neurons.me` is to be decided.
-- **Existing saved identities** live in `cleaker.me` and `www.cleaker.me` browser storage today; they stay usable by
-  the agent at `cleaker.me` (www via Recover or a one-time move), and stop being reachable from the interface pages.
-- **Deployment and updates:** whoever can change the code served at `cleaker.me` is inside the trust boundary; its
+**Agent origin and the shape around it, decided by the owner (2026-11-12, refined the same day):**
+
+- **`cleaker.me` is the namespace seeing itself, and the identity agent lives there.** The case "the page is the
+  namespace" is kept: at its own door the namespace shows its own view (who it is, sign in, its keys, approvals, its own
+  routes such as `/users`, `/blockchain`, `/@handle/...`), drawn as `cleaker.me`, without `@ surface`. The custody
+  boundary does not ask for an empty origin; it asks that the code running there be **small, reviewed and trusted**:
+  no app modules, no third-party scripts, no remote UI documents, strict CSP, `frame-ancestors 'none'` for approval
+  screens.
+- **`neurons.me` is the environment:** the full .GUI, the gateway panels, the apps. A namespace is seen from outside
+  there (`cleaker.me @ neurons.me`), its routes opening over the site's view. For anything signed, it asks the agent at
+  `cleaker.me` and receives only results or proofs.
+- **netget is what serves, not what is served.** The gateway routes each domain to its composition. `netget.site`
+  redirects to `neurons.me` (one address for the interface, one browser store), or keeps only the gateway's API.
+  `www.cleaker.me` redirects to `cleaker.me`.
+- **`all.this` is the source of the modules** (`this.me`, `cleaker`, `this.gui`, netget's GUI, apps), published as
+  packages. Each address is a composition of them:
+  - **`cleaker.me` receives them compiled and pinned inside its own release** (exact versions, reviewed), never loaded
+    live from a CDN: a CDN or registry serving that origin would be inside the agent's trust boundary. Publishing a new
+    `this.gui` does not change the agent; only a new `cleaker.me` release the owner activates does.
+  - `neurons.me` and the apps may load modules from a CDN (pinned versions, SRI preferred): they are outside the agent's
+    boundary.
+- **Deployment and updates of `cleaker.me`:** whoever can change the code served there is inside the trust boundary;
   releases follow the hash-guarded kit and rollback procedure, activated only by the owner.
+
+Open, before implementation:
+- **Handles:** `jabellae.cleaker.me` is also a namespace seeing itself, but another origin and store. Proposed: its own
+  view lives at `cleaker.me/@jabellae` (the existing `/@handle/<path>` grammar, inside the agent's origin), and
+  `<handle>.cleaker.me` redirects there; the name grammar `<handle>.<root>` does not change.
+- **What exactly belongs to `cleaker.me`'s own view** and what stays in `neurons.me` (the namespace's directory and
+  chain are the namespace's; gateway panels are the environment's).
+- **Reads from `neurons.me` to `cleaker.me`:** cross-origin from now on; CORS for public reads only, never for signing
+  or sign-in.
+- **Existing saved identities** in `cleaker.me` storage stay usable by the agent; `www` ones via Recover or a one-time
+  move.
 
 ## 3. Interface: a choice instead of the error paragraph
 
