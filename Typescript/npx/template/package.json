@@ -16,7 +16,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.18.3",
-    "this.gui": "^4.2.1",
+    "this.gui": "^4.4.5",
     "this.me": "^4.2.1",
     "monad.ai": "^3.0.0"
   },
