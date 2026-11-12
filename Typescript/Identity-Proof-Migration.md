@@ -101,3 +101,6 @@ These do not depend on the agent, and each needs its own go-ahead:
 1. **The agent's origin**, together with the reservation in the grammar and routing.
 2. **The exact v2 format**: fields, maximums, tag.
 3. **Fixing F1 and the `me_sig.lua` hardening now**, or with the agent.
+
+Related: [Identity-Access-Design.md](Identity-Access-Design.md) (how a person gets their identity into a new browser;
+rotation of the root, which ties into the keychain revocation used here).
