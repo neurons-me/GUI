@@ -322,6 +322,11 @@ async function main() {
       check(null, '14.2 no private key, seed or secret material in anything the host received', !/"d"\s*:|privateKey|seed|secret/i.test(json));
     }
 
+    // The agent origin runs no third-party code (Identity-Access-Design.md): its page loads scripts from itself only.
+    const agentHtml = await (await fetch(agentUrl)).text();
+    const scriptSrcs = [...agentHtml.matchAll(/<script[^>]*\bsrc=["']([^"']+)["']/gi)].map((m) => m[1]);
+    const foreign = scriptSrcs.filter((src) => /^(https?:)?\/\//i.test(src) && !src.startsWith(agent.origin));
+    check(null, '15.1 the agent page loads no third-party script (no analytics, pixel or CDN)', foreign.length === 0 && !/fbq|googletagmanager|connect\.facebook/i.test(agentHtml), foreign.join(', '));
     check(null, 'nothing was requested outside the test origins', outside.length === 0, outside.slice(0, 3).join(', '));
   } finally {
     await browser.close();

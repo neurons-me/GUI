@@ -76,6 +76,9 @@ end there. No other unlock path is added to apps in the meantime.
     `this.gui` does not change the agent; only a new `cleaker.me` release the owner activates does.
   - `neurons.me` and the apps may load modules from a CDN (pinned versions, SRI preferred): they are outside the agent's
     boundary.
+  - **No third-party scripts in the agent origin**, including analytics and tracking (Meta Pixel, GTM): the agent's
+    page is built from its own HTML, never from a shared site template that carries them. The public sites (docs,
+    `neurons.me`) may carry them; the agent may not. Checked by `tests/integration/agent.browser.test.mjs` (15.1).
 - **Deployment and updates of `cleaker.me`:** whoever can change the code served there is inside the trust boundary;
   releases follow the hash-guarded kit and rollback procedure, activated only by the owner.
 
