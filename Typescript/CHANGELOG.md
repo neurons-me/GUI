@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 4.4.6
+
+- **A refused first sign-in says why.** When the server refused a sign-in (for example a key saved in this browser that is not the registered one, `403 CLAIM_VERIFICATION_FAILED`, or an identity it does not know, `404`) before any link was selected, the form stayed silent: the error was kept under the link the attempt opened and the view read only the selected one. The view now shows the latest attempt's pending state and error while the selected link has no session of its own ("We couldn't open this identity... use Recover Account"). Selection is unchanged.
+- The `npx this.gui` template depends on `^4.4.6`.
+
 ## 4.4.5
 
 - **LeftBar expanded view stretches like the rail.** The Theme footer docks to the bottom in both views, and shrinks if the list overflows so the footer stays on screen.
