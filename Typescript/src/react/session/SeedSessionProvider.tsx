@@ -523,6 +523,9 @@ export function SeedSessionProvider({
   // the view follows the latter, which is what a provider with a single link always did.
   const [explicit, setExplicit] = React.useState<LinkTarget | null>(null);
   const [lastKey, setLastKey] = React.useState<string | null>(null);
+  // The link the latest operation was started for (an operation refines its key to the link it opens, which before the
+  // first sign-in is not the selected one).
+  const [attemptKey, setAttemptKey] = React.useState<string | null>(null);
   const explicitRef = React.useRef<LinkTarget | null>(explicit);
   explicitRef.current = explicit;
 
@@ -532,8 +535,16 @@ export function SeedSessionProvider({
     () => selectedSnapshot ?? createEmptySnapshot(explicit ? normalizeMonadTransportOrigin(explicit.transport) : defaultTransportOrigin),
     [selectedSnapshot, explicit, defaultTransportOrigin],
   );
-  const status: SeedSessionStatus = activity[selectedKey]?.status ?? (snapshot.session ? 'ready' : 'idle');
-  const error: Error | null = activity[selectedKey]?.error ?? null;
+  // While the selected link has no session and nothing of its own going on, what the view shows is the latest attempt:
+  // its pending state and its refusal. Without this a first sign-in the server refused (403/404 from /claims/signIn)
+  // left the form silent: the error was kept under the link the attempt opened, and the view read only the selected
+  // (empty) one. A selected link's own state always wins; nothing here changes which link is selected.
+  const attemptActivity = !snapshot.session && !activity[selectedKey] && attemptKey && attemptKey !== selectedKey
+    ? activity[attemptKey]
+    : undefined;
+  const status: SeedSessionStatus = activity[selectedKey]?.status
+    ?? (snapshot.session ? 'ready' : attemptActivity?.status === 'ready' ? 'idle' : attemptActivity?.status ?? 'idle');
+  const error: Error | null = activity[selectedKey]?.error ?? attemptActivity?.error ?? null;
 
   /** The link an operation is about: the selected one when it is the same transport (and a name under its root), else its own. */
   const linkKeyFor = React.useCallback((namespace: string, transport: string): string => {
@@ -578,6 +589,7 @@ export function SeedSessionProvider({
 
   const beginFor = React.useCallback((key: string) => {
     React.startTransition(() => {
+      setAttemptKey(key);
       setActivity((current) => ({ ...current, [key]: { status: 'pending', error: null } }));
     });
   }, []);
@@ -585,6 +597,7 @@ export function SeedSessionProvider({
   const failFor = React.useCallback((cause: unknown, key: string) => {
     const normalized = toError(cause);
     React.startTransition(() => {
+      setAttemptKey(key);
       setActivity((current) => ({ ...current, [key]: { status: 'error', error: normalized } }));
     });
     throw normalized;

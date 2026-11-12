@@ -456,6 +456,36 @@ async function main() {
       await context.close();
     }
 
+    // ── 11. A first sign-in the server refuses: the card says so (it used to stay silent) ─────────────────────────────
+    // The refusal is stored under the link the attempt opens; before any link is selected the card read only the
+    // selected (empty) one, so a 403/404 from /claims/signIn showed nothing (2026-11-12, www.cleaker.me in Chrome).
+    for (const [label, withVault, expected] of [
+      ['with a saved key', true, /couldn't open this identity/i],
+      ['without a saved key', false, /no saved key for that identity on this address/i],
+    ]) {
+      const a = fakeMonad({ origin: 'http://a.test', namespace: 'a.test' });
+      a.refuseOpen = { status: 403, error: 'CLAIM_VERIFICATION_FAILED' };
+      const { context, page } = await open(browser, harness, [a]);
+      if (withVault) {
+        const vaultModule = `/@fs${path.join(root, 'src/core/identity/localIdentityVault.ts')}`;
+        await page.evaluate(async ({ vaultModule }) => {
+          const m = await import(/* @vite-ignore */ vaultModule);
+          await m.saveLocalIdentityVault('stale.a.test', new Uint8Array(32).fill(0x55), 'stale-secret-1');
+        }, { vaultModule });
+      }
+      a.reset();
+      await signIn(page, 'stale', 'stale-secret-1');
+      const sent = await until(page, () => true, null, 50).then(() => a.count(/POST \/claims\/signIn/));
+      const shown = await until(page, (re) => new RegExp(re, 'i').test(document.body.innerText), expected.source, 4000);
+      const text = await bodyText(page);
+      check(`11.${withVault ? 1 : 2} ${label}: a refused sign-in shows why`, shown,
+        shown ? '' : `server answered 403 to ${a.count(/POST \/claims\/signIn/)} sign-in(s) (sent ${sent}); card text: ${text.replace(/\s+/g, ' ').slice(0, 160)}`);
+      const usable = await canSubmit(page);
+      check(`11.${withVault ? 3 : 4} ${label}: not signed in, the form is usable again`,
+        !/Sign out/i.test(text) && usable, /Sign out/i.test(text) ? 'shows a session' : usable ? '' : 'submit stays disabled');
+      await context.close();
+    }
+
   } finally {
     await browser.close();
     harness.stop();

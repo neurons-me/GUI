@@ -21,6 +21,8 @@ export function fakeMonad({ origin, namespace, monadId = `monad-of-${namespace}`
     namespace,
     calls: [],
     failing: false,
+    /** When set, /claims/signIn answers this refusal (e.g. { status: 403, error: 'CLAIM_VERIFICATION_FAILED' }). */
+    refuseOpen: null,
     gates: { surface: null, open: null, channel: null },
     /** NRP channel (wss://<host>/nrp): connections opened and expressions asked, as a transport sees them. */
     channels: [],
@@ -79,6 +81,10 @@ export function fakeMonad({ origin, namespace, monadId = `monad-of-${namespace}`
         if (gate) await gate;
         const body = (() => { try { return JSON.parse(request.postData() || '{}'); } catch { return {}; } })();
         const ns = String(body.namespace || '');
+        if (state.refuseOpen) {
+          const target = { namespace: { me: ns, host: state.host }, operation: 'open', path: '/' };
+          return route.fulfill(json(state.refuseOpen.status, { ok: false, target, error: state.refuseOpen.error }));
+        }
         state.opened.push(ns);
         return route.fulfill(json(200, {
           ok: true,
