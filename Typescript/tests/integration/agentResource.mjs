@@ -1,6 +1,6 @@
 // The TEST verifier for the identity agent's first cut (Agent-Protocol.md section 10). Disposable: started by
 // tests/integration/agent.browser.test.mjs, nothing real behind it. It serves:
-//   POST /register   a NEW identity created in the agent: claim + agent key + `agent-only`, in one atomic step (R10-R11)
+//   POST /api/v1/agent/register   a NEW identity created in the agent (the monad's route): claim + agent key + `agent-only`, in one atomic step (R10-R11)
 //   GET  /domains    one protected read, authorized on EVERY request (custody contract section 6)
 // and keeps its own security state (R13-R16): the identities (claim, keys, agent-only, revoked), the nonce store
 // (reserved only after a proof is fully validated, atomically, fail-closed when unavailable) and the time it started
@@ -124,8 +124,8 @@ export function startAgentResource({ agentOrigin, policy = 'v2', port = 0 }) {
     const n = reserveNonce(f.nonce); if (n) return { status: n === 'REPLAY' ? 401 : 503, error: n };
     // R11: one atomic step (single-threaded): only a name nobody holds; claim, agent key and agent-only together.
     if (identities.has(f.identityHash)) return { status: 409, error: 'ALREADY_REGISTERED' };
-    identities.set(f.identityHash, { v1Key: ip.publicKey, agentKey: f.agentKey, keyId: f.keyId, agentOnly: true, revoked: false });
-    return { status: 201, identityHash: f.identityHash, keyId: f.keyId };
+    identities.set(f.identityHash, { v1Key: ip.publicKey, agentKey: f.agentKey, keyId: f.keyId, agentOnly: true, revoked: false, namespace: message.namespace });
+    return { status: 201, identityHash: f.identityHash, keyId: f.keyId, namespace: message.namespace };
   }
 
   function readDomains(request, url, selfOrigin) {
@@ -181,14 +181,14 @@ export function startAgentResource({ agentOrigin, policy = 'v2', port = 0 }) {
       return res.end();
     }
     state.requests.push({ method: request.method, path: url.pathname + url.search, origin: origin || null });
-    if (request.method === 'POST' && url.pathname === '/register') {
+    if (request.method === 'POST' && url.pathname === '/api/v1/agent/register') {
       let raw = '';
       request.on('data', (c) => { raw += c; if (raw.length > 64_000) request.destroy(); });
       request.on('end', () => {
         let body = null; try { body = JSON.parse(raw); } catch { /* refused below */ }
         const v = register(body, origin, state.origin);
         state.outcomes.push(v.error || 'REGISTERED');
-        json(res, v.status, v.error ? { error: v.error } : { identityHash: v.identityHash, keyId: v.keyId, agentOnly: true }, origin);
+        json(res, v.status, v.error ? { error: v.error } : { identityHash: v.identityHash, keyId: v.keyId, namespace: v.namespace, agentOnly: true }, origin);
       });
       return;
     }

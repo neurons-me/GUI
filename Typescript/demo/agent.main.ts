@@ -20,7 +20,7 @@ import {
   type AgentRequest,
   type AgentResult,
 } from '@/agent/protocol';
-import { createIdentity, listIdentities, signV2, storeIdentity, type AgentIdentity } from '@/agent/agentKeys';
+import { AGENT_REGISTER_PATH, createIdentity, listIdentities, signV2, storeIdentity, type AgentIdentity } from '@/agent/agentKeys';
 
 const root = document.getElementById('agent') as HTMLElement;
 
@@ -95,7 +95,7 @@ if (createAt) {
     approve.disabled = true;
     listIdentities(op.namespace).then((ids) => {
       held = ids;
-      for (const id of ids) pick.append(el('option', { value: id.identityHash }, `${id.identityHash.slice(0, 12)}…  (key ${id.keyId.slice(0, 8)})`));
+      for (const id of ids) pick.append(el('option', { value: id.identityHash }, `${id.claimedNamespace ?? id.identityHash.slice(0, 12) + '…'}  (key ${id.keyId.slice(0, 8)})`));
       if (ids.length) approve.disabled = false;
       else status.textContent = `This agent holds no identity for ${op.namespace}.`;
     }, () => { status.textContent = 'This agent cannot read its identities.'; });
@@ -118,7 +118,8 @@ if (createAt) {
           id: request.id,
           ok: true,
           proof: base64url(JSON.stringify(proof)),
-          identity: { namespace: chosen.namespace, identityHash: chosen.identityHash, keyId: chosen.keyId },
+          // Public: the namespace this identity holds (the one the server confirmed), its hash and key id.
+          identity: { namespace: chosen.claimedNamespace ?? chosen.namespace, identityHash: chosen.identityHash, keyId: chosen.keyId },
         });
       } catch {
         // No unsigned fallback: the host gets an error, and nothing is sent anywhere from here.
@@ -141,11 +142,19 @@ function renderCreate(resource: string, namespace: string) {
     status.textContent = 'Creating…';
     try {
       const { identity, body } = await createIdentity({ namespace, audience: resource, origin: window.location.origin });
-      const res = await fetch(`${resource}/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), credentials: 'omit' });
+      const res = await fetch(`${resource}${AGENT_REGISTER_PATH}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), credentials: 'omit' });
       const answer = await res.json().catch(() => null);
       if (!res.ok) { status.textContent = `refused: ${res.status} ${answer?.error ?? ''}`.trim(); button.disabled = false; return; }
+      // The server must have registered exactly the namespace the identity proof named, for this identity and key.
+      if (answer?.namespace !== identity.claimedNamespace || answer?.identityHash !== identity.identityHash || answer?.keyId !== identity.keyId) {
+        status.textContent = 'refused: the server confirmed a different registration'; button.disabled = false; return;
+      }
       await storeIdentity(identity);   // kept only once the registration was accepted
-      root.replaceChildren(el('p', { 'data-agent': 'created' }, identity.identityHash), el('p', { 'data-agent': 'created-key' }, identity.keyId));
+      root.replaceChildren(
+        el('p', { 'data-agent': 'created' }, identity.identityHash),
+        el('p', { 'data-agent': 'created-key' }, identity.keyId),
+        el('p', { 'data-agent': 'created-namespace' }, identity.claimedNamespace ?? ''),
+      );
     } catch (e) {
       status.textContent = `error: ${e instanceof Error ? e.message : String(e)}`;
       button.disabled = false;

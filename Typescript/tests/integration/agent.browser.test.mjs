@@ -224,9 +224,9 @@ async function main() {
     {
       const page = await context.newPage();
       await page.goto(`${attacker.origin}/agentHost.html`);
-      const fromPage = await page.evaluate(async (url) => { const r = await fetch(`${url}/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return (await r.json()).error; }, resource.origin);
+      const fromPage = await page.evaluate(async (url) => { const r = await fetch(`${url}/api/v1/agent/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return (await r.json()).error; }, resource.origin);
       check('N12', '9.1 a registration sent from a page that is not the agent is refused (a hurdle: Origin, not proof)', fromPage === 'NOT_FROM_AGENT');
-      const again = await page.evaluate(async (url) => { const r = await fetch(`${url}/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.status; }, resource.origin);
+      const again = await page.evaluate(async (url) => { const r = await fetch(`${url}/api/v1/agent/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); return r.status; }, resource.origin);
       check(null, '9.2 (and nothing was created by it)', again === 403 && resource.identities.size === 4);
       await page.close();
     }

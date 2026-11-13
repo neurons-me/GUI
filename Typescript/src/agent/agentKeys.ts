@@ -16,7 +16,10 @@ const STORE = 'identities';
 
 export type AgentIdentity = {
   identityHash: string;
+  /** The ROOT the identity was created under (e.g. `cleaker.me`): what requests name, and what identities are listed by. */
   namespace: string;
+  /** The namespace the identity claimed under that root (`<handle>.<root>`), as the server confirmed at registration. */
+  claimedNamespace?: string;
   keyId: string;
   /** Agent public key, JWK `x` (base64url). */
   agentKey: string;
@@ -102,7 +105,10 @@ export async function createIdentity(input: { namespace: string; audience: strin
     v: PROOF_V2, op: 'register', identityHash, namespace: input.namespace, keyId, agentKey,
     nonce: newRequestId(), issuedAt, expiresAt: issuedAt + (input.ttlMs ?? 60_000), origin: input.origin, audience: input.audience,
   };
-  const identity: AgentIdentity = { identityHash, namespace: input.namespace, keyId, agentKey, privateKey: pair.privateKey, createdAt: issuedAt };
+  // The namespace the identity proof names (prove(): `<handle>.<root>`); the server must confirm exactly this one.
+  let claimedNamespace = `${handle}.${input.namespace}`;
+  try { claimedNamespace = String(JSON.parse(String(probe.message)).namespace || claimedNamespace); } catch { /* the default above */ }
+  const identity: AgentIdentity = { identityHash, namespace: input.namespace, claimedNamespace, keyId, agentKey, privateKey: pair.privateKey, createdAt: issuedAt };
   const statement = await signV2(identity, fields);
   const proof = await prove(statement.bytes);
   // The seed lived only in `me`; nothing keeps it after this function returns.
@@ -116,3 +122,6 @@ export async function createIdentity(input: { namespace: string; audience: strin
 }
 
 export const storeIdentity = put;
+
+/** The path a resource server takes registrations at (the monad's route; the test verifier serves the same one). */
+export const AGENT_REGISTER_PATH = '/api/v1/agent/register';
