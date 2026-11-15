@@ -63,6 +63,43 @@ async function main() {
   check('a name held by another key is refused and nothing else moves', !takenResult.ok && /TAKEN/.test((takenResult as any).code + (takenResult as any).message)
     && (await sB.readConfirmed('profile.note')) === 'from B' && heldIdentitiesOf(ctx).length === 2);
 
+  // ── a second name for the same identity on the SAME ledger: the ledger binds an identity to its first name there
+  //    (its anchor) and accepts another only with an identity-link signed by the anchor's claim key ──
+  const claimStatus = async (origin: string, ns: string) =>
+    (await (await fetch(`${origin}/api/v1/claim-status?namespace=${encodeURIComponent(ns)}`)).json())?.claimed === true;
+  const heldBefore = heldIdentitiesOf(ctx).map((h) => `${h.identityHash}:${h.links.length}`).join();
+  // an altered request: the link travels, but a byte it covers changed in flight (here its timestamp)
+  const alteringFetch = (async (input: any, init?: any) => {
+    if (typeof init?.body === 'string' && init.body.includes('"link"')) {         // only a claim body carries a link
+      const body = JSON.parse(init.body);
+      if (body.link) { body.link.timestamp = Number(body.link.timestamp) + 1; init = { ...init, body: JSON.stringify(body) }; }
+    }
+    return fetch(input, init);
+  }) as typeof fetch;
+  const altered = link({ context: ctx, identityFrom: sA, username: `ua-alt-${tag}`, namespace: RA, transportOrigin: A, fetchImpl: alteringFetch });
+  const alteredResult = await attempt(() => altered.claimAndOpen(`ua-alt-${tag}.${RA}`));
+  check('an altered link request is refused', !alteredResult.ok && /IDENTITY_TAKEN/.test((alteredResult as any).code + (alteredResult as any).message), (alteredResult as any).code || '');
+  check('the refusal leaves no claim, no open link, nothing held changed',
+    !(await claimStatus(A, `ua-alt-${tag}.${RA}`)) && !altered.semanticNamespace && heldIdentitiesOf(ctx).map((h) => `${h.identityHash}:${h.links.length}`).join() === heldBefore);
+
+  const linked = link({ context: ctx, identityFrom: sA, username: `ua-two-${tag}`, namespace: RA, transportOrigin: A });
+  const linkedResult = await attempt(() => linked.claimAndOpen(`ua-two-${tag}.${RA}`));
+  check('a second name on the same ledger, linked from the anchor, is accepted', linkedResult.ok, linkedResult.ok ? '' : `${(linkedResult as any).code} ${(linkedResult as any).message}`.slice(0, 90));
+  check('it is the same identity, and the ledger reports the name claimed', linked.identityHash === sA.identityHash && await claimStatus(A, `ua-two-${tag}.${RA}`));
+  const wL = await attempt(() => linked.signAndWrite('profile.note', 'from the linked name'));
+  check('the linked name writes under its own name', wL.ok && (await linked.readConfirmed('profile.note')) === 'from the linked name');
+
+  const fromLinked = link({ context: ctx, identityFrom: linked, username: `ua-three-${tag}`, namespace: RA, transportOrigin: A });
+  const fromLinkedResult = await attempt(() => fromLinked.claimAndOpen(`ua-three-${tag}.${RA}`));
+  check('a linked name cannot sign further links', !fromLinkedResult.ok && /IDENTITY_TAKEN/.test((fromLinkedResult as any).code + (fromLinkedResult as any).message), (fromLinkedResult as any).code || '');
+  check('and that refusal leaves no claim either', !(await claimStatus(A, `ua-three-${tag}.${RA}`)) && !fromLinked.semanticNamespace);
+  const fromAnchor = link({ context: ctx, identityFrom: sA, username: `ua-three-${tag}`, namespace: RA, transportOrigin: A });
+  const fromAnchorResult = await attempt(() => fromAnchor.claimAndOpen(`ua-three-${tag}.${RA}`));
+  check('the same name, linked from the anchor, is accepted', fromAnchorResult.ok, fromAnchorResult.ok ? '' : `${(fromAnchorResult as any).code} ${(fromAnchorResult as any).message}`.slice(0, 90));
+  const stranger = link({ context: ctx, username: `us-${tag}`, password: `ps-${tag}-horse`, namespace: RA, transportOrigin: A });
+  await stranger.claimAndOpen(`us-${tag}.${RA}`);
+  check('another identity on the ledger is untouched', stranger.identityHash !== sA.identityHash);
+
   // ── closing the one that was the source leaves the link made from it ──
   sB.logout();
   check('closing the source link leaves the claim\'s own link open', sC.semanticNamespace === `ub-in-a-${tag}.${RA}` && !!hold(sC.identityHash));

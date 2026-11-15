@@ -18,9 +18,9 @@ import ME, {
   signEd25519Proof,
 } from 'this.me';
 import cleaker from 'cleaker';
-import type { CleakerNode, MeKernel } from 'cleaker';
+import type { CleakerNode, IdentityLinkProof, IdentityLinkTarget, MeKernel } from 'cleaker';
 import type { RuntimeAdapter } from '@/runtime/adapter';
-import { enlist, rememberRoot, rootOf } from './heldIdentities';
+import { enlist, openLinksOf, rememberRoot, rootOf } from './heldIdentities';
 import { createMeRuntime, readMeValue, writeMeValue } from '@/runtime/run-me';
 import { deriveCompoundSeed } from '@/gui/All.This/Cleaker/signedRequest';
 import {
@@ -325,6 +325,45 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
       : null;
   };
 
+  // A monad binds an identityHash to the FIRST namespace claimed there with it (its anchor); another namespace for the
+  // same identity on that monad is accepted only with an identity-link signed by the anchor's claim key. With
+  // `identityFrom`, this link holds that identity's root, so it can sign as the open link of that identity on the SAME
+  // root and transport -- the source link itself when it qualifies, else another open link of that identity there.
+  // None there: no link is sent (a monad where the identity holds nothing needs none). The monad, not this choice,
+  // decides which namespace is the anchor; a link from a non-anchor is refused there and leaves no claim.
+  type LinkSource = { namespace: string; handle: string };
+  const identityLinkSource = (): LinkSource | null => {
+    const source = options.identityFrom;
+    if (!source || !options.context) return null;
+    const sourceIdentity = String(source.identityHash || '');
+    if (!sourceIdentity) return null;
+    const candidates = openLinksOf(options.context).filter((open) =>
+      open.root === rootNamespace
+      && String(open.session.identityHash || '') === sourceIdentity
+      && normalizeMonadTransportOrigin(open.session.transportOrigin || '') === transportOrigin,
+    );
+    const chosen = candidates.find((open) => open.session === source) ?? candidates[0];
+    if (!chosen) return null;
+    const handle = chosen.namespace.slice(0, chosen.namespace.length - chosen.root.length - 1);
+    return handle ? { namespace: chosen.namespace, handle } : null;
+  };
+  // Signed with the source handle's claim key, derived here from the held root (the key never leaves this module),
+  // over exactly the target cleaker hands over: the proof it then sends unchanged.
+  const signIdentityLink = async (source: LinkSource, target: IdentityLinkTarget): Promise<IdentityLinkProof | null> => {
+    if (!target.identityHash || target.identityHash !== String(options.identityFrom?.identityHash || '')) return null;
+    const timestamp = Date.now();
+    const message = normalizeProofMessage({
+      op: 'identity-link',
+      identityHash: target.identityHash,
+      fromNamespace: source.namespace,
+      toNamespace: target.toNamespace,
+      toPublicKey: target.toPublicKey,
+      timestamp,
+    });
+    const { privateKey } = await importEd25519SigningKey(await deriveBranchProofSeed(kernelSeedHex, source.handle));
+    return { fromNamespace: source.namespace, timestamp, signature: await signEd25519Proof(privateKey, message) };
+  };
+
   const claim = async (namespace: string): Promise<MonadClaimResult> => {
     const semanticNamespace = normalizeMonadSemanticNamespace(String(namespace || '').trim());
     if (!semanticNamespace) {
@@ -334,7 +373,11 @@ export function createCleakerSession(options: CleakerSessionOptions): SeedSessio
     try {
       // node.claim() builds its own real proof internally (proveKernelNamespace,
       // cleaker's binder.ts) -- no secret to pass on this path at all anymore.
-      const result = await node.claim({ namespace: semanticNamespace });
+      const linkSource = identityLinkSource();
+      const result = await node.claim({
+        namespace: semanticNamespace,
+        ...(linkSource ? { link: (target: IdentityLinkTarget) => signIdentityLink(linkSource, target) } : {}),
+      });
       activeNamespace = result.namespace;
       identityHash = result.identityHash;
       writeLocalSessionState(me, runtime, activeNamespace, true, identityHash, result.openedAt);
