@@ -23,6 +23,11 @@ export const GUI_BARS_ID = `${GUI_LAYOUT_ID}.bars`;
 export const GUI_CONTENT_ID = `${GUI_LAYOUT_ID}.content`;
 export const GUI_QR_ID = `${GUI_LAYOUT_ID}.qr`;
 export const GUI_QR_POSITION_ID = `${GUI_QR_ID}.position`;
+export const GUI_BRAND_ID = `${GUI_LAYOUT_ID}.brand`;
+export const GUI_BRAND_POSITION_ID = `${GUI_BRAND_ID}.position`;
+/** Public UI preference: how keys wrap inside the identity card (`rows` or `scroll`). */
+export const GUI_KEYS_ID = `${GUI_LAYOUT_ID}.keys`;
+export const GUI_KEYS_ROW_MODE_ID = `${GUI_KEYS_ID}.rowMode`;
 
 export type BarSide = 'left' | 'right' | 'top' | 'bottom';
 

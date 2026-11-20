@@ -10,6 +10,10 @@ import { Typography } from '@/gui/Atoms';
 import { Hero, Stack } from '@/gui/Molecules';
 import { BarBrandCell, MARK_CORNERS, QrBadge, SiteBrand, type MarkCorner } from './Position';
 
+// PUBLIC, reproducible test seed for this story only: not an identity, grants no authority.
+// Passing it explicitly keeps the kernel from generating + persisting an anonymous seed (this.me.seed:v1).
+const DEMO_SEED = 'storybook-demo:position-marks';
+
 function Home() {
   return (
     <Hero height="100vh" mode="left" padding={{ xs: 3, md: 8 }} contentMaxWidth={680}>
@@ -28,7 +32,7 @@ const app: AppDeclaration = { id: 'marks', namespace: 'apps.marks', title: 'Neur
 const NAV = [{ route: 'home', label: 'Home', icon: 'home' }];
 
 function MarksPreview({ identityCorner, username }: { identityCorner: MarkCorner; username?: string }) {
-  const me = useMemo(() => new ME() as any, []);
+  const me = useMemo(() => new ME(DEMO_SEED) as any, []);
   const runtime = useMemo(() => RunMe(me), [me]);
   const value = `https://cleaker.me/?at=${encodeURIComponent(window.location.origin)}`;
   return (
