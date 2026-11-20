@@ -1,4 +1,4 @@
-// CleakerKeychain.tsx — the UI for an identity's registered signing keys.
+// Keys.tsx — the UI for an identity's registered signing keys.
 // keychainClient.ts (sibling file) is now a real, working protocol client
 // — this component itself stays presentation-only: every callback prop is
 // still optional with a no-op default so Storybook can keep using pure
@@ -52,7 +52,7 @@ export interface PendingLocalRegistration {
   requestedAdmin: boolean;
 }
 
-export interface CleakerKeychainProps {
+export interface KeysProps {
   /** Whose keychain this is — display only. */
   handle: string;
   keys: KeychainKey[];
@@ -220,7 +220,7 @@ function AvailabilityBadge({ availability }: { availability: KeyLocalAvailabilit
 
 // ─── Main component ────────────────────────────────────────────────────
 
-export default function CleakerKeychain({
+export default function Keys({
   handle,
   keys,
   pendingLocalRegistrations = [],
@@ -236,7 +236,7 @@ export default function CleakerKeychain({
   focusedService = null,
   focusServiceKeys = false,
   sx,
-}: CleakerKeychainProps) {
+}: KeysProps) {
   // Necessary, not sufficient by itself: the server independently
   // re-checks authorization + vigencia + admin standing on every admin
   // mutation, regardless of what this disables.
@@ -245,7 +245,7 @@ export default function CleakerKeychain({
   );
 
   return (
-    <Box data-gui-component="CleakerKeychain" sx={{ maxWidth: 440, mx: 'auto', p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
+    <Box data-gui-component="Keys" sx={{ maxWidth: 440, mx: 'auto', p: { xs: 2, sm: 3 }, display: 'flex', flexDirection: 'column', gap: 2, ...sx }}>
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <Typography variant="h6">Keychain</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>@{handle}</Typography>

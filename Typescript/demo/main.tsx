@@ -1,5 +1,5 @@
-// demo/main.tsx — a REAL mount of CleakerKeychain against a REAL,
-// disposable monad instance. Storybook (CleakerKeychain.stories.tsx)
+// demo/main.tsx — a REAL mount of Keys against a REAL,
+// disposable monad instance. Storybook (Keys.stories.tsx)
 // stays mock-only on purpose; this is the separate surface where
 // keychainClient.ts actually signs things and talks to a backend.
 //
@@ -20,9 +20,9 @@ import { createRoot } from 'react-dom/client';
 import Theme from '@/gui/Theme/Theme';
 import { createCleakerSession } from '@/core/session/createCleakerSession';
 import { deriveIdentityRootHexFromPhrase } from '@/core/identity/recoveryPhrase';
-import CleakerKeychain from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
-import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
-import type { KeychainKey, KeychainView } from '@/gui/All.This/Cleaker/Keychain/keychainState';
+import Keys from '@/gui/All.This/Cleaker/Keys/Keys';
+import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keys/keychainClient';
+import type { KeychainKey, KeychainView } from '@/gui/All.This/Cleaker/Keys/keychainState';
 
 const DEMO_PHRASE = 'giant pigeon ridge powder allow gasp disease turn bean legend track nasty'.split(' ');
 
@@ -116,7 +116,7 @@ function App() {
           endpoint={DEMO_ENDPOINT} namespace={DEMO_NAMESPACE} identityHash={session.identityHash.slice(0, 12)}…
         </div>
         <div style={{ flex: 1 }}>
-          <CleakerKeychain
+          <Keys
             handle={DEMO_USERNAME}
             keys={keys}
             pendingLocalRegistrations={pendingLocalRegistrations}

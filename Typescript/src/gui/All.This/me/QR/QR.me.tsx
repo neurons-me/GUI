@@ -1,4 +1,5 @@
 import React from 'react';
+import { truncateMiddlePath } from './truncateMiddlePath';
 import { Avatar, Box, Tooltip, Typography } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
 import { useGuiTheme } from '@/gui-internals/Hooks';
@@ -76,6 +77,13 @@ export type QRmeProps = {
    * the landing QR's 125px scan size.
    */
   fitDiameter?: boolean;
+  /**
+   * Keep the face and the outer box at `diameter` even when `value` (or a
+   * longer perimeter label) would change the snapped module size. The
+   * pattern is still whole-pixel, then uniformly scaled to fill the face.
+   * Used by the login-status card so the QR is a fixed theme-rem anchor.
+   */
+  lockSize?: boolean;
   bg?: string;
   fg?: string;
   defaultFace?: 'qr' | 'avatar';
@@ -244,6 +252,7 @@ export default function QRme({
   diameter,
   size = 112,
   fitDiameter = false,
+  lockSize = false,
   bg,
   fg,
   defaultFace = 'qr',
@@ -301,7 +310,7 @@ export default function QRme({
   // CSS-stretched to fit, which would silently reintroduce the fractional
   // per-module pixel size snapQrCellSize exists to avoid (see its own doc
   // comment in QR.tsx for the confirmed real decode failure this caused).
-  const { qrSize, effectiveDiameter, qrInset } = React.useMemo(() => {
+  const { qrSize, effectiveDiameter, qrInset, faceScale = 1 } = React.useMemo(() => {
     if (isTopbar) {
       // The real remaining source of "air" (flagged live 2026-10-02, after
       // the inset fixes above stopped helping): this branch used to just
@@ -334,23 +343,33 @@ export default function QRme({
       // same function to size that other thing to match, instead of two
       // independently-maintained copies of this math drifting apart.
       const size = resolveTopbarQrSize(value, cappedDiameter - inset * 2);
-      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
+      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset, faceScale: 1 };
     }
     const moduleCount = getQrModuleCount(value, QR_ECC);
     const totalModules = moduleCount + QR_QUIET_ZONE_MODULES * 2;
     const inset = Math.max(2, Math.round(resolvedDiameter * QR_INSET_RATIO));
     const requestedQrSize = resolvedDiameter - inset * 2;
-    if (fitDiameter) {
+    if (fitDiameter || lockSize) {
       // Nearest whole-pixel cell that fills the requested diameter, without
       // the 4px scan-floor growing the badge past it (a longer URL would
       // otherwise jump from ~125px to ~172px).
       const cell = Math.max(1, Math.round(requestedQrSize / Math.max(1, totalModules)));
       const size = cell * totalModules;
-      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
+      if (lockSize) {
+        // Frame stays at `diameter`; the snapped pattern is scaled to fill it
+        // so a longer /keys URL cannot change the drawn size or its centre.
+        return {
+          qrSize: size,
+          effectiveDiameter: resolvedDiameter,
+          qrInset: inset,
+          faceScale: size > 0 ? requestedQrSize / size : 1,
+        };
+      }
+      return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset, faceScale: 1 };
     }
     const { size } = snapQrCellSize(totalModules, requestedQrSize, MIN_PX_PER_MODULE);
-    return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset };
-  }, [value, resolvedDiameter, isTopbar, fitDiameter]);
+    return { qrSize: size, effectiveDiameter: size + inset * 2, qrInset: inset, faceScale: 1 };
+  }, [value, resolvedDiameter, isTopbar, fitDiameter, lockSize]);
   // The embedded wordmark's pixel cell size floor is NOT scaled to
   // `qrSize` in practice: `qrSize / 100` is below 1.4 at every size this
   // component actually renders (even the ~124px default case), so the
@@ -441,6 +460,7 @@ export default function QRme({
           : theme.palette.text.disabled,
     theme.palette.text.secondary,
   );
+  const [perimeterShown, setPerimeterShown] = React.useState<string | undefined>(undefined);
   // The handle portion (everything before the root) is its own kind of
   // thing -- an identity, not a connection-status signal -- so it gets
   // its own color rather than either the root's status-driven ringAccent
@@ -463,22 +483,26 @@ export default function QRme({
   // The label reads `<handle>.<root>[<path>][ @ <where the page is>]`: the namespace with its path, then the address bar's
   // place when it is a different one (positionExpression.ts: the NRP overlay, namespace @ surface). The root is found as a whole segment run (after a `.`
   // or at the start, before the end or a `/ ? # @` or a space), so what follows it no longer hides it.
+  // What is actually drawn: the full label, or its hash-style middle cut when it doesn't fit the two edges
+  // (truncateMiddlePath: keeps the username and the deepest segment, eats from the first path segment down).
+  const shownLabel = perimeterShown ?? perimeterLabel;
+  const perimeterTruncated = perimeterShown !== undefined && perimeterShown !== perimeterLabel;
   const perimeterRootStart = (() => {
-    if (!perimeterRootLabel || !perimeterLabel) return -1;
+    if (!perimeterRootLabel || !shownLabel) return -1;
     let from = 0;
     for (;;) {
-      const at = perimeterLabel.indexOf(perimeterRootLabel, from);
+      const at = shownLabel.indexOf(perimeterRootLabel, from);
       if (at < 0) return -1;
-      const next = perimeterLabel[at + perimeterRootLabel.length];
-      const startsSegment = at === 0 || perimeterLabel[at - 1] === '.';
+      const next = shownLabel[at + perimeterRootLabel.length];
+      const startsSegment = at === 0 || shownLabel[at - 1] === '.';
       const endsSegment = next === undefined || next === '/' || next === '?' || next === '#' || next === '@' || next === ' ';
       if (startsSegment && endsSegment) return at;
       from = at + 1;
     }
   })();
-  const perimeterPrefixText = perimeterRootStart >= 0 ? perimeterLabel!.slice(0, perimeterRootStart) : perimeterLabel;
+  const perimeterPrefixText = perimeterRootStart >= 0 ? shownLabel!.slice(0, perimeterRootStart) : shownLabel;
   const perimeterRootText = perimeterRootStart >= 0 ? perimeterRootLabel! : '';
-  const perimeterPathText = perimeterRootStart >= 0 ? perimeterLabel!.slice(perimeterRootStart + perimeterRootLabel!.length) : '';
+  const perimeterPathText = perimeterRootStart >= 0 ? shownLabel!.slice(perimeterRootStart + perimeterRootLabel!.length) : '';
   // The namespace carries the accent: the theme's own primary, so it stands apart from the handle (link blue) and from the
   // path (quiet). A warning or an error still colours it (those are worth seeing); "off" only dims it, and the dot and
   // the ring say that nothing answers.
@@ -564,6 +588,30 @@ export default function QRme({
   // mirror it (plus the dot's) as transparent, pointer-events:none HTML boxes
   // carrying the node ids. Purely a hit/outline target: no visual of its own.
   const perimeterTextRef = React.useRef<SVGTextElement>(null);
+  const perimeterPathRef = React.useRef<SVGPathElement>(null);
+  // Fit the label to the real run: the path IS the frame's own geometry pushed out by ringOffset (concentric) —
+  // from where the bottom-left curve ends, along the bottom, round the bottom-right corner, up the right side to
+  // where the top-right curve begins. Room = that whole length past the dot; measured with the SVG's own text
+  // engine (same font, same size), so nothing is cut while it still fits.
+  React.useLayoutEffect(() => {
+    if (!showPerimeterLabel || !perimeterLabel) { setPerimeterShown(undefined); return; }
+    const pathEl = perimeterPathRef.current; const textEl = perimeterTextRef.current;
+    const svg = textEl?.ownerSVGElement;
+    if (!pathEl || !textEl || !svg || typeof pathEl.getTotalLength !== 'function') return;
+    let room = 0;
+    try { room = pathEl.getTotalLength() - perimeterTextStartOffset; } catch { return; }
+    if (room <= 0) return;
+    const probe = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    probe.setAttribute('font-family', textEl.getAttribute('font-family') || 'monospace');
+    probe.setAttribute('font-size', String(perimeterFontSize));
+    probe.setAttribute('font-weight', '700'); // widest weight used in the label
+    probe.setAttribute('visibility', 'hidden');
+    svg.appendChild(probe);
+    const width = (c: string) => { probe.textContent = c; try { return probe.getComputedTextLength(); } catch { return Infinity; } };
+    const next = truncateMiddlePath(perimeterLabel, (c) => width(c) <= room + 0.5);
+    probe.remove();
+    setPerimeterShown((prev) => (prev === next ? prev : next));
+  }, [showPerimeterLabel, perimeterLabel, perimeterFontSize, perimeterPathSize, perimeterRadius, perimeterTextStartOffset]);
   const [perimeterTextBox, setPerimeterTextBox] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
   React.useLayoutEffect(() => {
     if (!showPerimeterLabel) {
@@ -582,7 +630,7 @@ export default function QRme({
     } catch {
       // getBBox throws on a non-rendered element -- nothing to mirror yet.
     }
-  }, [showPerimeterLabel, perimeterLabel, perimeterRootLabel, perimeterFontSize, outerSize]);
+  }, [showPerimeterLabel, perimeterLabel, perimeterShown, perimeterRootLabel, perimeterFontSize, outerSize]);
 
   const handlePointerEnter = () => {
     if (hoverFlip) setHovered(true);
@@ -626,6 +674,7 @@ export default function QRme({
         >
           <defs>
             <path
+              ref={perimeterPathRef}
               id={pathId}
               d={buildPerimeterPath(perimeterPathSize, perimeterRadius)}
               transform={`translate(${perimeterInset}, ${perimeterInset})`}
@@ -655,7 +704,11 @@ export default function QRme({
           ) : (
             <circle cx={statusDotCx} cy={statusDotCy} r={statusDotRadius} fill={statusDotColor} />
           )}
-          <text ref={perimeterTextRef} fontFamily="monospace" fontSize={perimeterFontSize}>
+          <text
+            ref={perimeterTextRef} fontFamily="monospace" fontSize={perimeterFontSize}
+            data-perimeter-full={perimeterLabel} data-perimeter-truncated={perimeterTruncated ? 'true' : undefined}
+          >
+            {perimeterTruncated && <title>{perimeterLabel}</title>}
             <textPath href={`#${pathId}`} startOffset={perimeterTextStartOffset}>
               {perimeterPrefixText && (
                 perimeterHandleHref ? (
@@ -663,7 +716,7 @@ export default function QRme({
                     href={perimeterHandleHref}
                     target="_blank"
                     rel="noopener noreferrer"
-                    aria-label={`Open ${perimeterPrefixText}${perimeterRootText}`}
+                    aria-label={perimeterTruncated ? `Open ${perimeterLabel}` : `Open ${perimeterPrefixText}${perimeterRootText}`}
                     style={{ pointerEvents: 'auto', cursor: 'pointer' }}
                     // Sits inside the QR's own click-to-expand region
                     // (Namespace wraps the whole bubble in a toggle) --
@@ -735,13 +788,15 @@ export default function QRme({
               aria-hidden="true"
               data-gui-node-id={`${qrBase}.namespace`}
               data-gui-component="namespace"
+              // Cut label: hovering it shows the whole address (the link, if any, keeps its own target instead).
+              title={perimeterTruncated && !perimeterHandleHref ? perimeterLabel : undefined}
               sx={{
                 position: 'absolute',
                 left: perimeterTextBox.x,
                 top: perimeterTextBox.y,
                 width: perimeterTextBox.width,
                 height: perimeterTextBox.height,
-                pointerEvents: 'none',
+                pointerEvents: perimeterTruncated && !perimeterHandleHref ? 'auto' : 'none',
               }}
             />
           )}
@@ -755,7 +810,7 @@ export default function QRme({
       data-gui-label={rootNodeId.endsWith('.code') ? 'QR code' : undefined}
       role={clickFlip ? 'button' : undefined}
       tabIndex={clickFlip ? 0 : undefined}
-      aria-label={[showingAvatar ? 'Show .me QR' : 'Show avatar', statusLabel].filter(Boolean).join(' — ')}
+      aria-label={[showingAvatar ? 'Show .me QR' : 'Show avatar', statusLabel, perimeterTruncated ? perimeterLabel : null].filter(Boolean).join(' — ')}
       onMouseEnter={handlePointerEnter}
       onMouseLeave={handlePointerLeave}
       onFocus={handlePointerEnter}
@@ -860,6 +915,18 @@ export default function QRme({
               justifyContent: 'center',
             }}
           >
+            <Box
+              sx={faceScale !== 1 ? {
+                width: qrSize,
+                height: qrSize,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                transform: `scale(${faceScale})`,
+                transformOrigin: 'center center',
+              } : undefined}
+            >
             <QR
               value={value}
               size={qrSize}
@@ -932,6 +999,7 @@ export default function QRme({
               }}
               data-gui-node-id={`${rootNodeId}.wordmark`}
             />
+            </Box>
           </Box>
         </Box>
 

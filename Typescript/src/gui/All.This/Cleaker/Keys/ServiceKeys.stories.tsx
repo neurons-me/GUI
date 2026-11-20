@@ -1,38 +1,21 @@
 import * as React from 'react';
 import type { Meta } from '@storybook/react';
 import ServiceKeysSection from './ServiceKeysSection';
-import CleakerKeychain from './CleakerKeychain';
+import Keys from './Keys';
 import IdentityIconRow from '../IdentityIconRow';
-import { removeServiceKeys, saveServiceKeys, SERVICE_IDS, type ServiceId } from './serviceKeyVault';
+import { DEMO_NS, Seeded } from './serviceKeys.storyFixtures';
 
 // me.cleaker.keychain › Service keys — third-party API keys (Twitch, PayPal Sandbox, Meta).
 // These stories use the REAL serviceKeyVault against this browser's localStorage under a demo
 // namespace (`storybook.demo`) — encrypted like the real thing; the seeded values are fakes.
 const meta: Meta<typeof ServiceKeysSection> = {
-  title: 'Pieces/Keychain/Service keys',
+  title: 'Pieces/Keys/Service keys',
   component: ServiceKeysSection,
   parameters: { layout: 'fullscreen' },
 };
 export default meta;
 
-const NS = 'storybook.demo';
-const DEMO_PASS = 'storybook-demo-passphrase';
-
-function Seeded({ saved, children }: { saved: ServiceId[]; children: () => React.ReactNode }) {
-  const [ready, setReady] = React.useState(false);
-  React.useEffect(() => {
-    let live = true;
-    (async () => {
-      for (const s of SERVICE_IDS) removeServiceKeys(NS, s);
-      for (const s of saved) {
-        await saveServiceKeys(NS, s, s === 'meta' || s === 'openai' || s === 'grok' ? { apiKey: 'demo-not-a-real-key' } : s === 'github' ? { token: 'demo-token' } : s === 'facebook' ? { appId: 'demo-app', appSecret: 'demo-secret' } : s === 'whatsapp' ? { accessToken: 'demo-token', phoneNumberId: '000' } : s === 'sms' ? { accountSid: 'ACdemo', authToken: 'demo', fromNumber: '+10000000000' } : s === 'google' ? { clientId: 'demo-id.apps.example', clientSecret: 'demo-secret' } : { clientId: 'demo-id', clientSecret: 'demo-secret', channel: 'demo' }, DEMO_PASS);
-      }
-      if (live) setReady(true);
-    })();
-    return () => { live = false; };
-  }, [saved.join(',')]);
-  return ready ? <>{children()}</> : null;
-}
+const NS = DEMO_NS;
 
 export const NoneSaved = () => (
   <Seeded saved={[]}>{() => <Box440><ServiceKeysSection namespace={NS} /></Box440>}</Seeded>
@@ -59,7 +42,7 @@ export const ScrolledToSection = () => (
   <Seeded saved={['github']}>
     {() => (
       <div style={{ height: 600, overflow: 'auto' }}>
-        <CleakerKeychain
+        <Keys
           handle="jabellae"
           keys={[{ keyId: 'key-laptop', label: 'This laptop', admin: true, authorization: 'active', localAvailability: 'available-unlocked', addedAt: Date.now() - 864e5 }]}
           serviceKeysNamespace={NS}
@@ -73,7 +56,7 @@ export const ScrolledToSection = () => (
 export const InKeychainList = () => (
   <Seeded saved={['twitch', 'meta', 'google', 'openai', 'linkedin', 'grok', 'github', 'facebook', 'whatsapp', 'sms']}>
     {() => (
-      <CleakerKeychain
+      <Keys
         handle="jabellae"
         keys={[{ keyId: 'key-laptop', label: 'This laptop', admin: true, authorization: 'active', localAvailability: 'available-unlocked', addedAt: Date.now() - 864e5 }]}
         serviceKeysNamespace={NS}

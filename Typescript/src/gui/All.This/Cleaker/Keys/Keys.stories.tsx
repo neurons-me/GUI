@@ -1,7 +1,7 @@
 import * as React from 'react';
 import type { Meta } from '@storybook/react';
 import Theme from '@/gui/Theme/Theme';
-import CleakerKeychain, { type PendingLocalRegistration } from './CleakerKeychain';
+import Keys, { type PendingLocalRegistration } from './Keys';
 import type { KeychainKey, KeychainView } from './keychainState';
 
 // me.cleaker.keychain — a navigable prototype of what each keychain
@@ -15,9 +15,9 @@ import type { KeychainKey, KeychainView } from './keychainState';
 // registers a key atomically (an admin key signs the whole request in
 // one call) -- there's no server-side two-step "request, then someone
 // approves it later" state for a screen to represent.
-const meta: Meta<typeof CleakerKeychain> = {
-  title: 'Pieces/Keychain',
-  component: CleakerKeychain,
+const meta: Meta<typeof Keys> = {
+  title: 'Pieces/Keys',
+  component: Keys,
   parameters: {
     layout: 'fullscreen',
   },
@@ -94,7 +94,7 @@ function Interactive({
 
   return (
     <Theme>
-      <CleakerKeychain
+      <Keys
         handle={HANDLE}
         keys={keys}
         pendingLocalRegistrations={pendingLocalRegistrations}

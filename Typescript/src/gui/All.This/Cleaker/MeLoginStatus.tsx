@@ -8,6 +8,16 @@ import Typography from '@/gui/Atoms/Typography/Typography';
 import QRme, { type QRmeProps } from '@/gui/All.This/me/QR/QR.me';
 import IdentityIconRow from './IdentityIconRow';
 
+/** Drawn size of the card QR, in rem (125px at a 16px root). Locked so /keys cannot change it. */
+export const QR_CARD_DIAMETER_REM = 7.8125;
+
+function cardQrDiameterPx(): number {
+  if (typeof window === 'undefined') return 125;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return (Number.isFinite(rem) && rem > 0 ? rem : 16) * QR_CARD_DIAMETER_REM;
+}
+
+
 export type MeLoginStatusProps = {
   nodeId: string;
   authenticated: boolean;
@@ -18,6 +28,10 @@ export type MeLoginStatusProps = {
   onNavigate: (to: string) => void;
   onLogout: () => void;
   onSignIn?: () => void;
+  /** When set, replaces the default icon row under the QR (IdentityTree already includes that row). */
+  tree?: React.ReactNode;
+  /** Sign out lives elsewhere (the card's icon under its gear): no Sign out button here. */
+  hideSignOut?: boolean;
 };
 
 export default function MeLoginStatus({
@@ -28,14 +42,28 @@ export default function MeLoginStatus({
   onNavigate,
   onLogout,
   onSignIn,
+  tree,
+  hideSignOut = false,
 }: MeLoginStatusProps) {
   return (
-    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, pb: 0.5 }}>
+    <Box data-me-login="" sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0, pb: 0, flex: '1 1 auto', minHeight: 0, overflow: 'visible', '& [data-qr-anchor]': { flex: '0 0 auto' } }}>
+      <Box
+        data-qr-anchor=""
+        sx={{
+          position: 'relative',
+          left: '50%',
+          // --qr-header-shift keeps this axis on the resting QR centre when
+          // the paper is pushed or viewport-clamped (see CleakerQrMenu).
+          transform: 'translateX(calc(-50% + var(--qr-header-shift, 0px)))',
+          width: 'max-content',
+        }}
+      >
       <QRme
         value={qr.value}
         username={qr.username}
-        diameter={qr.diameter ?? 125}
+        diameter={qr.diameter ?? cardQrDiameterPx()}
         fitDiameter
+        lockSize
         hoverFlip={false}
         clickFlip={false}
         status={qr.status}
@@ -44,13 +72,14 @@ export default function MeLoginStatus({
         perimeterRootLabel={qr.perimeterRootLabel}
         data-gui-node-id={`${nodeId}.qr`}
       />
+      </Box>
       {authenticated ? (
         <>
-          <IdentityIconRow nodeId={nodeId} onNavigate={onNavigate} />
+          {tree ?? <IdentityIconRow nodeId={nodeId} onNavigate={onNavigate} />}
           <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id={`${nodeId}.identityHash`}>
             {identityHash || ''}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, mt: '8px' }}>
+          {!hideSignOut && <Box sx={{ display: 'flex', gap: 1, mt: '8px' }}>
             <Box
               component="button"
               type="button"
@@ -74,7 +103,7 @@ export default function MeLoginStatus({
               <Icon name="logout" fontSize="1rem" />
               <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
             </Box>
-          </Box>
+          </Box>}
         </>
       ) : (
         <Box sx={{ display: 'flex', gap: 1, mt: '13px' }}>

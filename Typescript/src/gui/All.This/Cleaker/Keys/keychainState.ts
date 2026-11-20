@@ -1,5 +1,5 @@
-// keychainState.ts — the state contract for CleakerKeychain: what each
-// screen represents. See CleakerKeychain.tsx's own header comment for
+// keychainState.ts — the state contract for Keys: what each
+// screen represents. See Keys.tsx's own header comment for
 // what's still deliberately out of scope (device-to-device private key
 // transfer, netget's own consumption of this) versus what's now real:
 // keychainClient.ts is a working protocol client, not a mock.

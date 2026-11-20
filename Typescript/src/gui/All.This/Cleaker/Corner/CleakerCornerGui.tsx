@@ -14,10 +14,11 @@ import Theme from '@/gui/Theme/Theme';
 import { Box } from '@/gui/Atoms';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import CleakerQrMenu, { panelPositionFor } from './CleakerQrMenu';
+import { isMenuBoundsChrome } from './menuSize';
 import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { SeedSessionProvider, useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
-import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
+import { readBrandPosition, readQrMePosition, writeBrandPosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { barModeFromCleaker, barModeToCleaker, readStoredBarModes, writeBarMode } from '@/gui/Layout/Position/barMode';
 import QRme from '@/gui/All.This/me/QR/QR.me';
 import Layout from '@/gui/Layout/Layout';
@@ -26,7 +27,7 @@ import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import { SelectionProvider } from '@/runtime/selection';
 import { ThemeSettingsContext, GuiPageContext } from '@/runtime/themeSettings';
 import { NamespaceRoutePanel, type NamespaceRouteProps } from '@/gui/Layout/Position/NamespaceRoute';
-import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, IdentityButton, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, collapsedBarHandleProps, marksInBars, placeMarks, cornerOfSlot, splitPosition, topBarPosition, useNarrowBars, whoLines } from '@/gui/Layout/Position/Position';
 import {
   barStates,
   isBarState,
@@ -161,6 +162,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   const [corner, setCornerState] = React.useState<CleakerCorner>(() => (
     readQrMePosition(storage, isCorner(options.corner) ? options.corner : 'bottom-right')
   ));
+  const [brandAt, setBrandAt] = React.useState<CleakerCorner | undefined>(() => readBrandPosition(storage) ?? undefined);
   const [namespace, setNamespaceState] = React.useState<string | null>(() => {
     const stored = read(storage, STORE_NAMESPACE);
     if (stored !== null) return isNamespaceName(stored) ? stored : null;
@@ -223,7 +225,24 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     write(storage, STORE_NAMESPACE, next);   // '' remembers "none"
     setNamespaceState(next || null);
   };
-  const moveTo = (c: CleakerCorner) => { writeQrMePosition(c, storage); setCornerState(c); };
+  const moveTo = (c: CleakerCorner) => {
+    writeQrMePosition(c, storage);
+    setCornerState(c);
+    // Pin the current brand so placeMarks stays uncoupled. Collision/swap is
+    // resolved by PositionGrid.arrangeMove, which may also call moveBrand.
+    setBrandAt((prevBrand) => {
+      if (prevBrand && prevBrand !== c) {
+        writeBrandPosition(prevBrand, storage);
+        return prevBrand;
+      }
+      return prevBrand;
+    });
+  };
+  const moveBrand = (c: CleakerCorner) => {
+    writeBrandPosition(c, storage);
+    setBrandAt(c);
+  };
+
 
   const top = corner.startsWith('top');
   const right = corner.endsWith('right');
@@ -287,7 +306,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   );
   // The two marks (Roles-and-Territories.md §3): the person's QR where they put it, the site's brand at the other end.
   // Decided by the corner, which bars exist and the width -- never by whether a bar is open or a rail.
-  const placement = placeMarks({ identity: corner, bars: { top: Boolean(topBar), left: Boolean(leftBar) }, narrow, brand: Boolean(siteBrand) });
+  const placement = placeMarks({ identity: corner, bars: { top: Boolean(topBar), left: Boolean(leftBar) }, narrow, brand: Boolean(siteBrand), brandCorner: brandAt });
   const idWhere = placement.identity === 'left.brand' ? 'left' : placement.identity.startsWith('float:') ? 'float' : 'top';
   // The position split between the marks: who beside the QR (no username here: Cleaker on a page holds no session, so
   // the namespace), @where beside the brand. Without a brand the place stays with the QR (a third, smaller line, and the
@@ -295,14 +314,17 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   // panel's first line.
   const parts = namespace ? splitPosition(label) : { who: '', where: label };
   const who = whoLines(parts.who, identityUsername);
+  // In the left bar's head the QR and its text are ONE button (the QR's action: the panel).
+  const idText = parts.who
+    ? <IdentityText title={label} primary={who.primary} secondary={who.secondary} extra={siteBrand ? null : atWhere(parts.where)} />
+    : undefined;
+  const joinIdentity = placement.identity === 'left.brand' && idText != null;
   const marks = marksInBars(
     placement,
     {
-      identity: badge(idWhere),
-      identityText: parts.who
-        ? <IdentityText title={label} primary={who.primary} secondary={who.secondary} extra={siteBrand ? null : atWhere(parts.where)} />
-        : undefined,
-      brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} compact={placement.brand !== 'left.brand'} /> : undefined,
+      identity: joinIdentity ? <IdentityButton mark={badge(idWhere)} text={idText} /> : badge(idWhere),
+      identityText: joinIdentity ? undefined : idText,
+      brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} compact={placement.brand !== 'left.brand'} floating={typeof placement.brand === 'string' && placement.brand.startsWith('float:')} /> : undefined,
       brandText: siteBrand && parts.where ? <WhereText title={label} where={atWhere(parts.where)} /> : undefined,
     },
     { topText: states.top === 'open' && !narrow },
@@ -324,6 +346,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       onClickAway={(event) => {
         const target = event.target;
         if (qrCellRef.current && target instanceof Node && qrCellRef.current.contains(target)) return;
+        if (isMenuBoundsChrome(target)) return;
         setOpen(false);
       }}
     >
@@ -337,6 +360,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           onUseNamespace={choose}
           corner={corner}
           onMoveTo={moveTo}
+          onMoveBrand={siteBrand ? moveBrand : undefined}
+          otherCorner={siteBrand ? (brandAt ?? (placement.brand !== 'none' ? cornerOfSlot(placement.brand, corner) : null)) : null}
           onClose={closePanel}
           layout={{
             address: label,
@@ -395,6 +420,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
         } : false}
         LeftBar={leftBar ? {
           brand: marks.leftBrand,
+          togglePlacement: placement.brand === 'left.footer' ? 'footer' : 'header',
+          ...collapsedBarHandleProps({
+            narrow,
+            brand: siteBrand ? <SiteBrand label={siteBrand.label} href={siteBrand.href} logo={siteBrand.logo} /> : undefined,
+            identitySlot: placement.identity,
+          }),
           // The same foot as the shell's (Namespace.tsx): the theme and the dev tools, then a mark that sits at the foot.
           footerElements: [
             { type: 'action' as const, props: { label: 'Theme', element: <ThemeLauncher />, tooltip: false } },
@@ -403,7 +434,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
           initialView: states.left === 'open' ? 'expanded' : 'rail',
           // Shown while the bar is open: where you are, written out beside the QR (the top bar shows it otherwise).
           // beside the mark in the bar's head: its text (who, or @where); with neither mark there, the whole position
-          header: marks.leftHeader ?? (siteBrand ? undefined : <LeftBarPosition besideMark={!!marks.leftBrand} title={label} data-cleaker-position="">{label}</LeftBarPosition>),
+          header: marks.leftHeader ?? (siteBrand || joinIdentity ? undefined : <LeftBarPosition besideMark={!!marks.leftBrand} title={label} data-cleaker-position="">{label}</LeftBarPosition>),
           elements: leftBar.items.map((it) => ({ type: 'link' as const, props: { ...itemProps(it), 'data-gui-node-id': `GUI.window.layout.bars.left.${it.id}` } })),
         } : false}
       >

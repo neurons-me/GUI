@@ -1,4 +1,4 @@
-// keychainClient.ts — the real protocol client behind CleakerKeychain.tsx.
+// keychainClient.ts — the real protocol client behind Keys.tsx.
 // Mirrors groupsApi.ts's shape (a structural signer, a canonical signed
 // body via normalizeProofMessage, a plain fetch POST) rather than
 // netgetSetupClient.ts's older module-closure-holding-a-derived-node
