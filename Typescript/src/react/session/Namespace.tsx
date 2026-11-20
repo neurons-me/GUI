@@ -37,7 +37,7 @@ import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, marksInBars, placeMarks, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, IdentityButton, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, collapsedBarHandleProps, marksInBars, placeMarks, cornerOfSlot, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import NamespaceFavicon from './namespaceFavicon';
@@ -46,10 +46,10 @@ import { flattenGuiDocument, renderGuiDocumentPage, mergeGuiDocument, leftBarSlo
 import { declaredCapabilities, evaluateRequirement, type CapabilityLink, type CapabilityResolvers } from '@/runtime/capabilities';
 import { GuiCapabilitiesContext, useCapabilityStates } from './useCapabilities';
 import { targetKey } from '@/react/link';
-import CleakerKeychain, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keychain/CleakerKeychain';
-import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keychain/keychainClient';
-import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keychain/keychainState';
-import { isServiceId } from '@/gui/All.This/Cleaker/Keychain/serviceKeyVault';
+import Keys, { type PendingLocalRegistration } from '@/gui/All.This/Cleaker/Keys/Keys';
+import { createKeychainClient, type KeychainClient } from '@/gui/All.This/Cleaker/Keys/keychainClient';
+import type { KeychainKey, KeychainView as KeychainScreen } from '@/gui/All.This/Cleaker/Keys/keychainState';
+import { isServiceId } from '@/gui/All.This/Cleaker/Keys/serviceKeyVault';
 import Layout from '@/gui/Layout/Layout';
 import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types';
 import { useCleakerRootSidebar } from './cleakerNavigationComposition';
@@ -68,7 +68,8 @@ import { isOwnGatewayOrigin } from '@/gui/All.This/netget/Setup/trustedOrigin';
 import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import CleakerQrMenu, { panelPositionFor } from '@/gui/All.This/Cleaker/Corner/CleakerQrMenu';
-import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
+import { isMenuBoundsChrome } from '@/gui/All.This/Cleaker/Corner/menuSize';
+import { readBrandPosition, readQrMePosition, writeBrandPosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { documentBarModes, readBarModes, writeBarMode, type BarMode, type LayoutBarId } from '@/gui/Layout/Position/barMode';
 import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
 import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition, drawnPosition } from '@/react/positionExpression';
@@ -535,7 +536,7 @@ const CleakerUrlView: React.FC<DocumentPageProps> = ({ sx, cleakerEndpoint, 'dat
 // tree instead of a hardcoded demo phrase, and the endpoint is whatever
 // transportOrigin the session itself claimed/opened against — never a
 // second, separately-configured origin to keep in sync.
-const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.keychain', 'data-gui-component': nodeComponent = 'Keychain' }) => {
+const CleakerKeysView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': nodeId = 'GUI.window.layout.content.keychain', 'data-gui-component': nodeComponent = 'Keys' }) => {
   const ctx = useOptionalSeedSessionContext();
   const [client, setClient] = useState<KeychainClient | null>(null);
   const [keys, setKeys] = useState<KeychainKey[]>([]);
@@ -600,7 +601,7 @@ const CleakerKeychainView: React.FC<DocumentPageProps> = ({ 'data-gui-node-id': 
       {notice && (
         <Typography variant="body2" sx={{ color: 'warning.main', mb: 1 }}>{notice}</Typography>
       )}
-      <CleakerKeychain
+      <Keys
           handle={(semanticNamespace || '').split('.')[0] || ''}
           keys={keys}
           pendingLocalRegistrations={pendingLocalRegistrations}
@@ -1482,9 +1483,25 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const [identityCorner, setIdentityCorner] = useState<MarkCorner>(() => (
     readQrMePosition(undefined, props.identityCorner ?? 'top-left')
   ));
+  const [brandAt, setBrandAt] = useState<MarkCorner | undefined>(() => readBrandPosition() ?? undefined);
+  const brandShownRef = useRef<MarkCorner | null>(null);
   const moveIdentityCorner = useCallback((corner: MarkCorner) => {
     writeQrMePosition(corner);
     setIdentityCorner(corner);
+    // Pin the current brand so placeMarks stays uncoupled. Collision/swap is
+    // resolved by PositionGrid.arrangeMove, which may also call moveBrandCorner.
+    setBrandAt((prevBrand) => {
+      const at = prevBrand ?? brandShownRef.current;
+      if (at && at !== corner) {
+        writeBrandPosition(at);
+        return at;
+      }
+      return prevBrand;
+    });
+  }, []);
+  const moveBrandCorner = useCallback((corner: MarkCorner) => {
+    writeBrandPosition(corner);
+    setBrandAt(corner);
   }, []);
   const [barModes, setBarModes] = useState(() => readBarModes(undefined, documentBarModes()));
   const chooseBarMode = useCallback((id: LayoutBarId, mode: BarMode) => {
@@ -1817,9 +1834,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // than that, so it is scaled as a whole and given the same breathing room above and below.
   // The QR is this app's brand in the left bar (LeftBar's `brand` slot, the same one any other app fills with its logo).
   // On the landing (`/` or `/.me`) the content already is that QR, so the rail mark does not open a panel.
-  // On other namespace routes, clicking it opens the Cleaker panel (login status + corners). Expanding and contracting the bar is the bar's own arrow, so the QR is
-  // never that control. On a narrow screen the corner control is the bar's standard "Open navigation" button and the QR
-  // leads the drawer.
+  // On other namespace routes, clicking it opens the identity card (login status + corners). Expanding and contracting the bar is the bar's own arrow, so the QR is
+  // never that control. On a narrow screen the closed-drawer handle is the site's brand (it reopens the bar) or, with
+  // no brand, the QR itself (it opens the identity card). There is no second floating mark over that handle.
   // The two marks (Roles-and-Territories.md §3). With an app's brand, the QR is the person's mark at their corner and
   // the brand takes the other end; without one, placeMarks() puts the QR where it always was (the left bar's head).
   const narrowBars = useNarrowBars();
@@ -1828,19 +1845,25 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     bars: { top: barModes.top !== 'off', left: barModes.left !== 'off' },
     narrow: narrowBars,
     brand: Boolean(props.brand),
+    brandCorner: brandAt,
   });
   const marksPlacement = marksPlacementRaw.identity === 'corner'
     ? { ...marksPlacementRaw, identity: `float:${identityCorner}` as const }
     : marksPlacementRaw;
+  brandShownRef.current = props.brand
+    ? (brandAt ?? (marksPlacement.brand !== 'none' && marksPlacement.brand !== 'corner' ? cornerOfSlot(marksPlacement.brand, identityCorner) : null))
+    : null;
+  // On a narrow screen with no site brand, the QR is the only corner handle, including on the landing.
+  const identityOpensMenu = !isNamespaceLanding || (narrowBars && !props.brand);
   const positionBrand = (
     <BarBrandCell
       ref={qrCellRef}
-      component={isNamespaceLanding ? 'div' : 'button'}
-      type={isNamespaceLanding ? undefined : 'button'}
-      onClick={isNamespaceLanding ? undefined : () => setQrMenuOpen((open) => !open)}
-      aria-label={isNamespaceLanding ? undefined : 'Open .me'}
-      aria-expanded={isNamespaceLanding ? undefined : qrMenuOpen}
-      aria-haspopup={isNamespaceLanding ? undefined : 'dialog'}
+      component={identityOpensMenu ? 'button' : 'div'}
+      type={identityOpensMenu ? 'button' : undefined}
+      onClick={identityOpensMenu ? () => setQrMenuOpen((open) => !open) : undefined}
+      aria-label={identityOpensMenu ? 'Open .me' : undefined}
+      aria-expanded={identityOpensMenu ? qrMenuOpen : undefined}
+      aria-haspopup={identityOpensMenu ? 'dialog' : undefined}
       aria-description={`${positionExpressionFull} — ${linkFacts}`}
       title={`${positionExpressionFull} — ${linkFacts}`}
       data-position-expression={positionExpressionFull}
@@ -1916,18 +1939,43 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // in, the namespace below), @where beside the brand. Text only where the bar shows text; icons only, the marks alone.
   const splitParts = splitPosition(positionExpression || '');
   const splitWho = whoLines(splitParts.who, authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : null);
+  // In the left bar's head the QR and its text are ONE button (the QR's action: its menu). On the landing the QR is
+  // not a button, so the text keeps its own link there.
+  const splitIdentityText = resolvingNamespace
+    ? <IdentityText title={positionExpressionFull} primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
+    : <IdentityText title={positionExpressionFull} primary={splitWho.primary} secondary={splitWho.secondary} />;
+  const joinIdentity = Boolean(props.brand) && marksPlacement.identity === 'left.brand' && !isNamespaceLanding;
+  // Without a brand the head's text is where you are. Off the landing the QR is a button (its menu): QR + text are that
+  // one button. On the landing the QR does nothing by itself, so the one element is the text's own link (the identity
+  // page), open bar only (the rail keeps the bare QR).
+  const joinPosition = !props.brand && marksPlacement.identity === 'left.brand';
+  const positionHeadText = (
+    <LeftBarPosition
+      component="span"
+      besideMark={false}
+      title={positionExpressionFull}
+      data-position-expression={positionExpressionFull}
+      data-gui-component="namespace"
+    >
+      {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : positionExpression}
+    </LeftBarPosition>
+  );
   const marks = marksInBars(
     marksPlacement,
     {
-      identity: positionBrand,
-      identityText: props.brand ? (
+      identity: joinIdentity
+        ? <IdentityButton mark={positionBrand} text={splitIdentityText} />
+        : joinPosition
+          ? <IdentityButton mark={positionBrand} text={positionHeadText} openProps={isNamespaceLanding ? { component: Link, to: IDENTITY_ROUTE, type: undefined, 'aria-label': 'Open identity' } : undefined} />
+          : positionBrand,
+      identityText: joinIdentity ? undefined : props.brand ? (
         <Box component={Link} to={IDENTITY_ROUTE} title={positionExpressionFull} data-position-expression={positionExpressionFull} sx={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
           {resolvingNamespace
             ? <IdentityText primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
             : <IdentityText primary={splitWho.primary} secondary={splitWho.secondary} />}
         </Box>
       ) : undefined,
-      brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} /> : undefined,
+      brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} floating={typeof marksPlacement.brand === 'string' && marksPlacement.brand.startsWith('float:')} /> : undefined,
       brandText: props.brand && splitParts.where ? <WhereText title={positionExpressionFull} where={atWhere(splitParts.where)} /> : undefined,
     },
     { topText: !narrowBars },
@@ -1960,9 +2008,15 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         LeftBar={barModes.left === 'off' ? false : {
           initialView: barModes.left === 'expanded' ? 'expanded' : 'rail',
           brand: marks.leftBrand,
+          togglePlacement: marksPlacement.brand === 'left.footer' ? 'footer' : 'header',
+          ...collapsedBarHandleProps({
+            narrow: narrowBars,
+            brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} /> : undefined,
+            identitySlot: marksPlacement.identity,
+          }),
           // Shown while the bar is open: with a brand, the text of the mark in the bar's head (who, or @where); without
           // one, where you are written out, and the way to the identity page.
-          header: props.brand ? marks.leftHeader : (
+          header: props.brand ? marks.leftHeader : joinPosition ? undefined : (
             <LeftBarPosition
               besideMark={!!marks.leftBrand}
               component={Link}
@@ -2034,6 +2088,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           onClickAway={(event) => {
             const target = event.target;
             if (qrCellRef.current && target instanceof Node && qrCellRef.current.contains(target)) return;
+            if (isMenuBoundsChrome(target)) return;
             setQrMenuOpen(false);
           }}
         >
@@ -2044,6 +2099,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               showNamespaceForm={false}
               corner={identityCorner}
               onMoveTo={moveIdentityCorner}
+              onMoveBrand={props.brand ? moveBrandCorner : undefined}
+              otherCorner={props.brand ? (brandAt ?? (marksPlacement.brand !== 'none' ? cornerOfSlot(marksPlacement.brand, identityCorner) : null)) : null}
               barModes={barModes}
               onChooseBarMode={chooseBarMode}
               onClose={() => setQrMenuOpen(false)}
@@ -2127,7 +2184,8 @@ const DOCUMENT_PAGES: Record<string, React.ComponentType<any>> = {
   Users: UsersView,
   Blockchain: CleakerBlockchainView,
   Url: CleakerUrlView,
-  Keychain: CleakerKeychainView,
+  Keys: CleakerKeysView,
+  Keychain: CleakerKeysView, // legacy name
   Netget: CleakerNetgetView,
   Claim: CleakerNetgetClaimView,
   Sign: CleakerNetgetAdminSignView,
