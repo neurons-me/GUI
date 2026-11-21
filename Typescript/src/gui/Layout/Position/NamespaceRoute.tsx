@@ -32,10 +32,12 @@ const normalRoute = (to: string) => `/${to.replace(/^\/+/, '').replace(/\/+$/, '
  * A route of the namespace, opened over the author's page: on the namespace's own page it renders in the content area;
  * here it takes the content area's place (between the bars) over the author's page, which stays as it is underneath.
  */
-export function NamespaceRoutePanel({ route, label, namespace, pages, go, onClose }: {
+export function NamespaceRoutePanel({ route, label, namespace, endpoint, pages, go, onClose }: {
   route: string | null;
   label?: string;
   namespace: string | null;
+  /** Where the namespace is reached (origin, port kept). Omitted: `https://<namespace>`. */
+  endpoint?: string;
   pages?: Record<string, React.ComponentType<NamespaceRouteProps>>;
   go: (route: string) => void;
   onClose: () => void;
@@ -51,7 +53,7 @@ export function NamespaceRoutePanel({ route, label, namespace, pages, go, onClos
   const guiPage = GUI_PAGE_BY_ROUTE.get(route);
   const View = pages?.[route];
   const title = label ?? guiPage?.label ?? ROUTE_LABELS.get(route) ?? route;
-  const door = namespace ? `https://${namespace}${route}` : null;
+  const door = namespace ? `${endpoint ? endpoint.replace(/\/+$/, '') : `https://${namespace}`}${route}` : null;
   return (
     // In the content area's place: between the bars, by the sizes they publish on the document (--gui-*), so it
     // follows a bar that expands, collapses or becomes a drawer. Under the bars (their menus stay usable, another item

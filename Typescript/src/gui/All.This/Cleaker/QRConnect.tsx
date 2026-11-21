@@ -286,8 +286,8 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   //   * what IS kept across a reload: the identity vault in localStorage (`this.me.identity-vault:v1:<handle>.<root>`),
   //     the theme, and the session if the provider persists one. A vault is per full namespace, so typing another
   //     root never reaches a different identity's vault.
-  // Persisting the typed root is a possible choice, not an impossible one: ./hooks/useCleakerNamespace stores it
-  // (localStorage + a kernel path) and is not wired in. It would trade the mismatch described above (a stale
+  // Persisting the typed root is a possible choice, not an impossible one (a hook that stored it in localStorage + a
+  // kernel path, useCleakerNamespace, was never wired in and was removed 2026-11-20). It would trade the mismatch described above (a stale
   // override outliving the server's own idea of the root) for not retyping it. That trade is the owner's to make.
   const [namespaceOverride, setNamespaceOverride] = useState<string | null>(null);
   // Choosing a namespace on the card selects a LINK: the session view follows it (the session of the one that was

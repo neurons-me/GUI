@@ -20,7 +20,8 @@ export { probeMonadSurface, isGenuineSurfacePayload } from '@/runtime/monads/mon
 
 // Cleaker in a corner of any page (level 1): the QR, `me @ where`, its four corners and the namespace panel, in a
 // Shadow DOM. React-free like the rest of this subpath. The standalone script is dist/cleaker.js.
-export { mountCleaker, cornerLabel, isNamespaceName, namespaceEndpoint, CLEAKER_CORNERS, DEFAULT_CLEAKER_NAMESPACE, positionQrValue } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
-export type { CleakerCorner, CleakerHandle, CleakerMountOptions } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
+// No built-in namespace (DEFAULT_CLEAKER_NAMESPACE was removed): a page that wants cleaker.me declares it.
+export { mountCleaker, cornerLabel, isNamespaceName, namespaceEndpoint, CLEAKER_CORNERS, positionQrValue, addressNamespace, resolveCornerNamespace, cornerEndpoint } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
+export type { CleakerCorner, CleakerHandle, CleakerMountOptions, NamespaceSource, ResolvedNamespace } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 export { readBars, barStates, CLEAKER_BARS, CLEAKER_BAR_STATES } from '@/gui/All.This/Cleaker/Corner/cleakerBars';
 export type { CleakerBar, CleakerBarId, CleakerBarItem, CleakerBarState } from '@/gui/All.This/Cleaker/Corner/cleakerBars';

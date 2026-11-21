@@ -3,8 +3,8 @@ import {
   toBlockchainBaseUrl,
 } from "./Namespace/scripts/connection";
 
-export const DEFAULT_CLEAKER_NAMESPACE_ORIGIN = "https://cleaker.me";
-export const DEFAULT_CLEAKER_NAMESPACE_EXPRESSION = "cleaker.me";
+// There is no default namespace: an empty expression is an error, never a built-in domain. A page that wants
+// cleaker.me declares it (DEFAULT_CLEAKER_NAMESPACE_ORIGIN / _EXPRESSION were removed).
 
 type NamespaceSelectorAtom = {
   key: string;
@@ -52,7 +52,8 @@ const CONTEXT_VALUE_SEPARATOR = ",";
 
 function normalizeInput(input: string): string {
   const raw = String(input ?? "").trim();
-  return raw || DEFAULT_CLEAKER_NAMESPACE_EXPRESSION;
+  if (!raw) throw new Error("Namespace cannot be empty");
+  return raw;
 }
 
 function stripScheme(raw: string): string {

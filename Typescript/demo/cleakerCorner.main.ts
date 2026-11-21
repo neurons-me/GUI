@@ -5,7 +5,7 @@ import { mountCleaker, type CleakerCorner } from '@/gui/All.This/Cleaker/Corner/
 const params = new URLSearchParams(window.location.search);
 const handle = mountCleaker({
   corner: (params.get('corner') as CleakerCorner) || undefined,
-  // absent: the default (cleaker.me); `?namespace=` (empty): none
+  // absent: the page's own host, as an address; `?namespace=` (empty): none
   namespace: params.has('namespace') ? params.get('namespace') : undefined,
 });
 (window as unknown as { __events: string[] }).__events = [];

@@ -1,7 +1,8 @@
 // Cleaker in a corner (level 1), in a real browser: src/gui/All.This/Cleaker/Corner/cleakerCorner.ts, mounted as an app
 // imports it (demo/cleakerCorner.html, a deliberately hostile page) and as the one-line script (dist cleaker.js, built
 // here into a temporary directory and served from a plain static page). cleaker.me is a fake (fakeMonads.mjs);
-// everything else outside the test servers is stopped.
+// everything else outside the test servers is stopped. There is no built-in namespace: with none declared, the corner
+// takes the page's host as an ADDRESS (shown as such, port kept in the transport); cleaker.me only when someone chooses it.
 //
 //   node tests/integration/cleakerCorner.browser.test.mjs          (from Typescript/)
 import { spawn, spawnSync } from 'node:child_process';
@@ -104,12 +105,19 @@ async function main() {
     // ── as an app imports it, on a hostile page ─────────────────────────────────────────────────────────────────
     {
       const { context, page } = await newPage();
+      const requested = [];
+      page.on('request', (r) => requested.push(r.url()));
       await page.goto(`${demo.origin}/cleakerCorner.html`);
       await page.waitForSelector('[data-cleaker]');
       const host = new URL(demo.origin).host;
+      const addressLabel = `${new URL(demo.origin).hostname} (address)`;
       check('1.1 one element appears, with its own shadow root', await page.evaluate(() => document.querySelectorAll('[data-cleaker]').length === 1 && !!document.querySelector('[data-cleaker]').shadowRoot));
-      await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
-      check('1.2 with no setup it starts on cleaker.me (and it answered): `cleaker.me @ <page>`', (await label(page)) === `cleaker.me @ ${host}`, await label(page));
+      await page.waitForFunction(() => ['ok', 'off'].includes(document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state')), null, { timeout: 8000 }).catch(() => {});
+      check('1.2 with no setup it takes the page\'s host as an address, shown as such (no cleaker.me): `<host> (address)`', (await label(page)) === addressLabel, await label(page));
+      const startQr = await inShadow(page, `return shadow.querySelector('.qr').getAttribute('data-value')`);
+      const surfaceAsks = requested.filter((u) => /__surface/.test(u));
+      check('1.2b the address keeps the page\'s transport: it asks the page\'s own origin (with its port), and the QR points there', surfaceAsks.length >= 1 && surfaceAsks.every((u) => new URL(u).origin === demo.origin) && new URL(startQr).origin === demo.origin, JSON.stringify({ surfaceAsks, startQr }));
+      check('1.2c nothing asked cleaker.me before anyone chose it', cleaker.calls.length === 0, JSON.stringify(cleaker.calls.map((c) => c.path)));
       const qr = await inShadow(page, `const b = shadow.querySelector('.qr'); const s = getComputedStyle(b); const r = b.getBoundingClientRect(); return { w: r.width, h: r.height, border: s.borderTopColor, svg: shadow.querySelector('.qr svg').getBoundingClientRect().width }`);
       check('1.3 the page\'s styles do not reach it (no red borders, no 900px svg)', qr.w === 64 && qr.h === 64 && qr.border !== 'rgb(255, 0, 0)' && qr.svg <= 64, JSON.stringify(qr));
       const own = await page.evaluate(() => { const p = document.querySelector('[data-page="own"]'); const s = getComputedStyle(p); return { color: s.color, border: s.borderTopColor }; });
@@ -131,10 +139,12 @@ async function main() {
       check('1.9 after a reload it stays where the person put it, over the author\'s default', kept.left <= 20 && kept.top <= 20, JSON.stringify(kept));
       // namespaces
       const submit = (ns) => inShadow(page, `shadow.querySelector('.qr').click(); const i = shadow.querySelector('input'); i.value = arg; shadow.querySelector('form').requestSubmit()`, ns);
+      // the address's own probe (started by the reload above) settles first, so its answer does not land on the refusal
+      await page.waitForFunction(() => ['ok', 'off'].includes(document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state')), null, { timeout: 8000 }).catch(() => {});
       await submit('cleaker.me\\');
       await page.waitForTimeout(200);
       const refused = await inShadow(page, `return { status: shadow.querySelector('.status').textContent, label: shadow.querySelector('.label .text').textContent }`);
-      check('2.1 a name that is not a namespace is refused, and nothing changes', /not a namespace name/.test(refused.status) && refused.label === `cleaker.me @ ${host}`, JSON.stringify(refused));
+      check('2.1 a name that is not a namespace is refused, and nothing changes', /not a namespace name/.test(refused.status) && refused.label === addressLabel, JSON.stringify(refused));
       await submit('cleaker.me');
       await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
       const chosen = await inShadow(page, `return { label: shadow.querySelector('.label .text').textContent, state: shadow.querySelector('.dot').getAttribute('data-state'), value: shadow.querySelector('.qr').getAttribute('data-value') }`);
@@ -171,8 +181,8 @@ async function main() {
       const r = await rect(page).catch(() => null);
       const api = await page.evaluate(() => typeof window.Cleaker?.mount === 'function' && !window.React);
       check(`3.1 <script src="cleaker.js" data-corner="top-left"> puts it top-left on a plain page (${Math.round(standalone.bytes / 1024)} kB, no React)`, !!r && r.left <= 20 && r.top <= 20 && api && errors.length === 0, JSON.stringify({ r, api, errors }));
-      await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
-      check('3.2 with no data-namespace it starts on cleaker.me at that page', (await label(page)) === `cleaker.me @ ${new URL(standalone.origin).host}`, await label(page));
+      await page.waitForFunction(() => ['ok', 'off'].includes(document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state')), null, { timeout: 8000 }).catch(() => {});
+      check('3.2 with no data-namespace it takes that page\'s host as an address', (await label(page)) === `${new URL(standalone.origin).hostname} (address)`, await label(page));
       await context.close();
     }
     // ── level 2: bars unfolding from the QR ─────────────────────────────────────────────────────────────────────
@@ -183,7 +193,7 @@ async function main() {
       const bars = () => inShadow(page, `return [...shadow.querySelectorAll('.bars nav')].map((n) => { const r = n.getBoundingClientRect(); return { bar: n.dataset.bar, state: n.dataset.state, hidden: n.hidden, w: Math.round(r.width), h: Math.round(r.height), items: [...n.querySelectorAll('a')].map((a) => a.dataset.item + (a.getAttribute('aria-current') ? '*' : '')), labels: [...n.querySelectorAll('a .text')].filter((t) => t.offsetParent).map((t) => t.textContent), pos: n.querySelector('.pos')?.textContent || null }; })`);
       let b = await bars();
       const top = b.find((x) => x.bar === 'top'); const left = b.find((x) => x.bar === 'left');
-      check('5.1 the author opened the top bar: it shows, with where you are and its element (current page marked)', top && !top.hidden && top.pos?.startsWith('cleaker.me @') && top.items.join() === 'docs*', JSON.stringify(top));
+      check('5.1 the author opened the top bar: it shows, with where you are and its element (current page marked)', top && !top.hidden && top.pos?.startsWith(`${new URL(standalone.origin).hostname} (address)`) && top.items.join() === 'docs*', JSON.stringify(top));
       check('5.2 the left bar starts closed (the page is unchanged until someone opens it)', left && left.hidden, JSON.stringify(left));
       check('5.3 an element with an unsafe link (javascript:) is not drawn', left && left.items.join() === 'home,beatle', JSON.stringify(left?.items));
       const rows = await inShadow(page, `return [...shadow.querySelectorAll('.barsec .barrow')].map((r) => r.textContent)`);
@@ -220,9 +230,9 @@ async function main() {
       await page.goto(standalone.fileUrl);
       await page.waitForSelector('[data-cleaker]', { timeout: 10000 }).catch(() => {});
       const seen = await inShadow(page, `return { label: shadow.querySelector('.label .text').textContent, title: shadow.querySelector('.label').title, value: shadow.querySelector('.qr').getAttribute('data-value') }`).catch(() => null);
-      check('4.1 opened as a file, it says which file: `cleaker.me @ <its name>`', seen?.label === 'cleaker.me @ local page.html', JSON.stringify(seen));
+      check('4.1 opened as a file there is no address to take: no namespace, it says which file (`local page.html`)', seen?.label === 'local page.html', JSON.stringify(seen));
       check('4.2 the tooltip carries the whole file (file:///…/local page.html)', seen?.title.includes(decodeURI(standalone.fileUrl)), JSON.stringify(seen));
-      check('4.3 the QR says both: cleaker.me + at=<the whole file>', !!seen && new URL(seen.value).origin === 'https://cleaker.me' && new URL(seen.value).searchParams.get('at') === standalone.fileUrl, seen?.value);
+      check('4.3 the QR says where it is: the whole file, no namespace invented', !!seen && seen.value === standalone.fileUrl, seen?.value);
       await context.close();
     }
     check('nothing else requested outside the test servers and the fake cleaker.me', unexpected.length === 0, unexpected.slice(0, 3).join(', '));

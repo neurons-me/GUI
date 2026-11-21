@@ -3,8 +3,9 @@
 // styling) writes its styles INTO that shadow root, and MUI's portals (tooltips, popovers) open inside it too, so the
 // page's styles do not reach it and its styles do not leak out.
 //
-// The behaviour is the corner's (cleakerCorner.ts): the same label (`me @ where`), QR value (namespace + at=), default
-// namespace (cleaker.me), probe (/__surface) and the person's choices kept in their browser (corner, namespace).
+// The behaviour is the corner's (cleakerCorner.ts): the same label (`me @ where`), QR value (namespace + at=), namespace
+// resolution with its source (declared, the page's address, or none -- never a built-in domain), probe (/__surface) and
+// the person's choices kept in their browser (corner, namespace).
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import createCache from '@emotion/cache';
@@ -40,13 +41,15 @@ import {
 } from './cleakerBars';
 import {
   CLEAKER_CORNERS,
-  DEFAULT_CLEAKER_NAMESPACE,
+  cornerEndpoint,
   cornerLabel,
   defaultProbe,
   isNamespaceName,
   namespaceEndpoint,
   positionQrValue,
+  resolveCornerNamespace,
   type CleakerCorner,
+  type ResolvedNamespace,
 } from './cleakerCorner';
 
 const STORE_NAMESPACE = 'cleaker:namespace';
@@ -55,11 +58,11 @@ const QR_DIAMETER = 76;
 
 export type CleakerGuiOptions = {
   corner?: CleakerCorner;
-  /** Default cleaker.me; null or '' starts with none. The person's choice wins. */
+  /** Omitted: the page's own host, as an address (no built-in domain); null or '' starts with none. The person's choice wins. */
   namespace?: string | null;
   container?: HTMLElement;
   storage?: Storage | null;
-  probe?: (namespace: string) => Promise<boolean>;
+  probe?: (namespace: string, endpoint: string) => Promise<boolean>;
   /**
    * Level 2: the author's GUI document (or `{ bars }`). Its GUI.window.layout.bars are drawn with .GUI's own Layout
    * (LeftBar, TopBar), each in the author's state until the person chooses another. The author may declare the site's
@@ -101,6 +104,7 @@ export type CleakerRouteProps = NamespaceRouteProps;
 
 function CleakerIdentityMenu({
   namespace,
+  endpoint,
   username,
   qrStatus,
   qr,
@@ -108,6 +112,7 @@ function CleakerIdentityMenu({
   goRoute,
 }: {
   namespace: string | null;
+  endpoint: string;
   username?: string;
   qrStatus: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
   qr: React.ComponentProps<typeof MeLoginStatus>['qr'];
@@ -125,7 +130,7 @@ function CleakerIdentityMenu({
       <QRConnect
         compact
         qrStatus={qrStatus}
-        cleakerEndpoint={namespaceEndpoint(namespace)}
+        cleakerEndpoint={endpoint || namespaceEndpoint(namespace)}
         username={username}
         data-gui-node-id="GUI.window.layout.marks.identity.menu"
       />
@@ -144,11 +149,11 @@ function CleakerIdentityMenu({
   );
 }
 
-function CornerSession({ namespace, children }: { namespace: string | null; children: React.ReactNode }) {
+function CornerSession({ namespace, endpoint, children }: { namespace: string | null; endpoint: string; children: React.ReactNode }) {
   const existing = useOptionalSeedSessionContext();
   if (existing || !namespace) return <>{children}</>;
   return (
-    <SeedSessionProvider transportOrigin={namespaceEndpoint(namespace)} sessionBackend="cleaker">
+    <SeedSessionProvider transportOrigin={endpoint || namespaceEndpoint(namespace)} sessionBackend="cleaker">
       {children}
     </SeedSessionProvider>
   );
@@ -163,12 +168,12 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     readQrMePosition(storage, isCorner(options.corner) ? options.corner : 'bottom-right')
   ));
   const [brandAt, setBrandAt] = React.useState<CleakerCorner | undefined>(() => readBrandPosition(storage) ?? undefined);
-  const [namespace, setNamespaceState] = React.useState<string | null>(() => {
-    const stored = read(storage, STORE_NAMESPACE);
-    if (stored !== null) return isNamespaceName(stored) ? stored : null;
-    const author = options.namespace === undefined ? DEFAULT_CLEAKER_NAMESPACE : options.namespace;
-    return author && isNamespaceName(author) ? author : null;
-  });
+  // the person's choice, else the author's, else the page's host as an address (shown as such), else none
+  const [resolved, setResolved] = React.useState<ResolvedNamespace>(() => (
+    resolveCornerNamespace({ stored: read(storage, STORE_NAMESPACE), author: options.namespace, page })
+  ));
+  const namespace = resolved.namespace;
+  const endpoint = cornerEndpoint(resolved, page);
   // The bars drawn so far are the left (LeftBar) and the top (TopBar); right and bottom are read but not offered yet.
   const bars: CleakerBar[] = React.useMemo(
     () => readBars(options.document, page.href).filter((b) => DRAWN_BARS.includes(b.id)),
@@ -213,17 +218,17 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     if (!namespace) { setProbeState('none'); return undefined; }
     let live = true;
     setProbeState('checking');
-    probe(namespace).then((ok) => { if (live) setProbeState(ok ? 'ok' : 'off'); }, () => { if (live) setProbeState('off'); });
+    probe(namespace, endpoint).then((ok) => { if (live) setProbeState(ok ? 'ok' : 'off'); }, () => { if (live) setProbeState('off'); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, options.qrStatus]);
+  }, [namespace, endpoint, options.qrStatus]);
 
   const choose = (raw: string) => {
     const next = raw.trim().toLowerCase();
     if (next && !isNamespaceName(next)) { setMessage(`"${raw}" is not a namespace name.`); return; }
     setMessage('');
     write(storage, STORE_NAMESPACE, next);   // '' remembers "none"
-    setNamespaceState(next || null);
+    setResolved({ namespace: next || null, source: next ? 'declared' : 'none' });
   };
   const moveTo = (c: CleakerCorner) => {
     writeQrMePosition(c, storage);
@@ -246,8 +251,8 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
 
   const top = corner.startsWith('top');
   const right = corner.endsWith('right');
-  const label = cornerLabel(namespace, page);
-  const value = namespace ? positionQrValue(namespace, pageAddress) : pageAddress;
+  const label = cornerLabel(namespace, page, resolved.source);
+  const value = namespace ? positionQrValue(namespace, pageAddress, endpoint) : pageAddress;
   const statusText = probeState === 'ok' ? `${namespace} answered` : probeState === 'off' ? `${namespace} did not answer` : probeState === 'checking' ? `asking ${namespace}…` : undefined;
   const identityQrStatus = options.qrStatus ?? QR_STATUS[probeState];
   const identityStatusLabel = options.qrStatus === 'confirmed' ? 'Connected' : statusText;
@@ -352,7 +357,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
     >
       <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }} data-cleaker-qr-menu="">
         <CleakerQrMenu
-          fullPosition={namespace ? `${namespace} @ ${pageAddress}` : pageAddress}
+          fullPosition={namespace ? `${namespace}${resolved.source === 'address' ? ' (address)' : ''} @ ${pageAddress}` : pageAddress}
           statusText={message || identityStatusLabel || label}
           showNamespaceForm={!namespace}
           draft={draft}
@@ -370,6 +375,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
         >
           <CleakerIdentityMenu
             namespace={namespace}
+            endpoint={endpoint}
             username={identityUsername}
             qrStatus={identityQrStatus}
             qr={identityQr}
@@ -449,6 +455,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       route={openRoute?.route ?? null}
       label={openRoute?.label}
       namespace={namespace}
+      endpoint={endpoint}
       pages={options.pages}
       go={goRoute}
       onClose={closeRoute}
@@ -457,7 +464,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
 
   if (leftBar || topBar) {
     return (
-      <CornerSession namespace={namespace}>
+      <CornerSession namespace={namespace} endpoint={endpoint}>
       <ThemeSettingsContext.Provider value={openThemeSettings}><GuiPageContext.Provider value={openGuiPage}>
         {layout}
         {routeDialog}
@@ -469,7 +476,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
   }
 
   return (
-    <CornerSession namespace={namespace}>
+    <CornerSession namespace={namespace} endpoint={endpoint}>
     <>
       {layout}
       <Box

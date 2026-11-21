@@ -12,7 +12,13 @@ import {
   SESSION_USERNAME_STORAGE_KEY,
 } from '../runtimeUsername';
 
-const DEFAULT_ENDPOINT = 'https://cleaker.me';
+// No built-in endpoint: without one, the QR points at the page's own origin (an address; the port is kept), read when
+// called, never at import; with no page (no browser, a file) it has nothing to point at and says nothing.
+function pageOriginFallback(): string {
+  if (typeof window === 'undefined') return '';
+  const { protocol, origin } = window.location;
+  return protocol === 'http:' || protocol === 'https:' ? origin : '';
+}
 function isNetworkOrigin(origin: string): boolean {
   return /^https?:\/\//i.test(String(origin || '').trim());
 }
@@ -45,7 +51,7 @@ export type CleakerQRProps = {
   value?: string;
   /** Optional username to build https://<username>.cleaker.me */
   username?: string;
-  /** Optional endpoint override (defaults to https://cleaker.me) */
+  /** Optional endpoint. Omitted: the page's own origin (an address), or nothing without a page. */
   endpoint?: string;
   /** Overall rendered size in px */
   size?: number;
@@ -78,13 +84,14 @@ export type CleakerQRProps = {
 };
 
 function buildCleakerUrl(username: string, endpoint: string): string {
-  const base = String(endpoint || DEFAULT_ENDPOINT).trim().replace(/\/+$/, '');
+  const base = String(endpoint || pageOriginFallback()).trim().replace(/\/+$/, '');
+  if (!base) return '';
   try {
-    return buildCleakerNamespaceUrl(base || DEFAULT_ENDPOINT, username || undefined);
+    return buildCleakerNamespaceUrl(base, username || undefined);
   } catch {
-    if (!username) return base || DEFAULT_ENDPOINT;
+    if (!username) return base;
     let host = base.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/\/+$/, '');
-    if (!host) return DEFAULT_ENDPOINT;
+    if (!host) return '';
     const scheme = /^https:\/\//i.test(base) ? 'https://' : 'http://';
     return `${scheme}${username}.${host}`;
   }
@@ -96,7 +103,7 @@ export default function CleakerQR({
   variant = 'default',
   value,
   username,
-  endpoint = DEFAULT_ENDPOINT,
+  endpoint = '',
   size,
   bg,
   fg,

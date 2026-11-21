@@ -31,7 +31,7 @@ import { useLauncherPopover } from '@/runtime/launcherPopover';
 import { useRegisterGuiNode } from '@/runtime/selection';
 import { useGuiNodeId } from '@/runtime/guiNodeId';
 import QRme from '@/gui/All.This/me/QR/QR.me';
-import { buildCleakerNamespaceUrl, DEFAULT_CLEAKER_NAMESPACE_ORIGIN } from '@/gui/All.This/Cleaker/namespaceExpression';
+import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
 
 export interface MeLauncherProps {
   sx?: any;
@@ -134,14 +134,22 @@ export function useMeLauncherView(): MeLauncherView | null {
 // exercised anyway -- the prop always won). `buildCleakerNamespaceUrl` can
 // throw on a malformed `endpoint`; same graceful host-guess fallback
 // CleakerQR's own helper falls back to.
+// No built-in endpoint: without one, the QR points at the page's own origin (an address; the port is kept), read when
+// called, never at import; with no page (no browser, a file) it has nothing to point at and says nothing.
+function pageOriginFallback(): string {
+  if (typeof window === 'undefined') return '';
+  const { protocol, origin } = window.location;
+  return protocol === 'http:' || protocol === 'https:' ? origin : '';
+}
 function resolveCleakerQrValue(username: string, endpoint: string): string {
-  const base = String(endpoint || DEFAULT_CLEAKER_NAMESPACE_ORIGIN).trim().replace(/\/+$/, '');
+  const base = String(endpoint || pageOriginFallback()).trim().replace(/\/+$/, '');
+  if (!base) return '';
   try {
-    return buildCleakerNamespaceUrl(base || DEFAULT_CLEAKER_NAMESPACE_ORIGIN, username || undefined);
+    return buildCleakerNamespaceUrl(base, username || undefined);
   } catch {
-    if (!username) return base || DEFAULT_CLEAKER_NAMESPACE_ORIGIN;
+    if (!username) return base;
     const host = base.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/\/+$/, '');
-    if (!host) return DEFAULT_CLEAKER_NAMESPACE_ORIGIN;
+    if (!host) return '';
     const scheme = /^https:\/\//i.test(base) ? 'https://' : 'http://';
     return `${scheme}${username}.${host}`;
   }

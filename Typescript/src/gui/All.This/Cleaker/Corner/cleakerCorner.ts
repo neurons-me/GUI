@@ -1,9 +1,10 @@
 // Cleaker in a corner: level 1 of bringing .GUI into any page (`cleaker.js`, `this.gui/cleaker`'s mountCleaker).
 //
 // Level 0 is a page with nothing of .GUI. Level 1 is one line that adds ONLY this: a QR floating in a corner of the
-// page, showing `me @ where` -- `where` is the page's own address, `me` the namespace: cleaker.me unless the author
-// or the person says otherwise, so it works with no setup; anyone can choose another (their own, or a local one) or
-// none, and keep administering through cleaker.me as root. The person can move it to any of the four corners and choose a
+// page, showing `me @ where` -- `where` is the page's own address, `me` the namespace. No namespace is invented: it is
+// the one the person chose or the author declared (source `declared`), else the page's own host as an address (source
+// `address`, shown as such: an address is not a declaration and grants no authority), else none. Anyone can choose
+// another (their own, or a local one) or none. The person can move it to any of the four corners and choose a
 // namespace from its panel; both are remembered in this browser, for this site (their local layer, `base @ overlay`):
 // the page's author only sets the default corner.
 //
@@ -26,8 +27,9 @@ export type CleakerMountOptions = {
   /** The author's default corner. The person's own choice, once made, wins. Default `bottom-right`. */
   corner?: CleakerCorner;
   /**
-   * The namespace shown until the person chooses one. Default: cleaker.me (DEFAULT_CLEAKER_NAMESPACE), so it works with
-   * no setup. `null` (or '') starts with none. The person's own choice -- including "none" -- wins.
+   * The namespace shown until the person chooses one (source `declared`). Omitted: the page's own host, as an address
+   * (source `address`); `null` (or '') starts with none. The person's own choice -- including "none" -- wins.
+   * There is no built-in namespace: a page that wants cleaker.me says `namespace: 'cleaker.me'`.
    */
   namespace?: string | null;
   /** Where the host element is appended. Default `document.body`. */
@@ -35,7 +37,8 @@ export type CleakerMountOptions = {
   /** Where the person's choices are kept. Default `localStorage`; `null` keeps them for this page view only. */
   storage?: Storage | null;
   /** Whether a namespace answers. Default: its public `/__surface`. */
-  probe?: (namespace: string) => Promise<boolean>;
+  /** Asks whether a monad answers. `endpoint` is where to ask: the page's own origin (port kept) for an address. */
+  probe?: (namespace: string, endpoint: string) => Promise<boolean>;
   /**
    * Level 2: the author's GUI document (or `{ bars }`), whose GUI.window.layout.bars the QR offers to unfold. Each bar
    * starts as the author says ('closed' if not said); the person's choice wins and is kept in their browser.
@@ -43,14 +46,22 @@ export type CleakerMountOptions = {
   document?: unknown;
 };
 
-/** The namespace cleaker.js starts with when neither the author nor the person chose one. */
-export const DEFAULT_CLEAKER_NAMESPACE = 'cleaker.me';
+/**
+ * Where a namespace came from. `declared`: the person chose it or the author wrote it. `address`: nobody declared one,
+ * so it is the page's own host. `none`: neither. This is PROVENANCE, not verification: a declared namespace is not
+ * verified either, and a monad answering at an address proves reachability, not authority.
+ */
+export type NamespaceSource = 'declared' | 'address' | 'none';
+export type ResolvedNamespace = { namespace: string | null; source: NamespaceSource };
+type PageAddress = { protocol: string; hostname: string; origin: string };
 
 export type CleakerHandle = {
   host: HTMLElement;
   corner(): CleakerCorner;
   setCorner(corner: CleakerCorner): void;
   namespace(): string | null;
+  /** Where the current namespace came from (see NamespaceSource). */
+  namespaceSource(): NamespaceSource;
   setNamespace(namespace: string | null): Promise<void>;
   /** Level 2: each declared bar's state, a bar set by the person, and a document that arrives later. */
   bars(): Partial<Record<CleakerBarId, CleakerBarState>>;
@@ -87,10 +98,51 @@ export function namespaceEndpoint(namespace: string): string {
   return `${LOCAL_RE.test(namespace) ? 'http' : 'https'}://${namespace}`;
 }
 
+/**
+ * The page's own host as a namespace by address: the hostname only, since the port is transport (NRP §3a). None for a
+ * page that is not served over http(s) (a file, an embedded view): there is no address to take.
+ */
+export function addressNamespace(page: Pick<PageAddress, 'protocol' | 'hostname'> | null | undefined): string | null {
+  if (!page || (page.protocol !== 'http:' && page.protocol !== 'https:')) return null;
+  const host = String(page.hostname || '').trim().toLowerCase();
+  return isNamespaceName(host) ? host : null;
+}
+
+/**
+ * Which namespace the corner starts with, and where it came from: the person's stored choice ('' = they chose none),
+ * else the author's (`null`/'' = none), else the page's host as an address, else none. Resolved when called, never
+ * when the module loads, so it is safe without a browser.
+ */
+export function resolveCornerNamespace(input: {
+  stored: string | null;
+  author?: string | null;
+  page?: Pick<PageAddress, 'protocol' | 'hostname'> | null;
+}): ResolvedNamespace {
+  if (input.stored !== null) return isNamespaceName(input.stored) ? { namespace: input.stored, source: 'declared' } : { namespace: null, source: 'none' };
+  if (input.author !== undefined) {
+    const author = String(input.author ?? '').trim().toLowerCase();
+    return author && isNamespaceName(author) ? { namespace: author, source: 'declared' } : { namespace: null, source: 'none' };
+  }
+  const address = addressNamespace(input.page);
+  return address ? { namespace: address, source: 'address' } : { namespace: null, source: 'none' };
+}
+
+/**
+ * Where to reach the namespace. An address keeps the page's own transport -- origin and port (`localhost:6006` gives the
+ * namespace `localhost`, but requests still go to `localhost:6006`). A declared namespace uses its own name.
+ */
+export function cornerEndpoint(resolved: ResolvedNamespace, page?: Pick<PageAddress, 'protocol' | 'origin'> | null): string {
+  if (!resolved.namespace) return '';
+  if (resolved.source === 'address' && page && (page.protocol === 'http:' || page.protocol === 'https:')) return page.origin;
+  return namespaceEndpoint(resolved.namespace);
+}
+
 /** `me @ where`, or `where` alone while no namespace is chosen, or the namespace alone when the page IS it. */
-export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string; pathname?: string }): string {
+export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string; pathname?: string }, source?: NamespaceSource): string {
   const where = unresolvedPosition(page);
   if (!namespace) return where;
+  // an address is shown as one, never as the namespace the page declared
+  if (source === 'address') return `${namespace} (address)`;
   return namespace === page.hostname ? namespace : `${namespace} @ ${where}`;
 }
 
@@ -108,8 +160,8 @@ export function qrSvg(value: string): string {
  * What the QR says: the same as the label, `me @ where` -- the namespace's link, plus `at=` where the page is (its
  * origin, or for a file the whole file). Nothing is added when the page IS the namespace.
  */
-export function positionQrValue(namespace: string, pageAddress: string): string {
-  const link = linkQrValue({ endpoint: namespaceEndpoint(namespace), namespace });
+export function positionQrValue(namespace: string, pageAddress: string, endpoint?: string): string {
+  const link = linkQrValue({ endpoint: endpoint || namespaceEndpoint(namespace), namespace });
   try {
     const u = new URL(link);
     if (pageAddress && pageAddress !== u.origin) u.searchParams.set('at', pageAddress);
@@ -119,8 +171,8 @@ export function positionQrValue(namespace: string, pageAddress: string): string 
   }
 }
 
-export async function defaultProbe(namespace: string): Promise<boolean> {
-  const result = await probeMonadSurface({ endpoint: namespaceEndpoint(namespace), sources: ['manual'], timeoutMs: 4000 });
+export async function defaultProbe(namespace: string, endpoint?: string): Promise<boolean> {
+  const result = await probeMonadSurface({ endpoint: endpoint || namespaceEndpoint(namespace), sources: ['manual'], timeoutMs: 4000 });
   return Boolean(result.monad);
 }
 
@@ -178,11 +230,11 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
 
   const stored = read(storage, STORE_CORNER);
   let corner: CleakerCorner = isCorner(stored) ? stored : isCorner(options.corner) ? options.corner : 'bottom-right';
-  const storedNs = read(storage, STORE_NAMESPACE);
-  // the person's choice first ('' = they chose none), then the author's, then cleaker.me
-  const authorNs = options.namespace === undefined ? DEFAULT_CLEAKER_NAMESPACE : options.namespace;
-  let namespace: string | null = storedNs !== null ? (isNamespaceName(storedNs) ? storedNs : null)
-    : authorNs && isNamespaceName(authorNs) ? authorNs : null;
+  // the person's choice first ('' = they chose none), then the author's, then the page's host as an address
+  const initial = resolveCornerNamespace({ stored: read(storage, STORE_NAMESPACE), author: options.namespace, page });
+  let namespace: string | null = initial.namespace;
+  let source: NamespaceSource = initial.source;
+  const endpoint = () => cornerEndpoint({ namespace, source }, page);
   let state: 'none' | 'checking' | 'ok' | 'off' = 'none';
   let probeRun = 0;
 
@@ -236,7 +288,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     barsLayer.replaceChildren(...bars.map((bar) => {
       const nav = el('nav', { 'data-bar': bar.id, 'data-state': states[bar.id], 'aria-label': bar.label });
       nav.hidden = states[bar.id] === 'closed';
-      if (bar.id === 'top' || bar.id === 'bottom') nav.append(el('span', { class: 'pos' }, cornerLabel(namespace, page)));
+      if (bar.id === 'top' || bar.id === 'bottom') nav.append(el('span', { class: 'pos' }, cornerLabel(namespace, page, source)));
       for (const item of bar.items) {
         // a route of the namespace: this plain corner has no modal, so it opens at the namespace's own door, where the
         // route renders in the content area; with no namespace chosen there is nowhere to open it
@@ -277,12 +329,12 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
 
   function render() {
     host.setAttribute('data-corner', corner);
-    const label = cornerLabel(namespace, page);
+    const label = cornerLabel(namespace, page, source);
     labelText.textContent = label;
     // a file's label is its name; the whole place is in the tooltip
     labelText.parentElement!.title = page.protocol === 'file:' ? `${label}\n${decodeURI(pageAddress())}` : label;
     dot.setAttribute('data-state', state);
-    const value = namespace ? positionQrValue(namespace, pageAddress()) : pageAddress();
+    const value = namespace ? positionQrValue(namespace, pageAddress(), endpoint()) : pageAddress();
     qrButton.innerHTML = qrSvg(value);
     qrButton.setAttribute('data-value', value);
     shadow.querySelectorAll<HTMLButtonElement>('[data-corner-choice]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cornerChoice === corner)));
@@ -295,12 +347,12 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     status.textContent = `Asking ${ns}…`;
     render();
     let answered = false;
-    try { answered = await probe(ns); } catch { answered = false; }
+    try { answered = await probe(ns, endpoint()); } catch { answered = false; }
     if (run !== probeRun) return;   // a newer choice took over
     state = answered ? 'ok' : 'off';
     status.textContent = answered ? `${ns} answered.` : `${ns} did not answer.`;
     render();
-    if (answered) host.dispatchEvent(new CustomEvent('cleaker:namespace', { detail: { namespace: ns }, bubbles: true, composed: true }));
+    if (answered) host.dispatchEvent(new CustomEvent('cleaker:namespace', { detail: { namespace: ns, source }, bubbles: true, composed: true }));
   }
 
   async function setNamespace(next: string | null) {
@@ -312,6 +364,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
       return;
     }
     namespace = ns;
+    source = ns ? 'declared' : 'none';
     write(storage, STORE_NAMESPACE, ns ?? '');   // '' remembers "none", so the default does not come back
     if (!ns) { probeRun += 1; state = 'none'; status.textContent = ''; render(); return; }
     await check(ns);
@@ -346,6 +399,7 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
     corner: () => corner,
     setCorner,
     namespace: () => namespace,
+    namespaceSource: () => source,
     setNamespace,
     bars: () => barStates(bars, chosenBars),
     setBar,

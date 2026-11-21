@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **No built-in namespace: the library no longer invents `cleaker.me`.** Where nothing declared a namespace, the corner (`mountCleaker`, `cleaker.js`, `mountCleakerGui`), `CleakerQR` and `MeLauncher` used `cleaker.me` as a default. Now the namespace is resolved with its source: declared (the person's stored choice, or the author's) → the page's own host as an **address** (shown as `<host> (address)`; the port is dropped from the name but kept in the transport, so `localhost:6006` asks `http://localhost:6006`) → none (a file, or no browser). Resolved when called, never at import. The source is provenance, not verification: nothing here labels a namespace "verified".
+  - **Migration:** a page that wants cleaker.me declares it: `mountCleaker({ namespace: 'cleaker.me' })`, `<script src="cleaker.js" data-namespace="cleaker.me">`, `<CleakerQR endpoint="https://cleaker.me">`.
+  - **Removed exports:** `DEFAULT_CLEAKER_NAMESPACE` (from `this.gui/cleaker`). Internal: `DEFAULT_CLEAKER_NAMESPACE_ORIGIN`, `DEFAULT_CLEAKER_NAMESPACE_EXPRESSION`; `parseCleakerNamespaceExpression('')` now throws instead of returning cleaker.me.
+  - **New in `this.gui/cleaker`:** `resolveCornerNamespace`, `addressNamespace`, `cornerEndpoint`, types `NamespaceSource` / `ResolvedNamespace`; the handle's `namespaceSource()`; the `cleaker:namespace` event carries `source`.
+  - Unused code removed: `getThemeScope`, `applyThemeScope`, `readScopedThemeSelection`, `readCleakerNamespacePreview` and the `useCleakerNamespace` hook (no callers). The live `window.__thisGuiThemeScope` contract is unchanged.
+
 ## 4.4.6
 
 - **A refused first sign-in says why.** When the server refused a sign-in (for example a key saved in this browser that is not the registered one, `403 CLAIM_VERIFICATION_FAILED`, or an identity it does not know, `404`) before any link was selected, the form stayed silent: the error was kept under the link the attempt opened and the view read only the selected one. The view now shows the latest attempt's pending state and error while the selected link has no session of its own ("We couldn't open this identity... use Recover Account"). Selection is unchanged.

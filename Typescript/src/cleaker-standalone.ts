@@ -7,8 +7,8 @@
 //   <script type="application/json" data-cleaker-document>{ "bars": { "left": { "children": { … } } } }</script>
 //
 // data-corner: the author's default corner (the person's own choice, once made, wins). data-namespace: the namespace
-// shown until the person chooses one (default cleaker.me, so nothing needs setting up; data-namespace="" starts with
-// none). The bars: an inline `<script type="application/json" data-cleaker-document>` on the page, or a document at
+// shown until the person chooses one. Without it, the page's own host as an address (shown as "(address)"; no built-in
+// domain: a page that wants cleaker.me writes data-namespace="cleaker.me"); data-namespace="" starts with none. The bars: an inline `<script type="application/json" data-cleaker-document>` on the page, or a document at
 // data-document (fetched without credentials). `data-cleaker-manual` skips the automatic mount;
 // `window.Cleaker.mount(options)` mounts by hand.
 import { mountCleaker, type CleakerCorner, type CleakerHandle } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
