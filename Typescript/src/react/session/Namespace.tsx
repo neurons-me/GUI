@@ -23,6 +23,10 @@ import ClickAwayListener from '@mui/material/ClickAwayListener';
 import { resolveTopbarQrSize } from '@/gui/All.This/me/QR/QR.me';
 import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
+import { forgetSearchRecent, readSearchRecent, rememberSearchRecent } from '@/gui/All.This/Cleaker/searchRecent';
+import { querySearchGraph } from '@/runtime/searchGraph';
+import { SelectionProvider, useOptionalSelection } from '@/runtime/selection';
+import { RuntimeInspector } from '@/runtime/inspector';
 import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
 import BlocksTable from '@/gui/All.This/Cleaker/Namespace/Blocks/BlocksTable';
 import { buildCleakerNamespaceUrl } from '@/gui/All.This/Cleaker/namespaceExpression';
@@ -316,39 +320,64 @@ const ThemeKernelMirror: React.FC<{ session: SeedSession | null }> = ({ session 
 // endpoint would be overbuilding it.
 const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?: string; onExpandedChange?: (expanded: boolean) => void; collapsedSize?: number }> = ({ cleakerEndpoint, netgetMonadOrigin, onExpandedChange, collapsedSize }) => {
   const resolvedEndpoint = requireCleakerEndpoint(cleakerEndpoint);
+  const connectionSeams = React.useContext(ConnectionSeamsContext);
+  const sessionCtx = useOptionalSeedSessionContext();
+  const connectedMe = sessionCtx?.authenticated ? (sessionCtx.session?.me ?? sessionCtx.me ?? null) : null;
   const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let cancelled = false;
-    fetch(`${getNetgetMonadOrigin(netgetMonadOrigin)}/`)
+    // The story's simulated door (and any other ConnectionSeams fetch) must
+    // answer this read; window.fetch would hit the page itself and get no users.
+    const load = connectionSeams.fetchImpl ?? fetch;
+    load(`${getNetgetMonadOrigin(netgetMonadOrigin)}/`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((data) => { if (!cancelled) setDirectoryUsers(Array.isArray(data?.users) ? data.users : []); })
       .catch(() => { if (!cancelled) setDirectoryUsers([]); });
     return () => { cancelled = true; };
-  }, [netgetMonadOrigin]);
+  }, [netgetMonadOrigin, connectionSeams.fetchImpl]);
 
+  const [recents, setRecents] = useState<string[]>([]);
+  useEffect(() => {
+    setRecents(connectedMe ? readSearchRecent(connectedMe) : []);
+  }, [connectedMe, sessionCtx?.authenticated, sessionCtx?.identityHash]);
+
+  const navigate = useNavigate();
+  const selection = useOptionalSelection();
   const [searchQuery, setSearchQuery] = useState('');
-  const searchMatches = useMemo<SearchFieldResult[]>(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return [];
-    return directoryUsers
-      .filter((u) => u.username.toLowerCase().includes(query))
-      .slice(0, 6)
-      .map((u) => ({
-        id: u.username,
-        label: `@${u.username}`,
-        avatarSrc: u.profileImg,
-        avatarFallback: u.username,
-      }));
-  }, [directoryUsers, searchQuery]);
+  const searchMatches = useMemo<SearchFieldResult[]>(
+    () => querySearchGraph(searchQuery, {
+      recents,
+      handles: directoryUsers.map((user) => ({ username: user.username, profileImg: user.profileImg })),
+    }),
+    [directoryUsers, searchQuery, recents],
+  );
 
-  const visitUser = (result: SearchFieldResult) => {
+  const visitResult = (result: SearchFieldResult) => {
+    if (result.tool === 'grid') {
+      selection?.setGridEnabled(true);
+      return;
+    }
+    if (result.tool === 'inspector') {
+      selection?.setInspectorEnabled(true);
+      return;
+    }
+    if (result.route) {
+      navigate(result.route);
+      return;
+    }
+    const handle = result.handle || result.id;
     try {
-      const href = buildCleakerNamespaceUrl(resolvedEndpoint, result.id);
+      const href = buildCleakerNamespaceUrl(resolvedEndpoint, handle);
       window.open(href, '_blank', 'noopener,noreferrer');
+      if (connectedMe) setRecents(rememberSearchRecent(connectedMe, handle));
     } catch {
       // Malformed handle — nothing to navigate to, just leave the field as-is.
     }
+  };
+
+  const removeRecent = (result: SearchFieldResult) => {
+    if (connectedMe) setRecents(forgetSearchRecent(connectedMe, result.id));
   };
 
   // No longer its own `position: fixed` box -- lives inside the shared
@@ -364,11 +393,13 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
       query={searchQuery}
       onQueryChange={setSearchQuery}
       results={searchMatches}
-      onSelectResult={visitUser}
-      placeholder="Search .me"
-      ariaLabel="Search .me"
+      onSelectResult={visitResult}
+      onRemoveResult={connectedMe ? removeRecent : undefined}
+      placeholder="Search"
+      ariaLabel="Search"
       onExpandedChange={onExpandedChange}
       collapsedSize={collapsedSize}
+      maxResults={8}
       data-gui-node-id="GUI.window.layout.bars.top.search"
     />
   );
@@ -2285,11 +2316,27 @@ const CleakerRoutes: React.FC<NamespaceProps> = (props) => (
 // The shell reads and writes the page's one `.me` (the door's diagnosis asks it, under GUI.door). Under `<Cleaker>` there
 // is always one; a caller that mounts the shell directly gets a local one made for it, so nothing below has to ask
 // whether a `.me` exists.
+// Story 1 is the Namespace shell, not AppShell, so Inspector and Grid are
+// otherwise missing. Reuse AppShell's providers; if they are already around
+// us (a site with .GUI), do not mount a second pair.
+const OptionalNamespaceDevtools: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const existing = useOptionalSelection();
+  if (existing) return <>{children}</>;
+  return (
+    <SelectionProvider>
+      {children}
+      <RuntimeInspector />
+    </SelectionProvider>
+  );
+};
+
 const WithMe: React.FC<NamespaceProps> = (props) => {
   const found = useOptionalMe();
   const routes = (
     <RouterProvider>
-      <CleakerRoutes {...props} />
+      <OptionalNamespaceDevtools>
+        <CleakerRoutes {...props} />
+      </OptionalNamespaceDevtools>
     </RouterProvider>
   );
   if (found) return routes;
