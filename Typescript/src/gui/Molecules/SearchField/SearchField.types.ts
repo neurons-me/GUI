@@ -5,6 +5,14 @@ export type SearchFieldResult = {
   label: string;
   avatarSrc?: string | null;
   avatarFallback?: string;
+  /** A handle from this person's recent searches (shown with a history icon). */
+  recent?: boolean;
+  /** Leading icon for a page or tool. Handles keep the avatar when present. */
+  icon?: string;
+  kind?: 'page' | 'tool' | 'handle' | 'recent';
+  route?: string;
+  tool?: 'grid' | 'inspector';
+  handle?: string;
 };
 
 export type SearchFieldProps = {
@@ -14,6 +22,8 @@ export type SearchFieldProps = {
   /** Already-filtered results to show in the dropdown. */
   results: SearchFieldResult[];
   onSelectResult: (result: SearchFieldResult) => void;
+  /** When set, each recent (or any result) can be removed with a small ×. */
+  onRemoveResult?: (result: SearchFieldResult) => void;
   placeholder?: string;
   /** Shown when the query is non-empty and results is empty. Defaults to a generic "no match" line. */
   emptyLabel?: string;
