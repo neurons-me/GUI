@@ -10,6 +10,7 @@ import PixelWordmark from "@/gui/All.This/me/QR/PixelWordmark";
 import { ME_WORDMARK_EMBED_BITMAP } from "@/gui/All.This/me/QR/meMark";
 import { useGuiTheme } from "@/gui-internals/Hooks";
 import { buildCleakerNamespaceUrl } from "../../namespaceExpression";
+import { ConnectionSeamsContext } from "@/gui/All.This/Cleaker/useQRConnect";
 
 export interface UsersTableProps {
   endpoint: string; // e.g. "http://localhost:8161"
@@ -98,6 +99,7 @@ export default function UsersTable({
   "data-gui-component": dataGuiComponent = "UsersTable",
 }: UsersTableProps) {
   const theme = useGuiTheme();
+  const fetchImpl = React.useContext(ConnectionSeamsContext).fetchImpl ?? fetch;
   const [rows, setRows] = useState<UserEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +132,7 @@ export default function UsersTable({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${endpoint}/`);
+      const res = await fetchImpl(`${endpoint}/`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setRows(json.users ?? []);
@@ -142,7 +144,7 @@ export default function UsersTable({
 
   useEffect(() => {
     load();
-  }, [endpoint]);
+  }, [endpoint, fetchImpl]);
 
   const getUserHostUrl = useCallback((username: string) => {
     const u = String(username || '').trim().toLowerCase();

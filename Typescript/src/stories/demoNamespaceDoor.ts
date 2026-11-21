@@ -72,6 +72,28 @@ export const demoNamespaceFetch: typeof fetch = async (input, init) => {
     });
   }
 
+  // The claims directory the top-bar search and /users read from (`GET /` on
+  // this page's origin, which the story uses as the monad). Only identities
+  // claimed through this door in this tab; nothing decorative, no other host.
+  if (method === 'GET') {
+    try {
+      const parsed = new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+      const pageOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      if (parsed.pathname === '/' && (!pageOrigin || parsed.origin === pageOrigin)) {
+        const users = Object.entries(readClaims()).map(([ns, identityHash]) => ({
+          username: String(ns).split('.')[0] || String(ns),
+          identityHash,
+          publicKey: '',
+          createdAt: 0,
+          updatedAt: 0,
+        }));
+        return json({ users });
+      }
+    } catch {
+      // Not a URL we can parse: fall through.
+    }
+  }
+
   if (method === 'POST' && /\/claims\/signIn(\?|$)/.test(url)) {
     const body = await bodyOf(input, init);
     const namespace = String(body?.namespace || '').trim();
