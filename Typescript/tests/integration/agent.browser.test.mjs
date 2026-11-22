@@ -445,8 +445,8 @@ async function main() {
       await page.waitForSelector('[data-agent="keys-identity"] option', { state: 'attached', timeout: 15000 });
       await page.selectOption('[data-agent="keys-identity"]', ana);
       await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys"]', { timeout: 20000 });
-      await page.click('[data-gui-node-id="cleaker.keys.keys"]');
-      await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys.meta"]', { timeout: 10000 }).catch(() => {});
+      // The tree starts open (IdentityTree initialOpen); clicking the Keys icon would close it.
+      await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys.meta"]', { timeout: 20000 });
       const ids = await page.evaluate(() => [...document.querySelectorAll('[data-gui-node-id]')].map((n) => n.getAttribute('data-gui-node-id')));
       check(null, '18.1 the cleaker shows the keys tree for the chosen identity (labels from the tree)', ids.includes('cleaker.keys.keys.meta') && ids.includes('cleaker.keys.keys.stripe'), ids.filter((i) => i.startsWith('cleaker.keys.keys')).join(' '));
       check(null, '18.2 keys.netget is not shown', !ids.some((i) => /\.netget\b/.test(i)));
