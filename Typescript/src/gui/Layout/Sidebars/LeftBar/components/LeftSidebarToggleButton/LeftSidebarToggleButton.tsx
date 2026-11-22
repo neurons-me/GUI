@@ -7,12 +7,17 @@ type LeftSidebarToggleButtonProps = {
   expanded: boolean;
   onToggle: () => void;
   /**
-   * `inline` (default): a button in the header's flow. `edge`: a tall, thin tab on the bar's right border (a hair outside it), centred on the
+   * `inline` (default): a button in the header's flow. `edge`: a tall, thin tab on the bar's inner border (a hair outside it), centred on the
    * header, for a header whose leading cell belongs to the app's brand (the whole rail is only 72px wide, so the brand
    * keeps the cell and the arrow sits on the border, clear of the brand and of whatever is just outside the bar). The header must
-   * be `position: relative`, and what leads it leaves `EDGE_TAB_SPACE` px free on the right.
+   * be `position: relative`, and what leads it leaves `EDGE_TAB_SPACE` px free on that inner side.
    */
   placement?: 'inline' | 'edge';
+  /**
+   * Which border the edge tab sits on. Default `right` (the left bar's inner edge) — unchanged. The right bar passes
+   * `left` so the same handle sits on its inner (left) border.
+   */
+  edge?: 'left' | 'right';
   ['data-gui-node-id']?: string;
   ['data-gui-component']?: string;
 };
@@ -36,10 +41,15 @@ const LeftSidebarToggleButton: React.FC<LeftSidebarToggleButtonProps> = ({
   expanded,
   onToggle,
   placement = 'inline',
+  edge = 'right',
   ['data-gui-node-id']: dataGuiNodeId,
   ['data-gui-component']: dataGuiComponent,
 }) => {
   if (placement === 'edge') {
+    const onLeft = edge === 'left';
+    const collapseIcon = onLeft ? 'chevron_right' : 'chevron_left';
+    const expandIcon = onLeft ? 'chevron_left' : 'chevron_right';
+    const icon = expanded ? collapseIcon : expandIcon;
     return (
       <IconButton
         aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -55,12 +65,12 @@ const LeftSidebarToggleButton: React.FC<LeftSidebarToggleButtonProps> = ({
           top: 0.5,
           bottom: -0.5,
           // The bar's own border is 1px and the header sits inside it, so the overhang is counted past that border.
-          right: -(EDGE_OVERHANG + 1),
+          ...(onLeft ? { left: -(EDGE_OVERHANG + 1) } : { right: -(EDGE_OVERHANG + 1) }),
           width: EDGE_TARGET_WIDTH,
           p: 0,
           zIndex: 2,
           borderRadius: 0,
-          justifyContent: 'flex-end',
+          justifyContent: onLeft ? 'flex-start' : 'flex-end',
           '&:focus-visible': { outline: 'none' },
           // Only the tab is drawn; the rest of the target is invisible.
           '& .gui-edge-handle': {
@@ -104,8 +114,8 @@ const LeftSidebarToggleButton: React.FC<LeftSidebarToggleButtonProps> = ({
         }}
       >
         <span className="gui-edge-handle">
-          <span style={{ display: 'flex', transform: `translateX(${CHEVRON_NUDGE[expanded ? 'chevron_left' : 'chevron_right']}px)` }}>
-            <Icon name={expanded ? 'chevron_left' : 'chevron_right'} fontSize="0.9rem" />
+          <span style={{ display: 'flex', transform: `translateX(${CHEVRON_NUDGE[icon as keyof typeof CHEVRON_NUDGE]}px)` }}>
+            <Icon name={icon} fontSize="0.9rem" />
           </span>
         </span>
       </IconButton>

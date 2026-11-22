@@ -163,7 +163,7 @@ const LeftSidebarMenu: React.FC<LeftSidebarMenuProps> = ({
         display: 'flex',
         flexDirection: 'column',
         alignItems: isRail ? 'center' : 'flex-start',
-        p: 1.123,
+        p: isRail ? 0.875 : 1.123,
         backgroundColor: 'transparent',
         cursor: 'pointer',
         borderRadius: 1,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { LEAD_COL, LEAD_GAP, LEAD_INSET, leadColSx, leadInset } from '../../leadColumn';
 import clsx from 'clsx';
 import { Box, Typography, Tooltip } from '@/gui/Atoms';
 import Icon from '@/gui/Atoms/Icon/Icon';
@@ -63,19 +64,28 @@ const LeftSidebarAction: React.FC<LeftSidebarActionProps> = ({
     <Box
       sx={{
         display: 'flex',
-        gap: 1.123,
+        gap: view === 'rail' ? 1.123 : 0,
         justifyContent: view === 'rail' ? 'center' : 'flex-start',
         alignItems: 'center',
         width: view === 'rail' ? 'auto' : '100%',
         textAlign: view === 'rail' ? 'center' : 'left',
-        px: view === 'rail' ? 0 : 1.23,
+        // Open bar: the icon in the shared leading column (leadColumn.ts), the label after it.
+        ...(view === 'rail' ? { px: 0 } : { pl: leadInset(), pr: 1 }),
       }}
     >
-      <Icon name={icon || ''} iconColor={iconColor || (active ? 'primary.main' : 'text.secondary')} />
+      {view === 'rail' ? (
+        <Icon name={icon || ''} iconColor={iconColor || (active ? 'primary.main' : 'text.secondary')} />
+      ) : (
+        <Box data-lead-col="" sx={leadColSx}>
+          <Icon name={icon || ''} iconColor={iconColor || (active ? 'primary.main' : 'text.secondary')} />
+        </Box>
+      )}
       {view !== 'rail' && (
         <Typography
           variant="body2"
           sx={{
+            ml: LEAD_GAP,
+            minWidth: 0,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -143,7 +153,8 @@ const LeftSidebarAction: React.FC<LeftSidebarActionProps> = ({
         className={clsx('LeftSidebarAction', className)}
         style={style}
         sx={{
-          p: view === 'rail' ? 0.5 : 1.123,
+          // Open bar: the element starts at the shared inset (its own mark leads it); the rail keeps its padding.
+          ...(view === 'rail' ? { p: 0.5 } : { py: 1.123, pl: leadInset(), pr: LEAD_INSET }),
           display: 'flex',
           justifyContent: view === 'rail' ? 'center' : 'flex-start',
           alignItems: 'center',
@@ -166,7 +177,7 @@ const LeftSidebarAction: React.FC<LeftSidebarActionProps> = ({
       className={clsx('LeftSidebarAction', className)}
       style={style}
       sx={{
-        p: 1.123,
+        ...(view === 'rail' ? { p: 0.875 } : { py: 1.123, px: 0 }),
         display: 'flex',
         flexDirection: 'column',
         alignItems: view === 'rail' ? 'center' : 'flex-start',

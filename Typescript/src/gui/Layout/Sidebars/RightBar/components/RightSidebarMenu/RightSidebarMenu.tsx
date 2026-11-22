@@ -77,14 +77,17 @@ const RightSidebarMenu: React.FC<RightSidebarMenuProps> = ({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'flex-start',
-        p: 1.123,
+        alignItems: isRail ? 'center' : 'flex-end',
+        p: isRail ? 0.875 : 1.123,
+        boxSizing: 'border-box',
         backgroundColor: 'transparent',
         cursor: 'pointer',
         borderRadius: 1,
         color: 'text.primary',
         '&:hover': { backgroundColor: 'action.hover' },
         position: 'relative',
+        width: '100%',
+        maxWidth: '100%',
       }}
       onClick={() => !isRail && setOpen((prev) => !prev)}
     >
@@ -92,16 +95,20 @@ const RightSidebarMenu: React.FC<RightSidebarMenuProps> = ({
         sx={{
           display: 'flex',
           gap: 1.5,
-          justifyContent: isRail ? 'center' : 'flex-start',
+          justifyContent: isRail ? 'center' : 'flex-end',
           alignItems: 'center',
-          width: '100%',
-          textAlign: isRail ? 'center' : 'left',
+          width: isRail ? 'auto' : '100%',
+          textAlign: isRail ? 'center' : 'right',
           px: isRail ? 0 : 1.23,
         }}
       >
-        <Icon name={icon ?? ''} iconColor={iconColor} />
-        {view !== 'rail' && <Typography variant="body2">{label}</Typography>}
+        {view !== 'rail' && (
+          <Typography variant="body2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', minWidth: 0 }}>
+            {label}
+          </Typography>
+        )}
         {!isRail && <Icon name={open ? 'expand_less' : 'expand_more'} />}
+        <Icon name={icon ?? ''} iconColor={iconColor} />
       </Box>
 
       {isRail ? (
@@ -134,17 +141,19 @@ const RightSidebarMenu: React.FC<RightSidebarMenuProps> = ({
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'flex-end',
                   px: 2,
                   py: 0.75,
                   gap: 1.5,
                   cursor: 'pointer',
                   borderRadius: 1,
                   color: 'text.primary',
+                  textAlign: 'right',
                   '&:hover': { backgroundColor: 'action.hover' },
                 }}
               >
-                <Icon name={item.icon ?? ''} iconColor={item.iconColor} />
                 <Typography variant="body2">{item.label}</Typography>
+                <Icon name={item.icon ?? ''} iconColor={item.iconColor} />
               </Box>
             ))}
           </Box>
@@ -158,17 +167,19 @@ const RightSidebarMenu: React.FC<RightSidebarMenuProps> = ({
               sx={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'flex-end',
                 px: 2,
                 py: 0.75,
                 gap: 1.123,
                 cursor: 'pointer',
                 borderRadius: 1,
                 color: 'text.primary',
+                textAlign: 'right',
                 '&:hover': { backgroundColor: 'action.hover' },
               }}
             >
-              <Icon name={item.icon ?? ''} iconColor={item.iconColor} />
               <Typography variant="body2">{item.label}</Typography>
+              <Icon name={item.icon ?? ''} iconColor={item.iconColor} />
             </Box>
           ))}
         </Collapse>

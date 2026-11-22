@@ -35,9 +35,9 @@ const RightSidebarAction: React.FC<RightSidebarActionProps> = ({
     <Box
       sx={{
         display: 'flex',
-        justifyContent: view === 'rail' ? 'center' : 'flex-start',
+        justifyContent: view === 'rail' ? 'center' : 'flex-end',
         alignItems: 'center',
-        width: '100%',
+        width: view === 'rail' ? 'auto' : '100%',
         px: view === 'rail' ? 0 : 1.23,
       }}
     >
@@ -48,14 +48,13 @@ const RightSidebarAction: React.FC<RightSidebarActionProps> = ({
       sx={{
         display: 'flex',
         gap: 1.123,
-        justifyContent: view === 'rail' ? 'center' : 'flex-start',
+        justifyContent: view === 'rail' ? 'center' : 'flex-end',
         alignItems: 'center',
-        width: '100%',
-        textAlign: view === 'rail' ? 'center' : 'left',
+        width: view === 'rail' ? 'auto' : '100%',
+        textAlign: view === 'rail' ? 'center' : 'right',
         px: view === 'rail' ? 0 : 1.23,
       }}
     >
-      <Icon name={icon ?? ''} iconColor={iconColor || (active ? 'primary.main' : undefined)} />
       {view !== 'rail' && (
         <Typography
           variant="body2"
@@ -63,12 +62,15 @@ const RightSidebarAction: React.FC<RightSidebarActionProps> = ({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            textAlign: 'right',
+            minWidth: 0,
             color: active ? 'primary.main' : 'text.primary',
           }}
         >
           {label}
         </Typography>
       )}
+      <Icon name={icon ?? ''} iconColor={iconColor || (active ? 'primary.main' : undefined)} />
     </Box>
   );
 
@@ -123,10 +125,11 @@ const RightSidebarAction: React.FC<RightSidebarActionProps> = ({
       className={clsx('RightSidebarAction', className)}
       style={style}
       sx={{
-        p: 1.123,
+        p: view === 'rail' ? 0.875 : 1.123,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: view === 'rail' ? 'center' : 'flex-start',
+        alignItems: view === 'rail' ? 'center' : 'flex-end',
+        boxSizing: 'border-box',
         borderRight: 2,
         borderRightColor: active ? 'primary.main' : 'transparent',
         borderRightStyle: 'solid',
@@ -138,7 +141,8 @@ const RightSidebarAction: React.FC<RightSidebarActionProps> = ({
         color: active ? 'primary.main' : 'text.primary',
         cursor: hasCustomElement && !onClick ? 'default' : 'pointer',
         width: '100%',
-        textAlign: view === 'rail' ? 'center' : 'left',
+        maxWidth: '100%',
+        textAlign: view === 'rail' ? 'center' : 'right',
         outline: 'none',
         border: 'none',
       }}

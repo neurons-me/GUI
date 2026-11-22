@@ -4,6 +4,7 @@ import Icon from '@/gui/Atoms/Icon/Icon';
 import type { LeftSidebarItemProps } from './LeftSidebarLink.types';
 import { useLeftSidebar } from '@/gui-internals/Hooks';
 import { Link as RouterLink } from 'react-router-dom';
+import { LEAD_COL, LEAD_GAP, leadColSx, leadInset } from '../../leadColumn';
 
 const SIDEBAR_RAIL_FLYOUT_Z_INDEX = 1705;
 
@@ -37,18 +38,22 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
     <Box
       sx={{
         display: 'flex',
-        gap: 1.123,
+        gap: view === 'rail' ? 1.123 : 0,
         justifyContent: view === 'rail' ? 'center' : 'flex-start',
         alignItems: 'center',
         width: view === 'rail' ? 'auto' : '100%',
         textAlign: view === 'rail' ? 'center' : 'left',
-        px: view === 'rail' ? 0 : 1.23,
+        // Open bar: the icon in the shared leading column (leadColumn.ts), the label after it.
+        ...(view === 'rail' ? { px: 0 } : { pl: leadInset(1), pr: 1 }),
       }}
     >
-      {icon && (
-        <Icon name={icon} iconColor={iconColor}/>
+      {icon && view === 'rail' && <Icon name={icon} iconColor={iconColor}/>}
+      {view !== 'rail' && (
+        <Box data-lead-col="" sx={leadColSx}>
+          {icon ? <Icon name={icon} iconColor={iconColor}/> : null}
+        </Box>
       )}
-      {view !== 'rail' && <Typography variant="body2">{label}</Typography>}
+      {view !== 'rail' && <Typography variant="body2" sx={{ ml: LEAD_GAP, minWidth: 0 }}>{label}</Typography>}
       {hasChildren && (
         <Icon
           name={expanded ? 'expand_less' : 'expand_more'}
@@ -69,8 +74,8 @@ const LeftSidebarLink: React.FC<LeftSidebarItemProps> = ({
         display: 'flex',
         flexDirection: 'column',
         alignItems: view === 'rail' ? 'center' : 'flex-start',
-        p: 1.123,
-        ...(roomy ? { py: 1.75 } : {}),
+        ...(view === 'rail' ? { p: 0.875 } : { py: 1.123, px: 0 }),
+        ...(roomy ? { py: view === 'rail' ? 1.35 : 1.75 } : {}),
         backgroundColor: 'transparent',
         border: '1px solid',
         borderColor: active ? 'primary.main' : 'transparent',

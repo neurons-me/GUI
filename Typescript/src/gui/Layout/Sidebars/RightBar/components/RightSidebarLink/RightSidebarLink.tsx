@@ -32,21 +32,23 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
     onClick?.();
   };
 
+  // Expanded: label then icon, packed to the outer (right) edge.
+  // Rail: the icon is centred in the column, aligned with the brand / QR in the head,
+  // the same way the left bar centres its rail icons.
   const content = (
     <Box
       {...rest}
       sx={{
         display: 'flex',
         gap: 1.123,
-        justifyContent: view === 'rail' ? 'center' : 'flex-start',
+        justifyContent: view === 'rail' ? 'center' : 'flex-end',
         alignItems: 'center',
-        width: '100%',
-        textAlign: view === 'rail' ? 'center' : 'left',
+        width: view === 'rail' ? 'auto' : '100%',
+        textAlign: view === 'rail' ? 'center' : 'right',
         px: view === 'rail' ? 0 : 1.23,
         color: active ? 'primary.main' : 'text.primary',
       }}
     >
-      {icon && <Icon name={icon} iconColor={iconColor || (active ? 'primary.main' : undefined)} />}
       {view !== 'rail' && (
         <Typography
           variant="body2"
@@ -54,6 +56,8 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            textAlign: 'right',
+            minWidth: 0,
             color: active ? 'primary.main' : 'text.primary',
           }}
         >
@@ -63,6 +67,7 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
       {hasChildren && view !== 'rail' && (
         <Icon name={expanded ? 'expand_less' : 'expand_more'} />
       )}
+      {icon && <Icon name={icon} iconColor={iconColor || (active ? 'primary.main' : undefined)} />}
     </Box>
   );
 
@@ -71,8 +76,9 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        alignItems: view === 'rail' ? 'center' : 'flex-start',
-        p: 1.123,
+        alignItems: view === 'rail' ? 'center' : 'flex-end',
+        p: view === 'rail' ? 0.875 : 1.123,
+        boxSizing: 'border-box',
         backgroundColor: active ? 'action.selected' : 'transparent',
         borderRight: 2,
         borderRightStyle: 'solid',
@@ -85,6 +91,7 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
         },
         position: 'relative',
         width: '100%',
+        maxWidth: '100%',
       }}
       onClick={handleClick}
     >
@@ -130,7 +137,7 @@ const RightSidebarLink: React.FC<RightSidebarLinkProps> = ({
         content
       )}
       {hasChildren && expanded && view !== 'rail' && (
-        <Box sx={{ pl: 2, pt: 0.5 }}>
+        <Box sx={{ pr: 2, pt: 0.5 }}>
           {React.Children.toArray(children).map((child) =>
             React.isValidElement(child) ? child : null
           )}

@@ -1,8 +1,8 @@
 import clsx from 'clsx';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import IconButton from '@mui/material/IconButton';
 import Icon from '@/gui/Atoms/Icon/Icon';
-import { Box } from '@/gui/Atoms';
+import { Box, Typography } from '@/gui/Atoms';
 import { Drawer } from '@/gui/Molecules';
 import { useRightBar, useGuiTheme, useGuiMediaQuery, useUpdateInsets, useInsets } from '@/gui-internals/Hooks';
 import type { RightBarView } from '@/gui-internals/Contexts';
@@ -11,6 +11,7 @@ import RightBarLink from './components/RightSidebarLink/RightSidebarLink';
 import RightBarMenu from './components/RightSidebarMenu/RightSidebarMenu';
 import RightBarAction from './components/RightSidebarAction/RightSidebarAction';
 import RightBarToggleButton from './components/RightSidebarToggleButton/RightSidebarToggleButton';
+import LeftSidebarToggleButton, { EDGE_TAB_SPACE } from '@/gui/Layout/Sidebars/LeftBar/components/LeftSidebarToggleButton/LeftSidebarToggleButton';
 import { selectionStore } from '@/runtime/selectionStore';
 import type { ResolvedNodeRecord } from '@/runtime/renderer';
 import { mergeRightBarCollections } from '@/gui/Layout/Sidebars/Collections/resolveCollections';
@@ -55,6 +56,8 @@ const RightBar = ({
   initialView = 'rail',
   id,
   style,
+  header,
+  brand,
   'data-testid': dataTestId,
   'data-gui-node-id': dataGuiNodeId,
   'data-gui-component': dataGuiComponent,
@@ -95,6 +98,107 @@ const RightBar = ({
   const adminAttrs = {
     'data-gui-node-id': adminNodeId,
     'data-gui-component': dataGuiComponent || 'right',
+  };
+  const headerNodeId = `${adminNodeId}.header`;
+  const toggleButtonNodeId = `${adminNodeId}.header.toggle`;
+  const rawHeaderNode = (() => {
+    if (!header) return null;
+    if (React.isValidElement(header)) return header;
+    if (typeof header === 'string') {
+      return <Typography variant="subtitle2">{header}</Typography>;
+    }
+    if (typeof header === 'object') {
+      const title = (header as any).title;
+      const iconName = (header as any).icon;
+      const iconColor = (header as any).iconColor;
+      return (
+        <>
+          {iconName && !brand ? <Icon name={iconName} iconColor={iconColor} /> : null}
+          {view !== 'rail' && title ? <Typography variant="subtitle2">{title}</Typography> : null}
+        </>
+      );
+    }
+    return null;
+  })();
+  // Same as LeftBar: the header text is not drawn in rail (only the mark's icon stays in the rail-width cell).
+  const headerNode = view === 'rail' ? null : rawHeaderNode;
+  const leadingCell = !!brand;
+  const toggleControl = (expanded: boolean, onToggle: () => void, placement: 'inline' | 'edge') =>
+    brand ? (
+      <LeftSidebarToggleButton
+        expanded={expanded}
+        onToggle={onToggle}
+        placement={placement}
+        edge="left"
+        data-gui-node-id={toggleButtonNodeId}
+        data-gui-component="toggle"
+      />
+    ) : (
+      <RightBarToggleButton expanded={expanded} onToggle={onToggle} />
+    );
+  const headerContent = (expanded: boolean, onToggle: () => void, viewForApp: RightBarView, placement: 'inline' | 'edge' = 'edge') => {
+    // Text on the inner (left) side of the icon, packed toward the brand — name-then-logo, mirrored from the left bar.
+    const text = headerNode ? (
+      <Box
+        key="header-text"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          minWidth: 0,
+          flex: '1 1 0',
+          maxWidth: '100%',
+          // Do not overflow:hidden here: the label hangs a few px into the empty side of the mark's
+          // cell (besideRailMarkSx), the same as the left bar. The mark sits at the outer edge (flex-end)
+          // and paints above the label (zIndex 2), so the hang never covers the QR.
+          // Room for the edge tab on the inner (left) border, same 15px the left bar leaves on its inner side.
+          pl: brand && placement === 'edge' ? `${EDGE_TAB_SPACE}px` : 0,
+        }}
+      >
+        {headerNode}
+      </Box>
+    ) : null;
+    const control = <React.Fragment key="toggle">{toggleControl(expanded, onToggle, placement)}</React.Fragment>;
+    const brandCell = brand ? (
+      <Box
+        key="brand"
+        data-gui-node-id={`${adminNodeId}.brand`}
+        data-gui-component="brand"
+        sx={{
+          display: 'flex',
+          alignItems: 'stretch',
+          // Rail: centre the mark on the same line as the rail icons. Expanded: flush with the
+          // outer (right) edge so the text sits to its left and never covers it.
+          justifyContent: viewForApp === 'rail' ? 'center' : 'flex-end',
+          flexShrink: 0,
+          // Rail: the whole 72px. Expanded: at least 72px, but wider when the brand's name sits beside its logo.
+          width: viewForApp === 'rail' ? '100%' : 'auto',
+          minWidth: `${RAIL_WIDTH}px`,
+          height: '100%',
+          position: 'relative',
+          // Above hanging header text, so a label can never paint over the mark.
+          zIndex: 2,
+        }}
+      >
+        {brand}
+      </Box>
+    ) : null;
+    // Flow is inner-to-outer: text, then the mark flush with the right corner. The edge handle is absolute on the left border.
+    return brand ? [text, brandCell, control] : [control, text];
+  };
+  const headerJustify = leadingCell ? 'flex-end' : 'flex-start';
+  const headerSx = {
+    position: 'relative' as const,
+    flexShrink: 0,
+    borderBottom: '1px solid',
+    borderColor: 'divider',
+    height: `${headerHeight}px`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: headerJustify,
+    px: leadingCell ? 0 : 1.5,
+    py: 0,
+    gap: leadingCell ? 0 : 1.25,
   };
 
   useEffect(() => {
@@ -205,73 +309,6 @@ const RightBar = ({
       return null;
     });
 
-  if (view === 'rail') {
-    return (
-      <Box
-        component="aside"
-        className={clsx('RightBar', className)}
-        id={id}
-        data-testid={dataTestId}
-        style={style}
-        {...adminAttrs}
-        sx={{
-          position: 'fixed',
-          top: 0,
-          right: `${layoutRightOffset}px`,
-          bottom: 0,
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-        width: `${RAIL_WIDTH}px`,
-        overflow: 'hidden',
-        borderLeft: '1px solid',
-        borderColor: 'divider',
-        backgroundColor: 'background.paper',
-        zIndex: (theme) => theme.zIndex.drawer + 2,
-        transition: 'right 0.3s ease',
-      }}
-    >
-        <Box
-          component="header"
-          sx={{
-            flexShrink: 0,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            height: `${headerHeight}px`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            px: 1.5,
-            py: 0,
-            gap: 1.25,
-          }}
-        >
-            <RightBarToggleButton
-              expanded={view === ('expanded' as any)}
-              onToggle={() => setView(view === 'rail' ? 'expanded' : 'rail')}
-          />
-        </Box>
-        <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements(resolvedElements)}</Box>
-        {hasFooterElements && (
-          <Box
-            component="footer"
-            sx={{
-              flexShrink: 0,
-              px: 1,
-              py: 1.5,
-                      borderColor: 'divider',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.5,
-            }}
-          >
-            {renderFooterItems(resolvedFooterElements)}
-          </Box>
-        )}
-      </Box>
-    );
-  }
-
   if (view === 'mobile') {
     return (
       <>
@@ -327,19 +364,11 @@ const RightBar = ({
         >
           <Box
             component="header"
-            sx={{
-              flexShrink: 0,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              height: `${headerHeight}px`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              px: 1.5,
-              gap: 1.25,
-            }}
+            data-gui-node-id={headerNodeId}
+            data-gui-component="header"
+            sx={headerSx}
           >
-            <RightBarToggleButton expanded onToggle={() => setMobileOpen(false)} />
+            {headerContent(true, () => setMobileOpen(false), 'expanded', 'inline')}
           </Box>
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements(resolvedElements)}</Box>
           {hasFooterElements && (
@@ -363,6 +392,7 @@ const RightBar = ({
     );
   }
 
+  const isRail = view === 'rail';
   return (
     <Box
       component="aside"
@@ -379,34 +409,25 @@ const RightBar = ({
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        width: `${EXPANDED_WIDTH}px`,
-        overflow: 'hidden',
+        width: `${isRail ? RAIL_WIDTH : EXPANDED_WIDTH}px`,
+        overflow: 'visible',
+        '--gui-rail-width': `${RAIL_WIDTH}px`,
+        '--gui-expanded-width': `${EXPANDED_WIDTH}px`,
         borderLeft: '1px solid',
         borderColor: 'divider',
         backgroundColor: 'background.paper',
         zIndex: (theme) => theme.zIndex.drawer + 2,
-        transition: 'right 0.3s ease',
+        transition: 'right 0.3s ease, width 0.3s ease',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       <Box
         component="header"
-        sx={{
-          flexShrink: 0,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          height: `${headerHeight}px`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          px: 1.5,
-          py: 0,
-          gap: 1.25,
-        }}
+        data-gui-node-id={headerNodeId}
+        data-gui-component="header"
+        sx={headerSx}
       >
-        <RightBarToggleButton
-          expanded={view === ('expanded' as any)}
-          onToggle={() => setView(view === 'expanded' ? 'rail' : 'expanded')}
-        />
+        {headerContent(!isRail, () => setView(isRail ? 'expanded' : 'rail'), isRail ? 'rail' : 'expanded')}
       </Box>
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements(resolvedElements)}</Box>
       {hasFooterElements && (
@@ -414,12 +435,12 @@ const RightBar = ({
           component="footer"
           sx={{
             flexShrink: 0,
-            px: 1.5,
+            px: isRail ? 1 : 1.5,
             py: 1.5,
-                  borderColor: 'divider',
+            borderColor: 'divider',
             display: 'flex',
             flexDirection: 'column',
-            gap: 0.75,
+            gap: isRail ? 0.5 : 0.75,
           }}
         >
           {renderFooterItems(resolvedFooterElements)}

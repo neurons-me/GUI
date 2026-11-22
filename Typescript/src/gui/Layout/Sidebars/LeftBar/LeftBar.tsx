@@ -77,6 +77,9 @@ const LeftSidebar = ({
   header,
   brand,
   toggle: customToggle,
+  togglePlacement = 'header',
+  collapsedHandle,
+  collapsedHandleOpensBar = true,
   ['data-gui-node-id']: dataGuiNodeId,
   ['data-gui-component']: dataGuiComponent,
 }: LeftSidebarProps & {
@@ -178,15 +181,45 @@ const LeftSidebar = ({
         key="brand"
         data-gui-node-id={`${adminNodeId}.brand`}
         data-gui-component="brand"
-        sx={{ display: 'flex', alignItems: 'stretch', flexShrink: 0, width: viewForApp === 'rail' ? '100%' : `${RAIL_WIDTH_PX}px`, height: '100%' }}
+        sx={{
+          display: 'flex',
+          alignItems: 'stretch',
+          // Rail: centre the mark in the column, on the same line as the rail icons.
+          // Expanded: keep it at the outer (left) edge, as before, so the text can sit beside it.
+          justifyContent: viewForApp === 'rail' ? 'center' : 'flex-start',
+          flexShrink: 0,
+          // Expanded with no header text: the brand is the whole head (its own text inside, one button), up to the toggle.
+          flexGrow: viewForApp !== 'rail' && !headerNode ? 1 : 0,
+          minWidth: viewForApp === 'rail' ? undefined : `${RAIL_WIDTH_PX}px`,
+          width: viewForApp === 'rail' ? '100%' : 'auto',
+          mr: viewForApp !== 'rail' && !headerNode && !customToggle && placement === 'edge' ? `${EDGE_TAB_SPACE}px` : 0,
+          height: '100%',
+        }}
       >
         {brand}
       </Box>
     ) : null;
+    if (togglePlacement === 'footer') return [brandCell, text];
     if (customToggle) return [brandCell, control, text];
     return brand ? [brandCell, text, control] : [text, control];
   };
   const headerJustify = leadingCell ? 'flex-start' : headerNode ? 'space-between' : 'flex-end';
+  // When the brand (and its chevron) sit at the foot, drop the header only if it would
+  // otherwise be an empty strip. A mark still in the head (often the QR) keeps its row.
+  const showHeader = togglePlacement !== 'footer' || Boolean(brand || (view !== 'rail' && rawHeaderNode));
+
+  /** A footer action that carries the site's brand (the mark sits at the foot). */
+  const isBrandFooterItem = (el: { props?: { element?: React.ReactNode } }) => {
+    const walk = (n: unknown): boolean => {
+      if (!React.isValidElement(n)) return false;
+      const props = n.props as Record<string, unknown>;
+      const id = String(props['data-gui-node-id'] ?? '');
+      const comp = String(props['data-gui-component'] ?? '');
+      if (comp === 'brand' || id === 'GUI.window.layout.bars.brand') return true;
+      return React.Children.toArray(props.children as React.ReactNode).some(walk);
+    };
+    return walk(el?.props?.element);
+  };
 
   useEffect(() => {
     if (typeof setInsets !== 'function') return;
@@ -354,118 +387,143 @@ const LeftSidebar = ({
       return item ? <GuiParent key={`footer-${el.type}-${baseKey}`} id={adminMeta.nodeId}><GuiNodeIdBase value={adminMeta.nodeId}>{item}</GuiNodeIdBase></GuiParent> : null;
     });
 
-  if (view === 'rail') {
+  const renderFooter = (
+    expanded: boolean,
+    onToggle: () => void,
+    viewForApp: LeftSidebarView,
+    placement: 'inline' | 'edge',
+    footerSx: Record<string, unknown>,
+  ) => {
+    if (!hasFooterElements) return null;
+    const items = renderFooterItems();
+    const control = togglePlacement === 'footer'
+      ? toggleControl(expanded, onToggle, viewForApp, placement)
+      : null;
+    if (!control) {
+      return (
+        <Box component="footer" sx={footerSx}>
+          {items}
+        </Box>
+      );
+    }
+    const brandAt = resolvedFooterElements.findIndex(isBrandFooterItem);
+    const i = brandAt >= 0 ? brandAt : Math.max(0, items.length - 1);
+    const before = items.slice(0, i);
+    const brandItem = items[i];
+    const after = items.slice(i + 1);
+    const { px, py, gap, overflowX, overflowY, ...rest } = footerSx as any;
     return (
       <Box
-        component="aside"
-        className={clsx('LeftSidebar', className)}
-        id={id}
-        style={style}
-        {...adminAttrs}
-        sx={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          height: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          width: `${RAIL_WIDTH_PX}px`,
-          overflow: 'visible',
-          borderRight: '1px solid',
-          borderColor: 'divider',
-          '--gui-rail-width': `${RAIL_WIDTH_PX}px`,
-          zIndex: (theme) => theme.zIndex.drawer + 2,
-          backgroundColor: 'background.nav',
-        }}
+        component="footer"
+        data-gui-toggle-placement="footer"
+        sx={{ ...rest, overflow: 'visible', px: 0, py: 0, gap: 0 }}
       >
+        {before.length ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', px: px ?? 0, py: py ?? 1.5, gap: gap ?? 0.75, overflowX: overflowX ?? 'hidden', overflowY: overflowY ?? 'auto' }}>
+            {before}
+          </Box>
+        ) : null}
         <Box
-          component="header"
-          data-gui-node-id={headerNodeId}
-          data-gui-component="header"
+          data-gui-brand-row=""
           sx={{
             position: 'relative',
-            flexShrink: 0,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            height: `${headerHeight}px`,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: headerJustify,
-            px: leadingCell ? 0 : 1.5,
-            py: 0,
-            gap: leadingCell ? 0 : 1.25,
+            minHeight: `${headerHeight}px`,
+            px: viewForApp === 'rail' ? (px ?? 1) : 0,
+            pr: placement === 'edge' ? `${EDGE_TAB_SPACE}px` : (viewForApp === 'rail' ? (px ?? 1) : 0),
+            overflow: 'visible',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            flexShrink: 0,
           }}
         >
-          {headerContent(false, () => setView('expanded'), 'rail')}
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>{brandItem}</Box>
+          {control}
         </Box>
-        <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>{renderElements()}</Box>
-        {hasFooterElements && (
-          <Box
-            component="footer"
-            sx={{
-              flexShrink: 0,
-              px: 1,
-              py: 1.5,
-                      borderColor: 'divider',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.5,
-              maxWidth: '100%',
-              overflowX: 'hidden',
-              overflowY: 'auto',
-            }}
-          >
-            {renderFooterItems()}
+        {after.length ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', px: px ?? 0, py: py ?? 1.5, gap: gap ?? 0.75 }}>
+            {after}
           </Box>
-        )}
+        ) : null}
       </Box>
     );
-  }
+  };
 
   if (view === 'mobile') {
+    // One closed-drawer handle: the site's brand (opens the bar), or the identity QR (opens its
+    // card), or nothing when that mark is already in the top bar. The standard menu button is only
+    // a fallback when the app gave no mark at all.
+    const closedHandle = collapsedHandle !== undefined ? collapsedHandle : (customToggle ? customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) }) : brand);
+    const handleKind = closedHandle == null
+      ? (collapsedHandle === null ? 'none' : 'menu')
+      : (collapsedHandleOpensBar ? 'brand' : 'identity');
+    const handleTop = navInset > 0 ? toggleOffset : 8;
+    const openDrawer = () => setMobileOpen(true);
+    const handleBox = closedHandle != null ? (
+      <Box
+        data-gui-node-id={`${adminNodeId}.toggle.mobile`}
+        data-gui-component="toggle"
+        data-gui-mobile-handle={handleKind}
+        role={collapsedHandleOpensBar ? 'button' : undefined}
+        tabIndex={collapsedHandleOpensBar ? 0 : undefined}
+        aria-label={collapsedHandleOpensBar ? 'Open navigation' : undefined}
+        onClick={collapsedHandleOpensBar ? (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); openDrawer(); } : undefined}
+        onKeyDown={collapsedHandleOpensBar ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDrawer(); } } : undefined}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 48,
+          height: 48,
+          bgcolor: 'background.nav',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: navInset > 0 ? '0 0 12px 0' : 2,
+          overflow: 'hidden',
+          cursor: collapsedHandleOpensBar ? 'pointer' : 'default',
+        }}
+      >
+        {closedHandle}
+      </Box>
+    ) : handleKind === 'menu' ? (
+      <IconButton
+        aria-label="Open navigation"
+        data-gui-node-id={`${adminNodeId}.toggle.mobile`}
+        data-gui-component="toggle"
+        data-gui-mobile-handle="menu"
+        onClick={openDrawer}
+        sx={{
+          borderRadius: '0 16px 16px 0',
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          color: 'text.secondary',
+          boxShadow: 3,
+          '&:hover': {
+            bgcolor: 'background.nav',
+            color: 'text.primary',
+          },
+        }}
+      >
+        <Icon name="menu" />
+      </IconButton>
+    ) : null;
     return (
       <>
-        <Box
-          sx={{
-            position: 'fixed',
-            top: `${toggleOffset}px`,
-            left: 0,
-            zIndex: ((theme as any)?.zIndex?.drawer ?? 1200) + 1,
-            display: mobileOpen ? 'none' : 'flex',
-          }}
-        >
-          {customToggle ? (
-            // The app's own element (the position QR) is the corner control while the bar is off; tapping it opens the bar.
-            <Box
-              data-gui-node-id={`${adminNodeId}.toggle.mobile`}
-              data-gui-component="toggle"
-              sx={{ display: 'flex', width: 56, height: 56, bgcolor: 'background.nav', borderRight: '1px solid', borderBottom: '1px solid', borderColor: 'divider', borderRadius: '0 0 12px 0', overflow: 'hidden' }}
-            >
-              {customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) })}
-            </Box>
-          ) : (
-            <IconButton
-              aria-label="Open navigation"
-              data-gui-node-id={`${adminNodeId}.toggle.mobile`}
-              onClick={() => setMobileOpen(true)}
-              sx={{
-                borderRadius: '0 16px 16px 0',
-                border: '1px solid',
-                borderColor: 'divider',
-                bgcolor: 'background.paper',
-                color: 'text.secondary',
-                boxShadow: 3,
-                '&:hover': {
-                  bgcolor: 'background.nav',
-                  color: 'text.primary',
-                },
-              }}
-            >
-              <Icon name="menu" />
-            </IconButton>
-          )}
-        </Box>
+        {handleBox && !mobileOpen ? (
+          <Box
+            sx={{
+              position: 'fixed',
+              top: `${handleTop}px`,
+              left: navInset > 0 ? 0 : 8,
+              zIndex: ((theme as any)?.zIndex?.drawer ?? 1200) + 1,
+              display: 'flex',
+            }}
+          >
+            {handleBox}
+          </Box>
+        ) : null}
         <Drawer
           anchor="left"
           open={mobileOpen}
@@ -492,6 +550,7 @@ const LeftSidebar = ({
             },
           }}
         >
+          {showHeader && (
           <Box
             component="header"
             data-gui-node-id={headerNodeId}
@@ -511,6 +570,7 @@ const LeftSidebar = ({
           >
             {headerContent(true, () => setMobileOpen(false), 'expanded', 'inline')}
           </Box>
+          )}
           {/* A destination chosen in the temporary drawer closes it: the place it opens is what the person wants to see. */}
           <Box
             sx={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto' }}
@@ -518,28 +578,23 @@ const LeftSidebar = ({
           >
             {renderElements()}
           </Box>
-          {hasFooterElements && (
-            <Box
-              component="footer"
-              sx={{
-                flexShrink: 0,
-                px: 1.5,
-                py: 1.5,
-                          borderColor: 'divider',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 0.75,
-              }}
-            >
-              {renderFooterItems()}
-            </Box>
-          )}
+          {renderFooter(true, () => setMobileOpen(false), 'expanded', 'inline', {
+            flexShrink: 0,
+            px: 0,
+            py: 1.5,
+            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+          })}
         </Drawer>
       </>
     );
   }
 
-  // Default to 'expanded' view
+  // Rail and expanded share one aside so a width change can animate and
+  // the identity mark (and the open QR card) stay mounted.
+  const isRail = view === 'rail';
   return (
     <Box
       component="aside"
@@ -555,15 +610,19 @@ const LeftSidebar = ({
         height: '100vh',
         display: 'flex',
         flexDirection: 'column',
-        width: `${EXPANDED_WIDTH_PX}px`,
+        width: `${isRail ? RAIL_WIDTH_PX : EXPANDED_WIDTH_PX}px`,
         overflow: 'visible',
         borderRight: '1px solid',
         borderColor: 'divider',
+        '--gui-rail-width': `${RAIL_WIDTH_PX}px`,
         '--gui-expanded-width': `${EXPANDED_WIDTH_PX}px`,
         backgroundColor: 'background.nav',
         zIndex: (theme) => theme.zIndex.drawer + 2,
+        transition: 'width 0.3s ease',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
+      {showHeader && (
       <Box
         component="header"
         data-gui-node-id={headerNodeId}
@@ -582,26 +641,23 @@ const LeftSidebar = ({
           gap: leadingCell ? 0 : 1.25,
         }}
       >
-        {headerContent(true, () => setView('rail'), 'expanded')}
+        {headerContent(!isRail, () => setView(isRail ? 'expanded' : 'rail'), isRail ? 'rail' : 'expanded')}
       </Box>
-      {/* Grows like the rail view: the footer (Theme) is docked to the bottom in both views. Shrinks if the list overflows so the footer stays on screen. */}
-      <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>{renderElements()}</Box>
-      {hasFooterElements && (
-        <Box
-          component="footer"
-          sx={{
-            flexShrink: 0,
-            px: 1.5,
-            py: 1.5,
-                  borderColor: 'divider',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 0.75,
-          }}
-        >
-          {renderFooterItems()}
-        </Box>
       )}
+      {/* Footer stays docked; this flex grow shrinks if the list overflows. */}
+      <Box sx={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto' }}>{renderElements()}</Box>
+      {renderFooter(!isRail, () => setView(isRail ? 'expanded' : 'rail'), isRail ? 'rail' : 'expanded', 'edge', {
+        flexShrink: 0,
+        px: isRail ? 1 : 0,
+        py: 1.5,
+        borderColor: 'divider',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: isRail ? 0.5 : 0.75,
+        maxWidth: '100%',
+        overflowX: 'hidden',
+        overflowY: 'auto',
+      })}
     </Box>
   );
 };
