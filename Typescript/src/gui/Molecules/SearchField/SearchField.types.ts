@@ -53,6 +53,12 @@ export type SearchFieldProps = {
    */
   collapsedSize?: number;
   maxResults?: number;
+  /**
+   * `dropdown` (default) shows the results list under the field.
+   * `none` keeps keyboard movement (arrows / Enter) over `results` but
+   * does not draw a list — used when the QR Keys tree is itself the list.
+   */
+  resultsMode?: 'dropdown' | 'none';
   className?: string;
   sx?: SxProps<Theme>;
   ['data-gui-node-id']?: string;

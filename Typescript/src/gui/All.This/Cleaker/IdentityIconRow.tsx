@@ -33,9 +33,11 @@ export interface IdentityIconRowProps {
     /** Anchor for the tree line drawn under an unfolded entry. */
     entryRef?: (id: PersonalEntryId, el: HTMLElement | null) => void;
   };
+  /** When set (a live search), only these personal entries stay visible. */
+  visibleIds?: readonly PersonalEntryId[] | null;
 }
 
-export default function IdentityIconRow({ nodeId, onNavigate: navigate, unfold }: IdentityIconRowProps) {
+export default function IdentityIconRow({ nodeId, onNavigate: navigate, unfold, visibleIds }: IdentityIconRowProps) {
   // Theme collection hover: Dock magnification (see useDockRow / dockMagnify.ts).
   const dock = useDockRow(nodePx());
   return (
@@ -58,7 +60,7 @@ export default function IdentityIconRow({ nodeId, onNavigate: navigate, unfold }
         transform: 'translateX(var(--qr-header-shift, 0px))',
       }}
     >
-      {PERSONAL_ENTRIES.map((entry) => {
+      {PERSONAL_ENTRIES.filter((entry) => !visibleIds || visibleIds.includes(entry.id)).map((entry) => {
         const unfolds = !!unfold?.ids.includes(entry.id);
         const expanded = unfolds && unfold?.expandedId === entry.id;
         return (

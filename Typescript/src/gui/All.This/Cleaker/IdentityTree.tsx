@@ -42,6 +42,8 @@ import { SERVICE_DEFINITIONS, customKeyId, keyNoticeFromGroup, listCustomKeyGrou
 import { publicMetaReader, readPublicMeta, resolveNodeMeta, type MeReader, type NodeIcon, type ResolvedMeta } from './Keys/keyMeta';
 import { presetsAt } from './Keys/keyPresets';
 import { GROUP_INFO, accessFor, childrenAt, templatesAt, trimToExisting, type KeyAccessProp, type KeyChild, type KeyLeaf } from './Keys/keyTree';
+import { filterKeyLeaves, filterPersonalEntries } from './Keys/searchTreeFilter';
+import { useQrTreeSearch } from './qrTreeSearch';
 import { KEYS_ROOT, fieldPath, servicePath } from './Keys/keyPaths';
 import { orderByUsage, readKeyOrder, touchKey, type KeyOrderId } from './Keys/keyOrder';
 import { availableMenuContentWidth } from './Corner/menuSize';
@@ -93,7 +95,10 @@ export interface IdentityTreeProps {
    * from `notice`) and a Reconnect action.
    */
   facebookConnect?: { enabled: boolean; onClick: () => void; message?: string; connected?: boolean; notice?: 'expiring' | 'dead' };
+  /** Live filter from the top-bar Search: matching leaves keep their ancestors; a matching branch stays whole. */
+  filterQuery?: string;
 }
+
 
 const UNFOLDS: readonly PersonalEntryId[] = ['keys'];
 const defOf = (id: ServiceId) => SERVICE_DEFINITIONS.find((d) => d.id === id)!;
@@ -307,7 +312,7 @@ function useFollowOpenedRow(
 
 /** Shared by every level of the keys tree. */
 type TreeCtx = {
-  namespace: string; cap: number; inMenu?: boolean; /** `rows` wraps in the card; `scroll` is one horizontal row. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; saved: ServiceId[];
+  namespace: string; cap: number; inMenu?: boolean; /** `rows` wraps in the card; `scroll` is one horizontal row. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; filtering?: boolean; saved: ServiceId[];
   custom: CustomKeyGroup[]; sel: string[]; adding: string | null; access?: KeyAccessProp;
   nid: (path: string) => string; anchor: (path: string) => HTMLElement | undefined; setAnchor: (path: string) => (el: HTMLElement | null) => void;
   pick: (depth: number, child: KeyChild) => void; startAdd: (level: string) => void; closeCard: () => void;
@@ -333,7 +338,7 @@ export const IdentityTreeSeedCtx = React.createContext<{
   custom: CustomKeyGroup[];
 } | null>(null);
 
-export default function IdentityTree({ nodeId, username: _username, namespace, onNavigate, pageSize, reorderOnUse = false, onPathChange, access, me, pending, hide, initialOpen = false, facebookConnect }: IdentityTreeProps) {
+export default function IdentityTree({ nodeId, username: _username, namespace, onNavigate, pageSize, reorderOnUse = false, onPathChange, access, me, pending, hide, initialOpen = false, facebookConnect, filterQuery }: IdentityTreeProps) {
   const fixed = pageSize ? Math.max(1, Math.floor(pageSize)) : undefined;
   const treeRef = React.useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = React.useState(0);
@@ -401,6 +406,35 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
     order, leafId,
   ), [saved, custom, order, hide]);
   const leavesRef = React.useRef(leaves); leavesRef.current = leaves;
+  const treeSearch = useQrTreeSearch();
+  const searchQuery = (filterQuery ?? treeSearch?.query ?? '').trim();
+  const filtered = React.useMemo(
+    () => (searchQuery ? filterKeyLeaves(leaves, searchQuery) : { leaves, hits: [] as ReturnType<typeof filterKeyLeaves>['hits'] }),
+    [leaves, searchQuery],
+  );
+  const keysEntryMatches = Boolean(searchQuery && filterPersonalEntries(searchQuery).some((hit) => hit.id === 'keys'));
+  // A match on the Keys root is a matching branch: the whole keys tree stays visible.
+  const visibleLeaves = searchQuery && !keysEntryMatches ? filtered.leaves : leaves;
+  React.useEffect(() => {
+    if (searchQuery) setOpen(true);
+  }, [searchQuery]);
+  const treeSearchRef = React.useRef(treeSearch);
+  treeSearchRef.current = treeSearch;
+  const hitsKey = React.useMemo(
+    () => {
+      const personal = searchQuery ? filterPersonalEntries(searchQuery) : [];
+      return JSON.stringify([...personal, ...filtered.hits]);
+    },
+    [searchQuery, filtered.hits],
+  );
+  React.useEffect(() => {
+    const api = treeSearchRef.current;
+    if (!api) return undefined;
+    const personal = searchQuery ? filterPersonalEntries(searchQuery) : [];
+    api.setMatches([...personal, ...filtered.hits]);
+    api.setActiveIndex(0);
+    return () => api.setMatches([]);
+  }, [searchQuery, hitsKey, filtered.hits]);
 
   React.useEffect(() => {
     const refresh = () => {
@@ -451,11 +485,23 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
     if (segs[0] && segs[0] !== 'meta' && ['facebook', 'instagram', 'threads', 'app', 'user'].includes(segs[0])) {
       segs = ['meta', ...segs];
     }
-    const next = trimToExisting(leaves, segs);
+    if (!cleaned || cleaned === 'keys') {
+      setAdding(null);
+      setOpen(true);
+      setSel([]);
+      return;
+    }
+    const next = trimToExisting(leavesRef.current, segs);
     if (!next.length) return;
     setAdding(null);
+    setOpen(true);
     setSel(next);
   };
+  React.useEffect(() => {
+    if (!treeSearch) return undefined;
+    treeSearch.registerReveal(revealPath);
+    return () => treeSearch.registerReveal(null);
+  }, [treeSearch]);
 
   // Public path of the open branch, for the QR: segments of the .me path, nothing else.
   const openSegs = !open ? [] : [KEYS_ROOT, ...(adding !== null ? (adding ? adding.split('.') : []) : sel)];
@@ -469,7 +515,7 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
   const wrap = inMenu && rowMode === 'rows';
   const scroll = inMenu && rowMode === 'scroll';
   const ctx: TreeCtx = {
-    namespace, cap: scroll ? 1e6 : cap, inMenu, rowMode, fixed, leaves, saved, custom, sel, adding, access,
+    namespace, cap: scroll ? 1e6 : cap, inMenu, rowMode, fixed, leaves: visibleLeaves, saved, custom, sel, adding, access, filtering: Boolean(searchQuery),
     nid, anchor: (p) => anchors.current.get(p), setAnchor, pick, startAdd, closeCard, onCreated, revealPath,
     readers: [me, publicMetaReader(readPublicMeta(namespace))].filter(Boolean) as MeReader[],
     pending,
@@ -572,6 +618,7 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
       <IdentityIconRow
         nodeId={nodeId}
         onNavigate={onNavigate}
+        visibleIds={searchQuery ? filterPersonalEntries(searchQuery).map((hit) => hit.id as PersonalEntryId) : null}
         unfold={{ ids: UNFOLDS, expandedId: open ? 'keys' : null, onToggle: toggleKeys, entryRef: (_id, el) => setAnchor(KEYS_ROOT)(el) }}
       />
       </Box>
@@ -677,7 +724,7 @@ function KeysLevel({ prefix }: { prefix: string }) {
   const children = childrenAt(c.leaves, prefix);
   const selSeg = c.sel.length > depth ? c.sel[depth] : undefined;
   const selected = selSeg !== undefined ? children.find((ch) => ch.seg === selSeg) : undefined;
-  const canCreate = accessFor(c.access, levelPath) === 'edit';
+  const canCreate = !c.filtering && accessFor(c.access, levelPath) === 'edit';
   const addPath = full(prefix ? `${prefix}.add` : 'add');
 
   const [shown, setShown] = React.useState(1); // blocks (rows) shown

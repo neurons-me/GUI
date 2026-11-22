@@ -37,6 +37,7 @@ export default function SearchField({
   onExpandedChange,
   collapsedSize = 40,
   maxResults = 6,
+  resultsMode = 'dropdown',
   className,
   sx,
   'data-gui-node-id': dataGuiNodeId = 'SearchField',
@@ -60,6 +61,7 @@ export default function SearchField({
 
   const visibleResults = results.slice(0, maxResults);
   const resultsOpen = focused && (query.trim().length > 0 || results.length > 0);
+  const showDropdown = resultsMode === 'dropdown' && resultsOpen;
 
   React.useEffect(() => {
     setActiveIndex(0);
@@ -222,7 +224,7 @@ export default function SearchField({
               },
             }}
           />
-          {resultsOpen && (
+          {showDropdown && (
             <Box
               data-gui-node-id={`${dataGuiNodeId}.results`}
               sx={{
