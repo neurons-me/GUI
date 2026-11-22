@@ -1,5 +1,5 @@
 // src/themes/fromTokens.ts
-import { createTheme, type Theme } from '@mui/material/styles';
+import { createTheme, getContrastRatio, type Theme } from '@mui/material/styles';
 import { buildShadows } from '@/gui/Theme/styles/buildShadows';
 // Helpers ------------------------------------------------------------
 declare module '@mui/material/styles' {
@@ -132,6 +132,102 @@ function rgbaFromHex(input: string, alpha: number): string {
   return `rgba(${hexToRgbChannels(input)}, ${alpha})`;
 }
 
+function parseHexRgb(input: string): [number, number, number] | null {
+  const value = String(input || '').trim();
+  if (!value.startsWith('#')) return null;
+  let hex = value.slice(1);
+  if (hex.length === 3) hex = hex.split('').map((part) => part + part).join('');
+  if (hex.length !== 6) return null;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return null;
+  return [r, g, b];
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  switch (max) {
+    case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break;
+    case gn: h = (bn - rn) / d + 2; break;
+    default: h = (rn - gn) / d + 4;
+  }
+  return [h / 6, s, l];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const hue2rgb = (p: number, q: number, t: number) => {
+    let u = t;
+    if (u < 0) u += 1;
+    if (u > 1) u -= 1;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [
+    Math.round(hue2rgb(p, q, h + 1 / 3) * 255),
+    Math.round(hue2rgb(p, q, h) * 255),
+    Math.round(hue2rgb(p, q, h - 1 / 3) * 255),
+  ];
+}
+
+/** Raise a hex colour's HSL lightness by `delta` (0.015 = 1.5%). Non-hex values are returned as-is. */
+function lightenHex(input: string, delta = 0.015): string {
+  const rgb = parseHexRgb(input);
+  if (!rgb) return input;
+  const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+  const [r, g, b] = hslToRgb(h, s, Math.min(1, l + delta));
+  const chan = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+  return `#${chan(r)}${chan(g)}${chan(b)}`;
+}
+
+const FLOATING_PAPER_SHADOW = {
+  light: '0px 8px 24px rgba(0,0,0,0.12)',
+  dark: '0px 8px 24px rgba(0,0,0,0.55)',
+} as const;
+
+
+/** WCAG AA contrast for normal text. */
+const WCAG_AA = 4.5;
+
+/**
+ * A colour that sits on `background` at least 4.5:1. `preferred` is kept when
+ * it already meets that (or cannot be measured, e.g. a CSS variable); otherwise
+ * white or black, whichever is more contrasting.
+ */
+function contrastTextOn(background: string, preferred?: string): string {
+  const ratio = (color: string): number | null => {
+    try {
+      return getContrastRatio(color, background);
+    } catch {
+      return null;
+    }
+  };
+  if (preferred) {
+    const r = ratio(preferred);
+    if (r === null || r >= WCAG_AA) return preferred;
+  }
+  const white = '#fff';
+  const black = '#000';
+  return (ratio(white) ?? 0) >= (ratio(black) ?? 0) ? white : black;
+}
+
 // Main compiler ------------------------------------------------------
 export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 'dark' = 'light'): Theme {
   const g = themeTokens || {};
@@ -156,21 +252,35 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
     pick<string | undefined>(g, ['border', 'default'], undefined) ??
     (mode === 'dark' ? 'rgb(45,45,55)' : 'rgba(0,0,0,0.08)');
   // Text/icon color that sits on top of `primary.main` (e.g. contained primary buttons).
-  // If not provided by tokens, fall back to a dark surface color for readability.
-  const onPrimary =
+  // Keep a token (or the previous nav-surface fallback) when it already meets
+  // WCAG AA; otherwise pick white or black, whichever contrasts more. The old
+  // fallback to a dark surface failed on mid-dark primaries such as Seafoam
+  // dark (#396C70): contrastText was #1D2E2C at ~2.4:1. MUI's own
+  // getContrastText would also pick black here (its threshold is 3:1, and
+  // black only reaches ~3.6), so we measure 4.5:1 ourselves.
+  const declaredOnPrimary =
     pick<string | undefined>(c, ['onPrimary'], undefined) ??
-    pick<string>(c, ['background', 'nav'], mode === 'dark' ? '#1a2928' : '#111');
+    pick<string | undefined>(c, ['background', 'nav'], undefined);
+  const primaryMain = pick(c, ['primary'], '#1976d2');
+  const onPrimary = contrastTextOn(primaryMain, declaredOnPrimary);
   // Extended tokens
   const semantic = modeTokens?.extendedColors || modeTokens?.semantic || {};
   const gradients = semantic?.gradients || {};
   const overlays = semantic?.overlays || {};
-  const primaryMain = pick(c, ['primary'], '#1976d2');
   const secondaryMain = pick(c, ['secondary'], '#9c27b0');
   const errorMain = pick(semantic, ['error'], mode === 'dark' ? '#ef5350' : '#d32f2f');
   const warningMain = pick(semantic, ['warning'], '#ed6c02');
   const infoMain = pick(semantic, ['info'], '#0288d1');
-  const backgroundDefault = pick(c, ['background', 'default'], mode === 'dark' ? '#121214' : '#f8f9fa');
-  const backgroundPaper = pick(c, ['background', 'paper'], mode === 'dark' ? '#181a1c' : '#fff');
+  // Read both `color.background.default` and a flat `color.default` (GhostShell
+  // and LunaHex light declare the latter, not a background block).
+  const backgroundDefault = pick(
+    c,
+    ['background', 'default'],
+    pick(c, ['default'], mode === 'dark' ? '#121214' : '#f8f9fa'),
+  );
+  // Option B: paper is the page, lifted ~1.5% in lightness — almost flat,
+  // separated by a hairline rather than a Material slab.
+  const backgroundPaper = lightenHex(String(backgroundDefault), 0.015);
   const visuals = {
     accents: {
       aurora: {
@@ -365,7 +475,63 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
           sizeSmall: { padding: '8px 14px' },
         },
       },
-      MuiPaper: { styleOverrides: { rounded: { borderRadius: 14 } } },
+      MuiPaper: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundImage: 'none',
+            boxShadow: 'none',
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+          rounded: { borderRadius: 14 },
+          ...Object.fromEntries(
+            Array.from({ length: 25 }, (_, elevation) => [
+              `elevation${elevation}`,
+              { boxShadow: 'none', backgroundImage: 'none' },
+            ]),
+          ),
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundImage: 'none',
+            boxShadow: 'none',
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+        },
+      },
+      // Floating layers keep a soft shadow so they still lift off the page.
+      // Only boxShadow is restored; Dialog/Modal chrome is otherwise untouched.
+      MuiDialog: {
+        styleOverrides: {
+          paper: ({ theme }) => ({
+            '&.MuiPaper-root': {
+              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
+              backgroundImage: 'none',
+            },
+          }),
+        },
+      },
+      MuiMenu: {
+        styleOverrides: {
+          paper: ({ theme }) => ({
+            '&.MuiPaper-root': {
+              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
+              backgroundImage: 'none',
+            },
+          }),
+        },
+      },
+      MuiPopover: {
+        styleOverrides: {
+          paper: ({ theme }) => ({
+            '&.MuiPaper-root': {
+              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
+              backgroundImage: 'none',
+            },
+          }),
+        },
+      },
       MuiTextField: { defaultProps: { size: 'small' } },
       MuiCssBaseline: {
         styleOverrides: (theme) => ({

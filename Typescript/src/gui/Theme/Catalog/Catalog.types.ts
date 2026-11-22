@@ -53,6 +53,13 @@ export interface ThemesCatalogProps {
    */
   sidebarView?: ThemesCatalogSidebarView;
   /**
+   * When provided, rail avatars fade/scale with the parent catalog panel.
+   * `true` is the revealed (open) state. Omitted means always shown,
+   * with no enter/exit motion (catalogs used outside ThemeLauncher).
+   */
+  reveal?: boolean;
+
+  /**
    * Called after a theme is selected.
    */
   onThemeSelect?: (theme: ThemesCatalogSelection, themeId: string) => void;

@@ -1,5 +1,5 @@
 // neurons.me/this/GUI/npm/src/gui/Theme/Catalog/Catalog.tsx
-import React, { useEffect, useMemo, useState, useId } from 'react';
+import React, { useEffect, useMemo, useState, useId, useCallback } from 'react';
 import type { ThemesCatalogProps } from './Catalog.types';
 import { getGuiThemes } from '@/gui/Theme/utils/catalog';
 import type { ThemeManifest } from '@/types/theme';
@@ -24,6 +24,12 @@ import {
   selectedFirst,
 } from '@/gui-internals/Collections/rules';
 import { renderWithGUI } from '@/runtime/renderer';
+import {
+  DOCK_LEAVE_MS,
+  DOCK_TRACK_MS,
+  prefersReducedMotion,
+  useDockMagnify,
+} from '@/gui/Theme/dockMagnify';
 function getPreviewSwatches(item: ThemeManifest) {
   const swatches = [];
   const lightMode = item.mode?.light;
@@ -40,6 +46,189 @@ function getPreviewSwatches(item: ThemeManifest) {
   }
   return swatches;
 }
+
+/** Rail avatar resting sizes. Dock falloff / timing live in dockMagnify.ts.
+ *  Scales are applied directly to the DOM from a rAF-throttled
+ *  pointermove (no React state in the hot path). Layout size grows
+ *  with the scale so neighbors are pushed apart instead of overlapping. */
+const DOCK_BASE = 44;
+const DOCK_AVATAR = 34;
+const DOCK_AVATAR_FONT = 13;
+// Enter/exit of the catalog panel — motion lives on a WRAPPER around
+// each avatar so it never shares a transform with Dock magnification.
+const REVEAL_OPEN_MS = 300;
+const REVEAL_CLOSE_MS = 220;
+const REVEAL_OPEN_EASE = 'cubic-bezier(0.2, 0, 0, 1)';
+const REVEAL_CLOSE_EASE = 'cubic-bezier(0.4, 0, 1, 1)';
+const REVEAL_STAGGER_MS = 25;
+const REVEAL_REDUCED_MS = 120;
+
+function applyDockSizes(
+  items: Array<HTMLElement | null>,
+  scales: number[],
+  leaving: boolean,
+) {
+  const ms = leaving ? DOCK_LEAVE_MS : DOCK_TRACK_MS;
+  const transition = `width ${ms}ms ease-out, height ${ms}ms ease-out, font-size ${ms}ms ease-out`;
+  items.forEach((el, i) => {
+    if (!el) return;
+    const s = scales[i] ?? 1;
+    el.style.transition = transition;
+    el.style.width = `${DOCK_BASE * s}px`;
+    el.style.height = `${DOCK_BASE * s}px`;
+    el.style.zIndex = String(Math.round(s * 100));
+    const avatar = el.querySelector('.MuiAvatar-root') as HTMLElement | null;
+    if (avatar) {
+      avatar.style.transition = transition;
+      avatar.style.width = `${DOCK_AVATAR * s}px`;
+      avatar.style.height = `${DOCK_AVATAR * s}px`;
+      avatar.style.fontSize = `${DOCK_AVATAR_FONT * s}px`;
+    }
+  });
+}
+
+type RailThemesDockProps = {
+  themes: ThemeManifest[];
+  themeId?: string | null;
+  activeMode: string;
+  sx?: any;
+  onSelect: (selectedId: string, theme: ThemeManifest) => void;
+  /** When set, avatars fade/scale with the parent panel. Omitted = always shown. */
+  reveal?: boolean;
+};
+
+function RailThemesDock({ themes, themeId, activeMode, sx, onSelect, reveal }: RailThemesDockProps) {
+  const apply = useCallback((
+    items: Array<HTMLElement | null>,
+    scales: number[],
+    leaving: boolean,
+  ) => {
+    applyDockSizes(items, scales, leaving);
+  }, []);
+
+  const { listRef, itemRefs, onPointerMove, onPointerLeave, syncItemCount } = useDockMagnify({
+    axis: 'y',
+    itemSize: DOCK_BASE,
+    centers: 'layout',
+    apply,
+  });
+
+  // If the catalog reorders (selected-first) while the pointer is away, drop
+  // any leftover inline sizes. While hovering, the next move frame corrects.
+  useEffect(() => {
+    syncItemCount(themes.length);
+  }, [themes, syncItemCount]);
+
+  return (
+    <Box
+      ref={listRef}
+      onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
+      sx={{
+        width: '100%',
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 1.5,
+        overflow: 'visible',
+        // room so a 1.48 scale on the first/last avatar is not clipped
+        py: 0.75,
+        ...sx,
+      }}
+    >
+      {themes.map((theme: ThemeManifest, index: number) => {
+        const selected = theme.themeId === themeId;
+        const isDarkSelected = activeMode === 'dark';
+        const activePalette = (theme.mode as any)?.[isDarkSelected ? 'dark' : 'light']?.palette;
+        const activePrimary = activePalette?.primary?.main;
+        const selectedColor = activePrimary || 'primary.main';
+        const selectedId = theme.themeId ?? '';
+        const label = theme.themeName ?? 'Theme';
+        const animate = reveal !== undefined;
+        const shown = reveal !== false;
+        const reduced = prefersReducedMotion();
+        const origin = Math.max(0, themes.findIndex((t) => t.themeId === themeId));
+        const delay = Math.abs(index - origin) * REVEAL_STAGGER_MS;
+
+        return (
+          <Box
+            key={selectedId || label}
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              width: '100%',
+              // Enter/exit only. Dock magnification sets width/height on
+              // the inner button, so the two transforms never fight.
+              ...(animate ? {
+                opacity: shown ? 1 : 0,
+                transform: reduced ? 'none' : (shown ? 'scale(1) translateY(0)' : 'scale(0.85) translateY(8px)'),
+                transformOrigin: 'center center',
+                transition: reduced
+                  ? `opacity ${REVEAL_REDUCED_MS}ms ease`
+                  : shown
+                    ? `opacity ${REVEAL_OPEN_MS}ms ${REVEAL_OPEN_EASE} ${delay}ms, transform ${REVEAL_OPEN_MS}ms ${REVEAL_OPEN_EASE} ${delay}ms`
+                    : `opacity ${REVEAL_CLOSE_MS}ms ${REVEAL_CLOSE_EASE}, transform ${REVEAL_CLOSE_MS}ms ${REVEAL_CLOSE_EASE}`,
+              } : {}),
+            }}
+          >
+          <Tooltip title={label} placement="right" arrow>
+            <Box
+              ref={(el: HTMLElement | null) => { itemRefs.current[index] = el; }}
+              component="button"
+              type="button"
+              aria-label={`Select ${label} theme`}
+              aria-pressed={selected}
+              data-gui-node-id={`GUI.window.layout.bars.footer.theme.catalog.${selectedId || label}`}
+              data-gui-component="theme"
+              onClick={() => onSelect(selectedId, theme)}
+              sx={{
+                width: DOCK_BASE,
+                height: DOCK_BASE,
+                flexShrink: 0,
+                p: 0,
+                border: selected ? '2px solid' : '1px solid',
+                borderColor: selected ? selectedColor : 'divider',
+                borderRadius: '999px',
+                background: 'transparent',
+                color: 'inherit',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
+                position: 'relative',
+                '&:hover': {
+                  borderColor: selectedColor,
+                },
+                '&:focus-visible': {
+                  outline: '2px solid',
+                  outlineColor: selectedColor,
+                  outlineOffset: 2,
+                },
+              }}
+            >
+              {theme.badgeUrl ? (
+                <Avatar
+                  src={theme.badgeUrl}
+                  alt={label}
+                  sx={{ width: DOCK_AVATAR, height: DOCK_AVATAR, display: 'block' }}
+                />
+              ) : (
+                <Avatar sx={{ width: DOCK_AVATAR, height: DOCK_AVATAR, fontSize: DOCK_AVATAR_FONT }}>
+                  {label[0] ?? 'T'}
+                </Avatar>
+              )}
+            </Box>
+          </Tooltip>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
+
 export default function ThemesCatalog({
   sx,
   variant = 'grid',
@@ -51,6 +240,7 @@ export default function ThemesCatalog({
   hideModeToggle = false,
   sidebarView,
   onThemeSelect,
+  reveal,
 }: ThemesCatalogProps = {}) {
   const themes = getGuiThemes();
   const { setMode, mode: activeMode, themeId, setThemeId } = useThemeContext();
@@ -144,6 +334,8 @@ export default function ThemesCatalog({
               type="button"
               aria-label={`Select ${label} theme`}
               aria-pressed={selected}
+              data-gui-node-id={`GUI.window.layout.bars.footer.theme.catalog.${selectedId || label}`}
+              data-gui-component="theme"
               onClick={() => selectThemeById(selectedId, theme)}
               sx={{
                 width: '100%',
@@ -180,77 +372,14 @@ export default function ThemesCatalog({
 
   if (isRailView) {
     return (
-      <Box
-        sx={{
-          width: '100%',
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1.5,
-          ...sx,
-        }}
-      >
-        {orderedThemes.map((theme: ThemeManifest) => {
-          const selected = theme.themeId === themeId;
-          const isDarkSelected = activeMode === 'dark';
-          const activePalette = (theme.mode as any)?.[isDarkSelected ? 'dark' : 'light']?.palette;
-          const activePrimary = activePalette?.primary?.main;
-          const selectedColor = activePrimary || 'primary.main';
-          const selectedId = theme.themeId ?? '';
-          const label = theme.themeName ?? 'Theme';
-
-          return (
-            <Tooltip key={selectedId || label} title={label} placement="right" arrow>
-              <Box
-                component="button"
-                type="button"
-                aria-label={`Select ${label} theme`}
-                aria-pressed={selected}
-                onClick={() => selectThemeById(selectedId, theme)}
-                sx={{
-                  width: 44,
-                  height: 44,
-                  p: 0,
-                  border: selected ? '2px solid' : '1px solid',
-                  borderColor: selected ? selectedColor : 'divider',
-                  borderRadius: '999px',
-                  background: 'transparent',
-                  color: 'inherit',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  boxSizing: 'border-box',
-                  transition: 'border-color 120ms ease, transform 120ms ease',
-                  '&:hover': {
-                    transform: 'translateY(-1px)',
-                    borderColor: selectedColor,
-                  },
-                  '&:focus-visible': {
-                    outline: '2px solid',
-                    outlineColor: selectedColor,
-                    outlineOffset: 2,
-                  },
-                }}
-              >
-                {theme.badgeUrl ? (
-                  <Avatar
-                    src={theme.badgeUrl}
-                    alt={label}
-                    sx={{ width: 34, height: 34, display: 'block' }}
-                  />
-                ) : (
-                  <Avatar sx={{ width: 34, height: 34, fontSize: 13 }}>
-                    {label[0] ?? 'T'}
-                  </Avatar>
-                )}
-              </Box>
-            </Tooltip>
-          );
-        })}
-      </Box>
+      <RailThemesDock
+        themes={orderedThemes}
+        themeId={themeId}
+        activeMode={activeMode}
+        sx={sx}
+        onSelect={selectThemeById}
+        reveal={reveal}
+      />
     );
   }
 
