@@ -322,12 +322,28 @@ async function main() {
 
     // 14. Nothing private ever reached the host.
     {
-      const json = JSON.stringify(hostReceived);
       const results = hostReceived.filter((m) => m?.type === 'agent.result' && m.ok);
       const fieldsOk = results.every((m) => Object.keys(m.identity).sort().join() === 'identityHash,keyId,namespace'
         && Object.keys(JSON.parse(Buffer.from(m.proof, 'base64url').toString('utf8'))).sort().join() === 'bytes,signature');
       check(null, '14.1 every answer the host got holds only a proof (bytes + signature) and public identity fields', results.length > 0 && fieldsOk, `${results.length} answers`);
-      check(null, '14.2 no private key, seed or secret material in anything the host received', !/"d"\s*:|privateKey|seed|secret/i.test(json));
+      // Walk fields, not JSON.stringify of proofs/hashes: those blobs can spell "seed" or "secret" by chance.
+      const privateHit = (value) => {
+        if (Array.isArray(value)) return value.map(privateHit).find(Boolean);
+        if (value && typeof value === 'object') {
+          for (const [k, v] of Object.entries(value)) {
+            if (/^(d|privateKey|seed|secret)$/i.test(k)) return k;
+            const inner = privateHit(v);
+            if (inner) return `${k}.${inner}`;
+          }
+          return null;
+        }
+        if (typeof value === 'string' && /(?:^|[^A-Za-z0-9])(?:privateKey|seed|secret)(?:[^A-Za-z0-9]|$)/i.test(value)) {
+          return value.slice(0, 80);
+        }
+        return null;
+      };
+      const leak = privateHit(hostReceived);
+      check(null, '14.2 no private key, seed or secret material in anything the host received', !leak, leak || '');
     }
 
     // The agent origin runs no third-party code (Identity-Access-Design.md): its page loads scripts from itself only.
