@@ -4,6 +4,7 @@ import { INSPECTOR_SELECT_ROOT_EVENT } from './inspectorEvents';
 import { createPortal } from 'react-dom';
 import { RightSidebarContext } from '@/gui-internals/Contexts/RightSidebarContext';
 import { useSelection } from './selection';
+import { startGridOverlay } from './gridOverlay';
 import { useRuntimeEnvironment } from './runtimeContext';
 import CodeBlock from '@/gui/Molecules/CodeBlock/CodeBlock';
 import { alpha, getContrastRatio } from '@mui/material/styles';
@@ -741,6 +742,8 @@ function readPanelWidth(): number {
 // every fixed descendant -- they all follow the new width. The panel itself
 // is portaled onto <html>, outside <body>, so it is NOT inside that
 // containing block and keeps docking to the real viewport edge.
+const PANEL_NARROW_MQ = '(max-width: 600px)';
+
 const PANEL_SPLIT_CSS = `
 html.${PANEL_OPEN_CLASS} { overflow: hidden; }
 html.${PANEL_OPEN_CLASS} > body {
@@ -748,7 +751,13 @@ html.${PANEL_OPEN_CLASS} > body {
   height: 100vh;
   overflow: auto;
   transform: translateZ(0);
+  transition: width 280ms cubic-bezier(0.2, 0, 0, 1);
 }
+html.${PANEL_OPEN_CLASS}.gui-inspector-resizing > body {
+  transition: none;
+}
+/* Narrow viewports: the page stays full width; the panel is a bottom sheet
+   (styled on the aside), so the split class is not applied. */
 `;
 
 function readAdminScopeMode(): AdminScopeMode {
@@ -1573,6 +1582,21 @@ export function RuntimeInspector({
   }, []);
 
   const open = inspectorEnabled && !!selectedNodeId;
+  // The panel is already on screen whenever the inspector is enabled (it
+  // asks to "Select node" before anything is in focus). The split layout
+  // used to wait for `open` (a selected node), so the empty panel sat on
+  // top of the page and covered it. Dock as soon as the panel is visible.
+  const [narrowViewport, setNarrowViewport] = React.useState(() => (
+    typeof window !== 'undefined' && window.matchMedia(PANEL_NARROW_MQ).matches
+  ));
+  React.useEffect(() => {
+    const mq = window.matchMedia(PANEL_NARROW_MQ);
+    const sync = () => setNarrowViewport(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const panelDocked = inspectorEnabled && !narrowViewport;
 
   const [treeView, setTreeView] = React.useState<TreeView | null>(null);
   const [layoutInfo, setLayoutInfo] = React.useState<LayoutInfo | null>(null);
@@ -1997,20 +2021,9 @@ export function RuntimeInspector({
         stroke: var(--gui-inspector-accent, #3b82f6) !important;
         stroke-width: 3px !important;
       }
-      .gui-grid-overlay-active svg [data-gui-node-id] > :is(circle, ellipse, rect, polygon, path) {
-        stroke-dasharray: 3 2;
-      }
-      .gui-grid-overlay-active [data-gui-node-id] {
-        outline: 1px solid color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 35%, transparent);
-        outline-offset: -1px;
-      }
-      /* Controls draw their own border in (about) the accent color at the
-         very same edge, so an inset outline disappears into it. Push the
-         outline out past the border and dash it so the two read apart. */
-      .gui-grid-overlay-active :is(button, a, input, textarea, select, [role="button"], .MuiFormControl-root)[data-gui-node-id] {
-        outline: 1px dashed color-mix(in srgb, var(--gui-inspector-accent, #3b82f6) 70%, transparent);
-        outline-offset: 3px;
-      }
+      /* Grid outlines are painted by startGridOverlay() on a position:fixed
+         layer, not as CSS outline on the nodes — a bar's overflow:hidden
+         would clip those. */
     `;
     document.head.appendChild(style);
     return () => {
@@ -2059,14 +2072,11 @@ export function RuntimeInspector({
     lastHighlighted.current = host;
   }, [highlightClass, inspectorEnabled, selectedNodeId]);
 
-  // Outlines every registered node at once (see CSS rule above) — a global
-  // layout debug view, independent of the single-node inspector selection.
+  // Outlines every `[data-gui-node-id]` on a fixed overlay so a bar's
+  // overflow cannot clip them. Independent of the single-node inspector.
   React.useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.body.classList.toggle('gui-grid-overlay-active', Boolean(gridEnabled));
-    return () => {
-      document.body.classList.remove('gui-grid-overlay-active');
-    };
+    if (typeof document === 'undefined' || !gridEnabled) return undefined;
+    return startGridOverlay();
   }, [gridEnabled]);
 
   React.useEffect(() => {
@@ -2130,7 +2140,7 @@ export function RuntimeInspector({
   const [panelFont, setPanelFont] = React.useState<string>('');
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!panelDocked) return;
     const root = document.documentElement;
     setPanelFont(getComputedStyle(document.body).fontFamily);
     const style = document.createElement('style');
@@ -2140,22 +2150,24 @@ export function RuntimeInspector({
     root.classList.add(PANEL_OPEN_CLASS);
     return () => {
       root.classList.remove(PANEL_OPEN_CLASS);
+      root.classList.remove('gui-inspector-resizing');
       root.style.removeProperty('--gui-inspector-width');
       style.remove();
     };
-  }, [open]);
+  }, [panelDocked]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!panelDocked) return;
     document.documentElement.style.setProperty('--gui-inspector-width', `${panelWidth}px`);
-  }, [open, panelWidth]);
+    document.documentElement.classList.toggle('gui-inspector-resizing', resizing);
+  }, [panelDocked, panelWidth, resizing]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!panelDocked) return;
     const onResize = () => setPanelWidth((w) => clampPanelWidth(w));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [open]);
+  }, [panelDocked]);
 
   const startPanelResize = React.useCallback((ev: React.PointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -2451,20 +2463,35 @@ export function RuntimeInspector({
           data-gui-inspector-control="true"
           style={{
             position: 'fixed',
-            top: 0,
-            right: 0,
-            width: panelWidth,
-            height: '100vh',
+            ...(narrowViewport
+              ? {
+                  top: 'auto',
+                  right: 0,
+                  left: 0,
+                  bottom: 0,
+                  width: '100%',
+                  height: 'min(70vh, 520px)',
+                  borderLeft: 'none',
+                  borderTop: `1px solid ${ui.line}`,
+                }
+              : {
+                  top: 0,
+                  right: 0,
+                  width: panelWidth,
+                  height: '100vh',
+                  borderLeft: `1px solid ${ui.line}`,
+                }),
             zIndex: 1999,
             background: ui.bg,
             color: ui.fg,
             fontFamily: panelFont || undefined,
-            borderLeft: `1px solid ${ui.line}`,
             display: 'flex',
             flexDirection: 'column',
             userSelect: resizing ? 'none' : undefined,
+            transition: resizing || narrowViewport ? undefined : 'width 280ms cubic-bezier(0.2, 0, 0, 1)',
           }}
         >
+          {!narrowViewport && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -2489,6 +2516,7 @@ export function RuntimeInspector({
               touchAction: 'none',
             }}
           />
+          )}
           <header
             style={{
               padding: '12px 14px',
