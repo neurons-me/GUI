@@ -40,7 +40,7 @@
                     }
                   },
                   "left": {
-                    "note": "Left sidebar. A namespace starts with only its QR (the bar's mark), the Monad orb, and Theme (with Inspector and Layout Grid) in the footer; the search is the top bar's. The namespace's pages (Users, Blockchain, ...) stay declared under content and are reached by route. What the namespace adds is layered around them.",
+                    "note": "Left sidebar. A namespace starts with only its QR (the bar's mark) and Theme (with Inspector and Layout Grid) in the footer; the search is the top bar's. The namespace's pages (Users, Blockchain, Netget, Monad, ...) are not listed here: they stay declared under content (Monad's /monad by the serving monad / netget) and are reached by route. What the namespace adds is layered around them.",
                     "label": "Left bar",
                     "props": {
                       "on": true,
@@ -54,12 +54,6 @@
                         "to": "/",
                         "icon": "home",
                         "placement": "start"
-                      },
-                      "monad": {
-                        "label": "Monad",
-                        "to": "/monad",
-                        "icon": "orb:monad",
-                        "placement": "end"
                       }
                     }
                   },
@@ -254,8 +248,8 @@
                     }
                   },
                   "keychain": {
-                    "label": "Keychain",
-                    "component": "Keychain",
+                    "label": "Keys",
+                    "component": "Keys",
                     "route": "/keychain",
                     "needs": "monad",
                     "note": "The signing keys of the signed-in identity."

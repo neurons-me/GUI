@@ -33,16 +33,16 @@ assert.equal(home?.component, 'Landing', 'the namespace home ("/") is its QR (La
 assert.equal(entries.find((e) => e.route === '/.me')?.component, 'Landing', '/.me stays the identity page');
 
 // ── GUI.window.layout.bars.left declares its elements ────────────────────────────────────────────────────────────────
-// The left bar's elements are the document's. A namespace starts with only its QR (the bar's mark), the Monad orb and
-// Theme: Home first (the top bar's), then Monad at the end. The namespace's pages stay declared under content.
+// The left bar's elements are the document's. A namespace starts with only its QR (the bar's mark) and Theme: Home
+// first (the top bar's). Monad (like Netget, Users, Blockchain) is not listed; its page stays a route.
 const idsOf = (els: any[]) => els.map((e) => e.props.id);
 const anon = leftBarSlots(GUI_DOCUMENT, { authenticated: false });
 const authed = leftBarSlots(GUI_DOCUMENT, { authenticated: true });
 assert.deepEqual(idsOf(anon.start), ['home']);
 assert.deepEqual(idsOf(anon.defaults), []);
-assert.deepEqual(idsOf(anon.end), ['monad']);
-assert.deepEqual(idsOf(authed.end), ['monad'], 'signing in adds nothing to the bar');
-assert.deepEqual(anon.end[0].props.icon, 'orb:monad');
+assert.deepEqual(idsOf(anon.end), [], 'no Monad orb in the bar');
+assert.deepEqual(idsOf(authed.end), [], 'signing in adds nothing to the bar');
+assert.ok(![...anon.start, ...anon.defaults, ...anon.end].some((e: any) => e.props.icon === 'orb:monad'), 'the orb is not a left-bar item');
 assert.deepEqual(anon.start[0].props, { id: 'home', label: 'Home', to: '/', icon: 'home', 'data-gui-node-id': 'GUI.window.layout.bars.left.home' });
 // every element leads somewhere the document serves
 const served = new Set(entries.filter((e) => e.route).map((e) => e.route));
