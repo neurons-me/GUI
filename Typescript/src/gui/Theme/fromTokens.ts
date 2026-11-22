@@ -197,12 +197,6 @@ function lightenHex(input: string, delta = 0.015): string {
   return `#${chan(r)}${chan(g)}${chan(b)}`;
 }
 
-const FLOATING_PAPER_SHADOW = {
-  light: '0px 8px 24px rgba(0,0,0,0.12)',
-  dark: '0px 8px 24px rgba(0,0,0,0.55)',
-} as const;
-
-
 /** WCAG AA contrast for normal text. */
 const WCAG_AA = 4.5;
 
@@ -475,63 +469,7 @@ export function makeMuiTheme(themeTokens: any, modeTokens: any, mode: 'light' | 
           sizeSmall: { padding: '8px 14px' },
         },
       },
-      MuiPaper: {
-        styleOverrides: {
-          root: ({ theme }) => ({
-            backgroundImage: 'none',
-            boxShadow: 'none',
-            border: `1px solid ${theme.palette.divider}`,
-          }),
-          rounded: { borderRadius: 14 },
-          ...Object.fromEntries(
-            Array.from({ length: 25 }, (_, elevation) => [
-              `elevation${elevation}`,
-              { boxShadow: 'none', backgroundImage: 'none' },
-            ]),
-          ),
-        },
-      },
-      MuiCard: {
-        styleOverrides: {
-          root: ({ theme }) => ({
-            backgroundImage: 'none',
-            boxShadow: 'none',
-            border: `1px solid ${theme.palette.divider}`,
-          }),
-        },
-      },
-      // Floating layers keep a soft shadow so they still lift off the page.
-      // Only boxShadow is restored; Dialog/Modal chrome is otherwise untouched.
-      MuiDialog: {
-        styleOverrides: {
-          paper: ({ theme }) => ({
-            '&.MuiPaper-root': {
-              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
-              backgroundImage: 'none',
-            },
-          }),
-        },
-      },
-      MuiMenu: {
-        styleOverrides: {
-          paper: ({ theme }) => ({
-            '&.MuiPaper-root': {
-              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
-              backgroundImage: 'none',
-            },
-          }),
-        },
-      },
-      MuiPopover: {
-        styleOverrides: {
-          paper: ({ theme }) => ({
-            '&.MuiPaper-root': {
-              boxShadow: FLOATING_PAPER_SHADOW[theme.palette.mode],
-              backgroundImage: 'none',
-            },
-          }),
-        },
-      },
+      MuiPaper: { styleOverrides: { rounded: { borderRadius: 14 } } },
       MuiTextField: { defaultProps: { size: 'small' } },
       MuiCssBaseline: {
         styleOverrides: (theme) => ({
