@@ -133,7 +133,8 @@ await test('F4 exchange tries PKCE first, then secret, then long token — only 
   assert.equal(out.ok, true);
   if (out.ok) {
     assert.equal(out.user.token, USER_TOKEN);
-    assert.equal(out.user.expires, '2027-01-14');
+    // now 2026-11-15T22:00:00-06:00 + 60 days = 2027-01-15T04:00:00Z
+    assert.equal(out.user.expires, '2027-01-15');
     assert.equal(out.user.scopes, FACEBOOK_SCOPES);
   }
   assert.equal(calls.length, 3);

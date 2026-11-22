@@ -283,8 +283,9 @@ export async function exchangeFacebookCode(opts: {
 
   const now = opts.now ?? Date.now();
   const seconds = long.expires_in && Number.isFinite(long.expires_in) ? long.expires_in : 60 * 24 * 60 * 60;
+  // Public field is the UTC calendar day of that instant: expires_in is a duration, not a local date.
   const end = new Date(now + seconds * 1000);
-  const expires = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+  const expires = `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`;
   return { ok: true, user: { token: long.access_token, expires, scopes: opts.scopes ?? FACEBOOK_SCOPES } };
 }
 
