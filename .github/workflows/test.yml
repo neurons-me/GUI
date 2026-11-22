@@ -12,7 +12,7 @@ permissions:
 jobs:
   test:
     name: test (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # ubuntu-latest is 26.04, where Playwright 1.58.2 cannot install Chromium (2026-11-20)
     strategy:
       fail-fast: false
       matrix:
