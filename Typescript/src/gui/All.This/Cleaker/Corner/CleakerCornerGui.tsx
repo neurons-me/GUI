@@ -58,7 +58,10 @@ const QR_DIAMETER = 76;
 
 export type CleakerGuiOptions = {
   corner?: CleakerCorner;
-  /** Omitted: the page's own host, as an address (no built-in domain); null or '' starts with none. The person's choice wins. */
+  /**
+   * The author's INITIAL namespace (same rule as mountCleaker): omitted, the page's own host as an address (no
+   * built-in domain); null or '' starts with none. The person's stored choice replaces it; nothing pins it.
+   */
   namespace?: string | null;
   container?: HTMLElement;
   storage?: Storage | null;

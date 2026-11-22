@@ -6,8 +6,8 @@
 //   <script src="…/cleaker.js" data-document="/gui.document.json"></script>
 //   <script type="application/json" data-cleaker-document>{ "bars": { "left": { "children": { … } } } }</script>
 //
-// data-corner: the author's default corner (the person's own choice, once made, wins). data-namespace: the namespace
-// shown until the person chooses one. Without it, the page's own host as an address (shown as "(address)"; no built-in
+// data-corner: the author's default corner (the person's own choice, once made, wins). data-namespace: the author's
+// initial namespace, shown until the person chooses one (their stored choice replaces it; nothing pins it). Without it, the page's own host as an address (shown as "(address)"; no built-in
 // domain: a page that wants cleaker.me writes data-namespace="cleaker.me"); data-namespace="" starts with none. The bars: an inline `<script type="application/json" data-cleaker-document>` on the page, or a document at
 // data-document (fetched without credentials). `data-cleaker-manual` skips the automatic mount;
 // `window.Cleaker.mount(options)` mounts by hand.

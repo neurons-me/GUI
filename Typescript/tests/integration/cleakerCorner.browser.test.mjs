@@ -214,6 +214,33 @@ async function main() {
       check('5.8 the page itself is not changed (bars live in Cleaker\'s shadow root)', ownStyle.startsWith('8px'), ownStyle);
       await context.close();
     }
+    // ── KNOWN BUG (registered 2026-11-21, expected failure): an invalid entry does not cancel the probe in flight ──
+    // setNamespace() returns early on a refused name without bumping probeRun, so the address probe started at load
+    // still owns the status line: when its answer arrives it replaces "… is not a namespace name." with
+    // "<host> answered." / "did not answer.". The check below asserts the CORRECT behaviour (the refusal survives) and
+    // is reported as XFAIL while the bug is present. Once it is fixed it prints FAIL "fixed": turn it into a normal check.
+    {
+      const { context, page } = await newPage();
+      let release;
+      const held = new Promise((r) => { release = r; });
+      await context.route((u) => u.origin === demo.origin && /__surface/.test(u.pathname), async (r) => { await held; await r.continue().catch(() => {}); });
+      await page.goto(`${demo.origin}/cleakerCorner.html`);
+      await page.waitForFunction(() => document.querySelector('[data-cleaker]')?.shadowRoot?.querySelector('.dot')?.getAttribute('data-state') === 'checking', null, { timeout: 8000 }).catch(() => {});
+      const before = await inShadow(page, `return shadow.querySelector('.dot').getAttribute('data-state')`);
+      await inShadow(page, `shadow.querySelector('.qr').click(); const i = shadow.querySelector('input'); i.value = arg; shadow.querySelector('form').requestSubmit()`, 'cleaker.me\\');
+      await page.waitForTimeout(100);
+      const refusedFirst = await inShadow(page, `return shadow.querySelector('.status').textContent`);
+      release();
+      await page.waitForFunction(() => ['ok', 'off'].includes(document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state')), null, { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(100);
+      const after = await inShadow(page, `return shadow.querySelector('.status').textContent`);
+      const reproduced = before === 'checking' && /not a namespace name/.test(refusedFirst);
+      const refusalSurvives = /not a namespace name/.test(after);
+      if (!reproduced) check('2.8 [known bug] setup: the address probe was in flight and the refusal was shown', false, JSON.stringify({ before, refusedFirst }));
+      else if (refusalSurvives) check('2.8 [known bug] FIXED: a late probe answer no longer replaces the refusal -- make this a normal check', false, JSON.stringify({ after }));
+      else console.log(`XFAIL 2.8 [known bug] a late probe answer replaces the refusal  — ${JSON.stringify({ refusedFirst, after })}`);
+      await context.close();
+    }
     {
       const { context, page } = await newPage();
       await page.goto(`${standalone.origin}/bars-doc`);

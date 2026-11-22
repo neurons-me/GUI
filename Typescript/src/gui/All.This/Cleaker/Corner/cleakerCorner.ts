@@ -27,8 +27,10 @@ export type CleakerMountOptions = {
   /** The author's default corner. The person's own choice, once made, wins. Default `bottom-right`. */
   corner?: CleakerCorner;
   /**
-   * The namespace shown until the person chooses one (source `declared`). Omitted: the page's own host, as an address
-   * (source `address`); `null` (or '') starts with none. The person's own choice -- including "none" -- wins.
+   * The author's INITIAL namespace: shown until the person chooses one (source `declared`). Omitted: the page's own
+   * host, as an address (source `address`); `null` (or '') starts with none. The person's own choice, kept in their
+   * storage -- including "none" -- replaces it on every later load. There is no author-fixed namespace: no option
+   * pins one against the person's choice (that would be a separate option with its own name).
    * There is no built-in namespace: a page that wants cleaker.me says `namespace: 'cleaker.me'`.
    */
   namespace?: string | null;
