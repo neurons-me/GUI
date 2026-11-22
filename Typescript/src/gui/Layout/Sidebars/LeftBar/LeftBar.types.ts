@@ -46,6 +46,20 @@ export type LeftBarProps = {
    * `header` (shown when the bar is not a rail) beside it. Without it the bar keeps its arrow.
    */
   toggle?: (state: { view: LeftBarView; toggle: () => void }) => ReactNode;
+  /**
+   * Where the collapse/expand chevron sits. `header` (default): the same row as a brand in the top of the bar.
+   * `footer`: the brand is at the bottom, so the chevron sits on the right of that brand row and the empty top
+   * header strip is omitted (nav starts at the top). Also applies in rail, so the chevron stays reachable.
+   */
+  togglePlacement?: 'header' | 'footer';
+  /**
+   * The single corner mark while the mobile drawer is closed. `undefined` uses `brand` when there is
+   * one, else the standard "Open navigation" button. `null` draws no handle (the mark already lives
+   * in the top bar). A node is drawn as the handle: with `collapsedHandleOpensBar` (default true)
+   * a press opens the drawer; when false the node keeps its own action (the identity QR opens its card).
+   */
+  collapsedHandle?: ReactNode | null;
+  collapsedHandleOpensBar?: boolean;
 };
 
 export type LeftSidebarProps = LeftBarProps;

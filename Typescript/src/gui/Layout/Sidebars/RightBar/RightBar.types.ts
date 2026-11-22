@@ -13,6 +13,11 @@ export type RightBarProps = {
   footerElements?: RightBarElement[];
   footerCollections?: SideBarsCollectionInput[];
   className?: string;
+  /**
+   * The mark at the top of this bar (a QR, a brand): same role as LeftBar's `brand`. In rail only the icon shows,
+   * in a cell as wide as the rail; when the bar expands the text slides in on the inner (left) side of the icon.
+   */
+  brand?: React.ReactNode;
   header?: React.ReactNode | { title?: string; icon?: string; iconColor?: string };
   initialView?: RightBarView;
   id?: string;
