@@ -21,6 +21,10 @@ import { Stack } from '@/gui/Molecules';
 import { Me, useMeAction, useMeValue } from '@/react-entry';
 import { createMeRuntime, mount, writeMeValue } from '@/runtime-entry';
 
+// PUBLIC, reproducible test seed for this story only: not an identity, grants no authority.
+// Passing it explicitly keeps the kernel from generating + persisting an anonymous seed (this.me.seed:v1).
+const DEMO_SEED = 'storybook-demo:runtime-react-me-basic';
+
 function ReactBridgePanel({
   me,
   runtime,
@@ -215,7 +219,7 @@ function MountedSpecPanel({
 
 function RuntimeReactMeBasicDemo() {
   const demo = React.useMemo(() => {
-    const me = new ME();
+    const me = new ME(DEMO_SEED);
     writeMeValue(me, 'name', 'Ana Runtime');
     writeMeValue(me, 'status', 'online');
     writeMeValue(me, 'metrics.count', 3);

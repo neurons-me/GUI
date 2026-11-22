@@ -447,7 +447,9 @@ export default function MeField({
   const inheritedMe = (localContext?.me ?? env.me ?? (env.runtime as any)?.__me ?? (env.runtime as any)?.me) as MeLike | undefined;
   const localKernelRef = React.useRef<MeLike | null>(null);
 
-  if (!localKernelRef.current) {
+  // Fallback kernel only when nothing was provided or inherited: making it unconditionally created (and, being
+  // anonymous, persisted) a throwaway seed even when the field writes into the runtime's `.me`.
+  if (!localKernelRef.current && !providedMe && !inheritedMe) {
     const kernel = new ME() as unknown as MeLike;
     writeKernelWindowLocation(kernel);
     if (typeof initialValue !== 'undefined') {
