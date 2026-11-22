@@ -43,8 +43,10 @@ async function startDemo() {
 /** Builds dist-style cleaker.js into a temp dir and serves it with one plain page that loads it in one line. */
 async function startStandalone() {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cleaker-js-'));
+  // DEMO is dropped: a shell with DEMO=true would make vite build the demo instead and leave cleaker.js empty.
+  const { DEMO: _demo, ...buildEnv } = process.env;
   const build = spawnSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--outDir', out, '--emptyOutDir'], {
-    cwd: root, env: { ...process.env, UMD: 'true', UMD_TARGET: 'cleaker', BROWSER: 'none' }, encoding: 'utf8',
+    cwd: root, env: { ...buildEnv, UMD: 'true', UMD_TARGET: 'cleaker', BROWSER: 'none' }, encoding: 'utf8',
   });
   if (build.status !== 0) throw new Error(`cleaker.js build failed:\n${build.stdout}${build.stderr}`);
   const js = fs.readFileSync(path.join(out, 'cleaker.js'));
