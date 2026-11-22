@@ -25,6 +25,9 @@ import SearchField from '@/gui/Molecules/SearchField/SearchField';
 import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
 import { forgetSearchRecent, readSearchRecent, rememberSearchRecent } from '@/gui/All.This/Cleaker/searchRecent';
 import { querySearchGraph } from '@/runtime/searchGraph';
+import IdentityTree from '@/gui/All.This/Cleaker/IdentityTree';
+import { isLoginExcluded } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
+import { QrTreeSearchProvider, useQrTreeSearch } from '@/gui/All.This/Cleaker/qrTreeSearch';
 import { SelectionProvider, useOptionalSelection } from '@/runtime/selection';
 import { RuntimeInspector } from '@/runtime/inspector';
 import UsersTable from '@/gui/All.This/Cleaker/Namespace/Usernames/Usernames';
@@ -344,16 +347,43 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
 
   const navigate = useNavigate();
   const selection = useOptionalSelection();
+  const treeSearch = useQrTreeSearch();
   const [searchQuery, setSearchQuery] = useState('');
-  const searchMatches = useMemo<SearchFieldResult[]>(
+  const graphMatches = useMemo<SearchFieldResult[]>(
     () => querySearchGraph(searchQuery, {
       recents,
       handles: directoryUsers.map((user) => ({ username: user.username, profileImg: user.profileImg })),
     }),
     [directoryUsers, searchQuery, recents],
   );
+  const treeMatches = useMemo<SearchFieldResult[]>(
+    () => (treeSearch?.matches ?? []).map((hit) => ({
+      id: hit.id,
+      label: hit.label,
+      route: hit.to,
+    })),
+    [treeSearch?.matches],
+  );
+  const treeMode = Boolean(treeSearch && sessionCtx?.authenticated);
+  const searchMatches = treeMode ? treeMatches : graphMatches;
+
+  const setQuery = (value: string) => {
+    setSearchQuery(value);
+    treeSearch?.setQuery(value);
+    if (treeMode && value.trim()) treeSearch?.requestOpen();
+  };
 
   const visitResult = (result: SearchFieldResult) => {
+    if (treeSearch) {
+      const hit = treeSearch.matches.find((item) => item.id === result.id);
+      if (hit) {
+        if (hit.id === 'keys' || hit.kind !== 'entry') {
+          treeSearch.reveal(hit.path);
+          return;
+        }
+        if (hit.to) { navigate(hit.to); return; }
+      }
+    }
     if (result.tool === 'grid') {
       selection?.setGridEnabled(true);
       return;
@@ -391,15 +421,23 @@ const CleakerTopSearch: React.FC<{ cleakerEndpoint?: string; netgetMonadOrigin?:
   return (
     <SearchField
       query={searchQuery}
-      onQueryChange={setSearchQuery}
+      onQueryChange={setQuery}
       results={searchMatches}
       onSelectResult={visitResult}
-      onRemoveResult={connectedMe ? removeRecent : undefined}
+      onRemoveResult={treeMode ? undefined : (connectedMe ? removeRecent : undefined)}
       placeholder="Search"
       ariaLabel="Search"
-      onExpandedChange={onExpandedChange}
+      onExpandedChange={(expanded) => {
+        onExpandedChange?.(expanded);
+        if (expanded && treeMode) treeSearch?.requestOpen();
+        if (!expanded) {
+          setSearchQuery('');
+          treeSearch?.setQuery('');
+        }
+      }}
       collapsedSize={collapsedSize}
       maxResults={8}
+      resultsMode={treeMode ? 'none' : 'dropdown'}
       data-gui-node-id="GUI.window.layout.bars.top.search"
     />
   );
@@ -1510,6 +1548,10 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const IDENTITY_ROUTE = '/.me';
   const isNamespaceLanding = location.pathname === '/' || location.pathname === IDENTITY_ROUTE;
   const [qrMenuOpen, setQrMenuOpen] = useState(false);
+  const treeSearch = useQrTreeSearch();
+  useEffect(() => {
+    if (treeSearch && treeSearch.openTick > 0) setQrMenuOpen(true);
+  }, [treeSearch?.openTick]);
   const qrCellRef = useRef<HTMLElement>(null);
   const [identityCorner, setIdentityCorner] = useState<MarkCorner>(() => (
     readQrMePosition(undefined, props.identityCorner ?? 'top-left')
@@ -2154,6 +2196,18 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                   perimeterRootLabel: namespaceRootLabel,
                 }}
                 identityHash={ctx?.identityHash}
+                tree={authenticated && session?.semanticNamespace ? (
+                  <IdentityTree
+                    nodeId="GUI.window.layout.marks.identity.menu"
+                    username={String(session.semanticNamespace).split('.')[0] || String(session.semanticNamespace)}
+                    namespace={String(session.semanticNamespace)}
+                    onNavigate={(to) => { setQrMenuOpen(false); navigate(to); }}
+                    access="edit"
+                    hide={isLoginExcluded}
+                    initialOpen={Boolean(treeSearch?.query.trim())}
+                    filterQuery={treeSearch?.query}
+                  />
+                ) : undefined}
                 onNavigate={(to) => { setQrMenuOpen(false); navigate(to); }}
                 onLogout={() => { ctx?.logout(); setQrMenuOpen(false); }}
                 onSignIn={() => { setQrMenuOpen(false); if (location.pathname !== '/') navigate('/'); }}
@@ -2335,7 +2389,9 @@ const WithMe: React.FC<NamespaceProps> = (props) => {
   const routes = (
     <RouterProvider>
       <OptionalNamespaceDevtools>
-        <CleakerRoutes {...props} />
+        <QrTreeSearchProvider>
+          <CleakerRoutes {...props} />
+        </QrTreeSearchProvider>
       </OptionalNamespaceDevtools>
     </RouterProvider>
   );
