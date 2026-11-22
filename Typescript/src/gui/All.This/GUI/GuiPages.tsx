@@ -75,21 +75,21 @@ type PartProps = { 'data-gui-node-id'?: string; children?: React.ReactNode };
 
 // ── the page ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// On the address axis (addressAxis.ts): the page starts on the same left line as the address in the top bar, as its
-// continuation, and its first line sits close under the bar. The width is capped for reading, from the left.
-// The heading line has lineHeight 1, so its glyph box starts ADDRESS_PAGE_TOP_PX under the bar; its ink (the title's
-// capitals) ~2px lower. Both are measured by addressAxis.browser.test.mjs.
+// A responsive reading column: full width of the content area, capped, and
+// centered, so empty space sits on both sides (and the page recenters when
+// the inspector docks and the body narrows). Top padding still follows the
+// address axis so the heading sits close under the bar.
 function usePageSx() {
   const axis = useAddressAxis();
   return React.useMemo(() => ({
-    pl: `${axis.pagePl}px`,
-    pr: 3,
+    width: '100%',
+    maxWidth: 1080,
+    mx: 'auto',
+    alignSelf: 'center',
+    boxSizing: 'border-box',
+    px: 'clamp(16px, 4vw, 32px)',
     pt: `${axis.pagePt()}px`,
     pb: { xs: 5, sm: 8 },
-    maxWidth: 820,
-    mx: 0,
-    boxSizing: 'border-box',
-    width: '100%',
   }), [axis]);
 }
 
