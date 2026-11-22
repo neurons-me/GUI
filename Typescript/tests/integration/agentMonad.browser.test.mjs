@@ -17,6 +17,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
+// The cleaker's trusted resources (src/agent/cleakerTrust.ts), served by the demo at /cleaker-trust.json from this
+// file. The creation link only gives the transport; the audience comes from here.
+const TRUST_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cleaker-trust-')), 'cleaker-trust.json');
+const writeTrust = (entries) => fs.writeFileSync(TRUST_FILE, JSON.stringify(entries));
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 const NS = 'test.local';
@@ -32,7 +37,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function startDemo(name) {
   const port = await freePort();
   const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
-    cwd: root, env: { ...process.env, DEMO: 'true', BROWSER: 'none' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: root, env: { ...process.env, DEMO: 'true', BROWSER: 'none', CLEAKER_TRUST_FILE: TRUST_FILE }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const stop = () => { try { child.kill('SIGTERM'); } catch { /* gone */ } };
   process.on('exit', stop);
@@ -90,6 +95,7 @@ const check = (name, ok, detail = '') => {
 async function main() {
   const [agent, host, attacker] = await Promise.all([startDemo('agent'), startDemo('host'), startDemo('attacker')]);
   let monad = await startMonad(agent.origin);
+  writeTrust([{ audience: monad.origin, transports: [monad.origin] }]);
   const agentUrl = `${agent.origin}/agent.html`;
   const browser = await chromium.launch();
   const outside = [];

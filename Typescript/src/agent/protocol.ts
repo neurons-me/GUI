@@ -31,8 +31,51 @@ export type ReadOperation = {
   ttlMs: number;
 };
 
+/**
+ * A WRITE: one operation the agent explicitly ADMITS (admittedOperations.ts), sent to one authority (the audience).
+ * The envelope is common to every app; what `body` means is fixed by `kind`'s schema in the AGENT, never by the app.
+ * The agent recomputes `bodyHash` from `body` (canonicalBody) and refuses a mismatch. First admitted kind:
+ * `netget.gateway.bootstrap`.
+ */
+export type CallOperation = {
+  action: 'call';
+  /** An id from the agent's admitted-operations table. Anything not in that table is refused. */
+  kind: string;
+  /** The root namespace whose identities may approve, e.g. `cleaker.me`. */
+  namespace: string;
+  /** The authority that verifies AND authorizes (scheme://host[:port]) -- the only server this approval is good for. */
+  audience: string;
+  method: 'POST';
+  /** Must equal the path the admitted operation derives from `body`. */
+  path: string;
+  /** The operation's parameters, exactly. Plain JSON only. */
+  body: Record<string, unknown>;
+  /** sha256 (hex) of canonicalBody(body). */
+  bodyHash: string;
+  ttlMs: number;
+  /** Optional text the app may send about itself. UNTRUSTED: never shown as the operation, never signed. */
+  appLabel?: string;
+};
+
+/**
+ * A LOCAL read the agent answers itself: the names of your keys under `<your namespace>.keys`. Nothing is signed and
+ * nothing goes to a server: the keys live in the agent's own origin. The app receives paths and whether each is set
+ * -- never a value (keysList.ts). `namespace` is the root whose identities may approve (as in the other operations).
+ */
+export type KeysListOperation = {
+  action: 'keys.list';
+  namespace: string;
+};
+
+export type AgentOperation = ReadOperation | CallOperation | KeysListOperation;
+
+/** One entry of a key listing: a public path under `keys` and its status. Never a value, never a field's content. */
+export type KeyListingEntry = { path: string; status: 'set' };
+/** What an approved `keys.list` gives the app. */
+export type KeyListing = { resource: string; entries: KeyListingEntry[] };
+
 export type AgentReady = { protocol: typeof AGENT_PROTOCOL; type: 'agent.ready' };
-export type AgentRequest = { protocol: typeof AGENT_PROTOCOL; type: 'agent.request'; id: string; operation: ReadOperation };
+export type AgentRequest = { protocol: typeof AGENT_PROTOCOL; type: 'agent.request'; id: string; operation: AgentOperation };
 export type AgentResult =
   | {
       protocol: typeof AGENT_PROTOCOL;
@@ -44,6 +87,15 @@ export type AgentResult =
       /** Public: who approved. Never a key, a seed or a session. */
       identity: { namespace: string; identityHash: string; keyId: string };
     }
+  | {
+      protocol: typeof AGENT_PROTOCOL;
+      type: 'agent.result';
+      id: string;
+      ok: true;
+      /** keys.list only: names/paths/status, built by the agent from its own vault. No proof: nothing was signed. */
+      keys: KeyListing;
+      identity: { namespace: string; identityHash: string; keyId: string };
+    }
   | { protocol: typeof AGENT_PROTOCOL; type: 'agent.result'; id: string; ok: false; reason: 'rejected' | 'invalid' | 'error' };
 
 export const TTL_MIN_MS = 5_000;
@@ -51,6 +103,9 @@ export const TTL_MAX_MS = 10 * 60_000;
 const MAX_QUERY_CHARS = 2_048;
 const ID_RE = /^[0-9a-f]{32}$/;
 const NAMESPACE_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
+/** A namespace as requests name it (lowercase dotted labels). */
+export const isNamespace = (value: unknown): value is string => typeof value === 'string' && NAMESPACE_RE.test(value);
 const PATH_RE = /^\/[A-Za-z0-9._~\-/]*$/;
 
 /** Sorted top-level keys -- the same encoding as signedRequest.ts's canonicalJson (tests/agentProtocol.test.ts). */
@@ -82,10 +137,21 @@ export function isOrigin(value: unknown): value is string {
   }
 }
 
-/** null when the operation is acceptable; otherwise what is wrong. Strict: unknown fields are refused too. */
+/**
+ * null when the operation is acceptable IN SHAPE; otherwise what is wrong. Strict: unknown fields are refused too.
+ * A `call` additionally has to pass the agent's admitted-operations check (admittedOperations.ts validateCall) before
+ * anything is shown or signed: its kind, its body schema, its path and its bodyHash.
+ */
 export function validateOperation(op: unknown): string | null {
   if (!op || typeof op !== 'object' || Array.isArray(op)) return 'not an object';
   const o = op as Record<string, unknown>;
+  if (o.action === 'call') return validateCallShape(o);
+  if (o.action === 'keys.list') {
+    const extraKeys = Object.keys(o).filter((k) => k !== 'action' && k !== 'namespace');
+    if (extraKeys.length) return `unknown fields: ${extraKeys.join(', ')}`;
+    if (typeof o.namespace !== 'string' || !NAMESPACE_RE.test(o.namespace)) return 'namespace is not a valid name';
+    return null;
+  }
   const allowed = new Set(['action', 'namespace', 'audience', 'method', 'path', 'query', 'ttlMs']);
   const extra = Object.keys(o).filter((k) => !allowed.has(k));
   if (extra.length) return `unknown fields: ${extra.join(', ')}`;
@@ -103,6 +169,55 @@ export function validateOperation(op: unknown): string | null {
   }
   if (typeof o.ttlMs !== 'number' || !Number.isInteger(o.ttlMs) || o.ttlMs < TTL_MIN_MS || o.ttlMs > TTL_MAX_MS) return 'ttlMs out of range';
   return null;
+}
+
+const KIND_RE = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const HASH_RE = /^[0-9a-f]{64}$/;
+const MAX_LABEL_CHARS = 200;
+const MAX_BODY_CHARS = 8_192;
+
+function validateCallShape(o: Record<string, unknown>): string | null {
+  const allowed = new Set(['action', 'kind', 'namespace', 'audience', 'method', 'path', 'body', 'bodyHash', 'ttlMs', 'appLabel']);
+  const extra = Object.keys(o).filter((k) => !allowed.has(k));
+  if (extra.length) return `unknown fields: ${extra.join(', ')}`;
+  if (typeof o.kind !== 'string' || o.kind.length > 64 || !KIND_RE.test(o.kind)) return 'kind is not acceptable';
+  if (o.method !== 'POST') return 'method must be POST';
+  if (typeof o.namespace !== 'string' || !NAMESPACE_RE.test(o.namespace)) return 'namespace is not a valid name';
+  if (!isOrigin(o.audience)) return 'audience must be an origin (scheme://host[:port])';
+  if (typeof o.path !== 'string' || !PATH_RE.test(o.path) || o.path.split('/').some((s) => s === '..' || s === '.')) return 'path is not acceptable';
+  if (!o.body || typeof o.body !== 'object' || Array.isArray(o.body)) return 'body must be an object';
+  let canonical: string;
+  try { canonical = canonicalBody(o.body); } catch { return 'body is not plain JSON'; }
+  if (canonical.length > MAX_BODY_CHARS) return 'body too large';
+  if (typeof o.bodyHash !== 'string' || !HASH_RE.test(o.bodyHash)) return 'bodyHash must be sha256 hex';
+  if (typeof o.ttlMs !== 'number' || !Number.isInteger(o.ttlMs) || o.ttlMs < TTL_MIN_MS || o.ttlMs > TTL_MAX_MS) return 'ttlMs out of range';
+  if (o.appLabel !== undefined && (typeof o.appLabel !== 'string' || o.appLabel.length > MAX_LABEL_CHARS)) return 'appLabel is not acceptable';
+  return null;
+}
+
+/**
+ * The canonical encoding of a call's body (what bodyHash is computed over): JSON with object keys sorted at EVERY
+ * level (the same rule as this.me's normalizeProofMessage). Only plain JSON values; anything else throws.
+ */
+export function canonicalBody(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('NOT_PLAIN_JSON');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map((v) => canonicalBody(v)).join(',')}]`;
+  const proto = typeof value === 'object' ? Object.getPrototypeOf(value) : undefined;
+  if (typeof value === 'object' && (proto === Object.prototype || proto === null)) {
+    const rec = value as Record<string, unknown>;
+    return `{${Object.keys(rec).sort().map((k) => `${JSON.stringify(k)}:${canonicalBody(rec[k])}`).join(',')}}`;
+  }
+  throw new Error('NOT_PLAIN_JSON');
+}
+
+/** sha256 of a UTF-8 string, lowercase hex (WebCrypto: the same in the agent, the host and node). */
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** A message from the host, validated; null if it is not exactly an agent request. */
@@ -134,9 +249,19 @@ export type V2RegisterFields = {
   agentKey: string;
   nonce: string; issuedAt: number; expiresAt: number; origin: string; audience: string;
 };
-export type V2Fields = V2ReadFields | V2RegisterFields;
+/**
+ * A v2 proof for an admitted WRITE (`call`). `namespace` is the approving identity's own namespace (chosen in the
+ * agent, never by the app); `kind` names the admitted operation; `bodyHash` binds the exact body.
+ */
+export type V2CallFields = {
+  v: typeof PROOF_V2; op: 'call'; kind: string; identityHash: string; keyId: string; namespace: string;
+  method: 'POST'; path: string; bodyHash: string;
+  nonce: string; issuedAt: number; expiresAt: number; origin: string; audience: string;
+};
+export type V2Fields = V2ReadFields | V2RegisterFields | V2CallFields;
 
 const V2_KEYS: Record<V2Fields['op'], string[]> = {
+  call: ['v', 'op', 'kind', 'identityHash', 'keyId', 'namespace', 'method', 'path', 'bodyHash', 'nonce', 'issuedAt', 'expiresAt', 'origin', 'audience'],
   read: ['v', 'op', 'identityHash', 'keyId', 'method', 'path', 'query', 'bodyHash', 'nonce', 'issuedAt', 'expiresAt', 'origin', 'audience'],
   register: ['v', 'op', 'identityHash', 'namespace', 'keyId', 'agentKey', 'nonce', 'issuedAt', 'expiresAt', 'origin', 'audience'],
 };
@@ -168,6 +293,20 @@ export function buildReadFields(input: { operation: ReadOperation; requestingOri
   return {
     v: PROOF_V2, op: 'read', identityHash: input.identityHash, keyId: input.keyId,
     method: op.method, path: op.path, query: op.query, bodyHash: EMPTY_BODY_SHA256,
+    nonce: input.nonce, issuedAt: input.issuedAt, expiresAt: input.issuedAt + op.ttlMs,
+    origin: input.requestingOrigin, audience: op.audience,
+  };
+}
+
+/** What the call proof signs. Built ONLY from a validated, frozen request (approval.ts), never from a raw message. */
+export function buildCallFields(input: {
+  operation: Pick<CallOperation, 'kind' | 'method' | 'path' | 'bodyHash' | 'audience' | 'ttlMs'>;
+  requestingOrigin: string; identityHash: string; keyId: string; identityNamespace: string; nonce: string; issuedAt: number;
+}): V2CallFields {
+  const { operation: op } = input;
+  return {
+    v: PROOF_V2, op: 'call', kind: op.kind, identityHash: input.identityHash, keyId: input.keyId, namespace: input.identityNamespace,
+    method: op.method, path: op.path, bodyHash: op.bodyHash,
     nonce: input.nonce, issuedAt: input.issuedAt, expiresAt: input.issuedAt + op.ttlMs,
     origin: input.requestingOrigin, audience: op.audience,
   };

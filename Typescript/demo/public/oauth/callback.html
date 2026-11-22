@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <title>.me — approve a request</title>
+  </head>
+  <body>
+    <script>
+      (function () {
+        var q = location.search || '';
+        var join = q ? (q.indexOf('oauth=') >= 0 ? q : q + '&oauth=facebook') : '?oauth=facebook';
+        var hash = location.hash === '#_=_' ? '' : (location.hash || '');   // Facebook's meaningless #_=_
+        location.replace('/' + join + hash);   // the window is this origin's root (/agent.html is an alias)
+      })();
+    </script>
+  </body>
+</html>

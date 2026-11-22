@@ -7,11 +7,18 @@
 // Each check names the Agent-Protocol.md negative test (N) it covers. N rows outside this cut are printed as PENDING
 // at the end and are not counted as covered.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { startAgentResource, legacyIdentity } from './agentResource.mjs';
+
+// The cleaker's trusted resources (src/agent/cleakerTrust.ts), served by the demo at /cleaker-trust.json from this
+// file. The creation link only gives the transport; the audience comes from here.
+const TRUST_FILE = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cleaker-trust-')), 'cleaker-trust.json');
+const writeTrust = (entries) => fs.writeFileSync(TRUST_FILE, JSON.stringify(entries));
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -26,7 +33,7 @@ const freePort = () => new Promise((resolve, reject) => {
 async function startDemo(name) {
   const port = await freePort();
   const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
-    cwd: root, env: { ...process.env, DEMO: 'true', BROWSER: 'none' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: root, env: { ...process.env, DEMO: 'true', BROWSER: 'none', CLEAKER_TRUST_FILE: TRUST_FILE }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const stop = () => { try { child.kill('SIGTERM'); } catch { /* gone */ } };
   process.on('exit', stop);
@@ -51,6 +58,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function main() {
   const [agent, host, attacker] = await Promise.all([startDemo('agent'), startDemo('host'), startDemo('attacker')]);
   const resource = await startAgentResource({ agentOrigin: agent.origin, policy: 'v2' });
+  writeTrust([{ audience: resource.origin, transports: [resource.origin] }]);
   const agentUrl = `${agent.origin}/agent.html`;
   const hostUrl = (extra = '') => `${host.origin}/agentHost.html?agent=${encodeURIComponent(agentUrl)}&resource=${encodeURIComponent(resource.origin)}&ns=${NS}${extra}`;
   const domainsUrl = `${resource.origin}/domains`;
@@ -327,6 +335,139 @@ async function main() {
     const scriptSrcs = [...agentHtml.matchAll(/<script[^>]*\bsrc=["']([^"']+)["']/gi)].map((m) => m[1]);
     const foreign = scriptSrcs.filter((src) => /^(https?:)?\/\//i.test(src) && !src.startsWith(agent.origin));
     check(null, '15.1 the agent page loads no third-party script (no analytics, pixel or CDN)', foreign.length === 0 && !/fbq|googletagmanager|connect\.facebook/i.test(agentHtml), foreign.join(', '));
+
+    // 16. The creation link is TRANSPORT only; the audience is the cleaker's configured one (cleakerTrust.ts).
+    {
+      const registerUrl = `${resource.origin}/api/v1/agent/register`;
+      const openCreate = async (query) => {
+        const page = await context.newPage();
+        const posts = [];
+        page.on('request', (r) => { if (r.method() === 'POST') posts.push({ url: r.url(), body: r.postData() || '' }); });
+        await page.goto(`${agentUrl}?${query}`);
+        await page.waitForSelector('[data-agent="create"], [data-agent="create-invalid"], [data-agent="pending"]', { timeout: 15000 });
+        return { page, posts };
+      };
+      const tr = encodeURIComponent(resource.origin);
+      let o = await openCreate(`create=${tr}&ns=${NS}&audience=${encodeURIComponent(attacker.origin)}`);
+      check(null, '16.1 a link that tries to set the audience (audience=) is refused before anything is created or sent',
+        (await o.page.locator('[data-agent="create-invalid"]').count()) === 1 && (await o.page.locator('[data-agent="create"]').count()) === 0 && o.posts.length === 0,
+        await o.page.locator('[data-agent="create-invalid"]').textContent().catch(() => ''));
+      await o.page.close();
+      o = await openCreate(`create=${encodeURIComponent(attacker.origin)}&ns=${NS}`);
+      check(null, '16.2 a transport this cleaker does not trust (the attacker\'s origin) is refused', (await o.page.locator('[data-agent="create-invalid"]').count()) === 1 && o.posts.length === 0);
+      await o.page.close();
+      o = await openCreate(`create=${tr}&ns=${NS}`);
+      check(null, '16.3 a trusted transport: the screen names the configured audience', (await text(o.page, '[data-agent="create-audience"]')).includes(resource.origin));
+      await o.page.close();
+      // The SAME link, with the configuration mapping that transport to another audience: the registration is for the
+      // configured audience (so this verifier, whose own origin is its audience, refuses it).
+      writeTrust([{ audience: 'https://elsewhere.example', transports: [resource.origin] }]);
+      o = await openCreate(`create=${tr}&ns=${NS}`);
+      const before = resource.identities.size;
+      await o.page.click('[data-agent="create"]');
+      await o.page.waitForSelector('[data-agent="pending"], [data-agent="created"]', { timeout: 20000 }).catch(() => {});
+      const reg = o.posts.find((x) => x.url === registerUrl);
+      check(null, '16.4 the same link with another configured audience: the registration is sent to the transport but is FOR the configured audience, not the URL',
+        !!reg && reg.body.includes('https://elsewhere.example') && !reg.body.includes(resource.origin) && resource.identities.size === before,
+        reg ? reg.body.slice(0, 0) + `posted to ${reg.url}` : 'no registration sent');
+      await o.page.close();
+      fs.writeFileSync(TRUST_FILE, '{ not json');
+      o = await openCreate(`create=${tr}&ns=${NS}`);
+      check(null, '16.5 a broken configuration trusts nothing (fail closed)', (await o.page.locator('[data-agent="create-invalid"]').count()) === 1 && o.posts.length === 0);
+      await o.page.close();
+      writeTrust([{ audience: resource.origin, transports: [resource.origin] }]);
+    }
+
+    // 17. keys.list: the app gets the NAMES of your keys after you approve; never a value.
+    const SECRET = 'sk_live_CLEAKER_TEST_9f1a2b';
+    const FIELD_VALUE = 'cleaker-field-value-7c1d';
+    const PASS = 'a-long-test-passphrase-1';
+    let anaNs = '';
+    {
+      const seedPage = await context.newPage();
+      await seedPage.goto(agentUrl);
+      const vaultPath = `/@fs${path.join(root, 'src/gui/All.This/Cleaker/Keys/serviceKeyVault.ts')}`;
+      anaNs = await seedPage.evaluate(async ({ vaultPath, ana, SECRET, FIELD_VALUE, PASS }) => {
+        const db = await new Promise((res, rej) => { const o = indexedDB.open('me-agent', 1); o.onsuccess = () => res(o.result); o.onerror = () => rej(o.error); });
+        const one = await new Promise((res, rej) => { const q = db.transaction('identities').objectStore('identities').get(ana); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+        const ns = one.claimedNamespace ?? one.namespace;
+        const v = await import(vaultPath);
+        await v.saveServiceKeys(ns, 'instagram', { appId: FIELD_VALUE, appSecret: SECRET }, PASS);
+        await v.saveCustomKeys(ns, 'stripe.test', { secretKey: SECRET }, PASS);
+        await v.saveCustomKeys(ns, 'netget', { token: SECRET }, PASS);
+        v.lockServiceKeys();
+        return ns;
+      }, { vaultPath, ana, SECRET, FIELD_VALUE, PASS });
+      await seedPage.close();
+      const keysUrl = (extra = '') => `${host.origin}/agentHost.html?mode=keys&agent=${encodeURIComponent(agentUrl)}&ns=${NS}${extra}`;
+      const before = hostReceived.length;
+      const page = await context.newPage();
+      await page.goto(keysUrl());
+      const popup = await ask(page);
+      check(null, '17.1 the cleaker shows the request in its own words', (await text(popup, '[data-agent="field-operation"]')) === 'See the names of your keys'
+        && (await text(popup, '[data-agent="description"]')).includes('will not see any value')
+        && (await popup.locator('[data-agent="effect-valuesShared"]').getAttribute('data-value')) === 'false'
+        && (await popup.locator('[data-agent="effect-leavesDevice"]').getAttribute('data-value')) === 'false');
+      check(null, '17.2 ... at its own origin, naming who asks', new URL(popup.url()).origin === agent.origin && (await text(popup, '[data-agent="origin"]')) === host.origin);
+      await approveAs(popup, ana);
+      const okList = await hostStatus(page, /^ok$/);
+      const listing = okList ? JSON.parse(await text(page, '[data-host="result"]')) : null;
+      check(null, '17.3 approved: the app gets <ns>.keys and the paths that are set', okList && listing.resource === `${anaNs}.keys`
+        && JSON.stringify(listing.entries) === JSON.stringify([{ path: 'keys.meta.instagram', status: 'set' }, { path: 'keys.stripe.test', status: 'set' }]),
+        JSON.stringify(listing));
+      const crossed = JSON.stringify(hostReceived.slice(before));
+      check(null, '17.4 no value and no field name crossed postMessage; keys.netget is not listed', crossed.length > 0 && !crossed.includes(SECRET) && !crossed.includes(FIELD_VALUE)
+        && !/appSecret|appId|secretKey|token|netget|seed|privateKey/.test(crossed));
+      const answer = hostReceived.slice(before).find((m) => m?.type === 'agent.result' && m.ok);
+      check(null, '17.5 the answer holds exactly {keys, identity}, no proof', !!answer && Object.keys(answer).sort().join() === 'id,identity,keys,ok,protocol,type');
+      await page.close();
+
+      // The app swaps the request after it is shown: the approval does not carry over.
+      const page2 = await context.newPage();
+      await page2.goto(keysUrl('&alter=other.local&alterMs=1200'));
+      const popup2 = await ask(page2);
+      await popup2.waitForSelector('[data-agent="changed"]', { timeout: 10000 }).catch(() => {});
+      const changed = (await popup2.locator('[data-agent="changed"]').count()) === 1;
+      const noIdentity = await popup2.waitForFunction(() => /No \.me for other\.local/.test(document.querySelector('[data-agent="status"]')?.textContent || ''), null, { timeout: 5000 }).then(() => true, () => false);
+      check(null, '17.6 a request replaced by the app is shown as changed and needs a new approval (here: no identity for the new namespace)',
+        changed && noIdentity && (await popup2.locator('[data-agent="approve"]').isDisabled()));
+      await popup2.click('[data-agent="reject"]');
+      check(null, '17.7 ... and nothing was answered for the first one', await hostStatus(page2, /refused: rejected/));
+      await page2.close();
+    }
+
+    // 18. "Your keys" inside the cleaker window: the tree, values as dots, keys.netget hidden, typing writes nothing.
+    {
+      const page = await context.newPage();
+      const posts = [];
+      page.on('request', (r) => { const b = r.postData(); if (b) posts.push(b); });
+      await page.goto(agentUrl);
+      await page.waitForSelector('[data-agent="keys-identity"] option', { state: 'attached', timeout: 15000 });
+      await page.selectOption('[data-agent="keys-identity"]', ana);
+      await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys"]', { timeout: 20000 });
+      await page.click('[data-gui-node-id="cleaker.keys.keys"]');
+      await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys.meta"]', { timeout: 10000 }).catch(() => {});
+      const ids = await page.evaluate(() => [...document.querySelectorAll('[data-gui-node-id]')].map((n) => n.getAttribute('data-gui-node-id')));
+      check(null, '18.1 the cleaker shows the keys tree for the chosen identity (labels from the tree)', ids.includes('cleaker.keys.keys.meta') && ids.includes('cleaker.keys.keys.stripe'), ids.filter((i) => i.startsWith('cleaker.keys.keys')).join(' '));
+      check(null, '18.2 keys.netget is not shown', !ids.some((i) => /\.netget\b/.test(i)));
+      await page.click('[data-gui-node-id="cleaker.keys.keys.meta"]');
+      await page.waitForSelector('[data-gui-node-id="cleaker.keys.keys.meta.instagram"]', { timeout: 10000 });
+      await page.click('[data-gui-node-id="cleaker.keys.keys.meta.instagram"]');
+      await page.waitForSelector('input', { timeout: 10000 });
+      const html = await page.content();
+      check(null, '18.3 the open key shows dots, never the value (locked)', !html.includes(SECRET) && !html.includes(FIELD_VALUE) && /••••/.test(await page.evaluate(() => document.body.innerText + [...document.querySelectorAll('input')].map((i) => i.value + i.placeholder).join(' '))));
+      const snap = () => page.evaluate(() => JSON.stringify(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
+      const s0 = await snap();
+      const field = page.locator('input:not([type=hidden])').first();
+      await field.click();
+      await field.pressSequentially('typed-not-saved-123', { delay: 10 });
+      await wait(400);
+      const s1 = await snap();
+      const typed = (await field.inputValue().catch(() => '')).includes('typed-not-saved-123');
+      check(null, '18.4 typing into a field (the text is in the field) does not change localStorage', typed && s0 === s1, `typed=${typed}`);
+      check(null, '18.5 no seed or secret went on the network from the cleaker window', posts.every((b) => !b.includes(SECRET) && !b.includes('typed-not-saved-123') && !/seed/i.test(b)), `${posts.length} POSTs`);
+      await page.close();
+    }
     check(null, 'nothing was requested outside the test origins', outside.length === 0, outside.slice(0, 3).join(', '));
   } finally {
     await browser.close();

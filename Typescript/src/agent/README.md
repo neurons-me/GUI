@@ -13,6 +13,10 @@ wired into the shell. No real credentials, no real gateway.
 | Agent page: create an identity; approve a request | `demo/agent.html`, `demo/agent.main.ts` | agent origin |
 | Host demo page | `demo/agentHost.html`, `demo/agentHost.main.ts` | host origin |
 | Test verifier: registration, the protected read, its own security state | `tests/integration/agentResource.mjs` | test server |
+| Admitted writes: the agent's table (schema, path, its own words and effect rules); first: `netget.gateway.bootstrap` | `admittedOperations.ts` | agent |
+| One validated, frozen request; approval bound to its digest; signing refuses if it changed | `approval.ts` | agent |
+| Temporary `.me` kernel (public test seed, no persistence): effects + `me.explain()` trace, traceability only | `approvalKernel.ts` | agent |
+| MOCK authority for the bootstrap (netget's challenge + a v2 bootstrap verifier); not netget, not the monad | `tests/integration/agentBootstrapMock.mjs` | test server |
 
 ## How a new identity is bound to its agent key
 
@@ -33,6 +37,16 @@ This fits the agreed design as the first cut: a new identity, generated in the a
 without accepting v1 from the start. The seed of the GUI identity is not kept, so this identity has **no recovery**
 (out of the cut, by design) and is not Sync/Scan/Recover material.
 
+## Admitted write: netget gateway bootstrap (`tests/integration/agentBootstrap.browser.test.mjs`)
+
+The identity is registered on a disposable REAL monad; the bootstrap goes to the MOCK authority (the monad and netget do
+not accept a v2 bootstrap yet). The run shows: the agent names the operation from its own table even when the app labels
+it "Sign in"; effects come from the agent's rules with their `me.explain()` trace; nothing is signed without a click; a
+request swapped after display is shown as changed and the old approval signs nothing; an unknown kind or a wrong bodyHash
+is refused before display; replay and an explanation offered as authorization are refused; the app gets only
+`{bytes, signature}` + public identity; no `this.me.seed:v1`, no storage beyond the agent key store. See
+[Agent-Protocol.md](../../Agent-Protocol.md) section 3a.
+
 ## What the run proves (`tests/integration/agent.browser.test.mjs`)
 
 The full path (create → register with `agent-only` → visible approval → v2 proof → allowed read) and the rejections:
@@ -47,3 +61,13 @@ negative tests are covered, covered in part, or pending.
 unlock secret over the stored key yet; framing is refused by script only (CSP headers pending); the verifier is a
 single-process test server, not `me_sig.lua` or the monad; the in-page signing paths are not retired; nothing here
 isolates the production login or migrates existing identities.
+
+
+## Additions (prototype)
+
+| Piece | File | Runs in |
+|---|---|---|
+| Trusted resources: the creation link (`?create=<transport>&ns=`) is TRANSPORT only; the AUDIENCE comes from the agent origin's own `/cleaker-trust.json` (missing → built-in `https://cleaker.me`; invalid → nothing trusted). Any other link parameter (e.g. `audience=`) is refused | `cleakerTrust.ts` | **agent only** |
+| `keys.list`: an app gets the names/paths/status of `<ns>.keys` after an approval — never a value; digest-bound, a replaced request invalidates it; `keys.netget*` never listed | `keysList.ts`, `requestOperation.ts` (`requestKeysList`, strict `parseKeysGrant`) | agent / host |
+| The keys tree (IdentityTree, `hide` = `keys.netget*`) inside the agent window, values as dots | `demo/cleakerKeys.tsx` | **agent only** |
+| Storybook: `Getting Started/Namespace` → "2 · Namespace + site with .GUI" → left bar **Keys** | `src/gui/All.This/Cleaker/Keys/KeysListDemo.tsx` | Storybook only |

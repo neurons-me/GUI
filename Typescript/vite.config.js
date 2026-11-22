@@ -50,6 +50,28 @@ export default defineConfig({
         server.middlewares.use((req, res, next) => {
           const url = req.url || '';
           const pathOnly = url.split('?')[0];
+          // Facebook OAuth return: serve the approval window, not the claim-flow SPA fallback.
+          // Takes effect the next time this demo server starts (do not kill a running helper).
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathOnly === '/oauth/callback') {
+            const queryIndex = url.indexOf('?');
+            const rest = queryIndex === -1 ? '' : url.slice(queryIndex);
+            const q = rest ? (rest.includes('oauth=') ? rest : `${rest}&oauth=facebook`) : '?oauth=facebook';
+            req.url = `/agent.html${q}`;
+            return next();
+          }
+          // The cleaker's trusted resources (src/agent/cleakerTrust.ts), as a deployment serves them from its own
+          // origin. Demo-only: read from CLEAKER_TRUST_FILE on every request (tests write it once their verifier is
+          // up); without it a plain 404, so the cleaker uses its built-in configuration -- never the SPA fallback.
+          if (pathOnly === '/cleaker-trust.json') {
+            const file = process.env.CLEAKER_TRUST_FILE;
+            let body = null;
+            try { if (file) body = fs.readFileSync(file, 'utf8'); } catch { body = null; }
+            res.statusCode = body === null ? 404 : 200;
+            res.setHeader('content-type', 'application/json');
+            res.setHeader('cache-control', 'no-store');
+            res.end(body === null ? '{"error":"NOT_CONFIGURED"}' : body);
+            return;
+          }
           // claimFlowEmbedded's own routing handles GET AND POST -- setup-
           // code verify/challenge/claim, plus the monad's own register/
           // sign-in calls further below -- so this whole branch has to run
@@ -193,6 +215,14 @@ export default defineConfig({
           // readReportedApps()/upsertReportedApp()). A real monad's own
           // POST /apps/report heartbeat is what populates it now, not a
           // file seeded here on first request.
+          // The approval / keys window IS this origin's root: "/" serves agent.html (as cleaker.me/ will in
+          // production). /agent.html still works as an alias; the older keychain-only demo stays at /index.html.
+          // Plain demo only (no DEMO_ROLE): the role demos above keep their own "/".
+          if ((req.method === 'GET' || req.method === 'HEAD') && pathOnly === '/' && !process.env.DEMO_ROLE) {
+            const queryIndex = url.indexOf('?');
+            req.url = queryIndex === -1 ? '/agent.html' : `/agent.html${url.slice(queryIndex)}`;
+            return next();
+          }
           if (url === '/' || url.startsWith('/index.html') || url.startsWith('/claimFlow.html')) return next();
           if (url.startsWith('/@') || url.startsWith('/src/') || url.startsWith('/node_modules/')) return next();
           if (/\.[a-zA-Z0-9]+(\?|$)/.test(url)) return next(); // has a file extension -> a real asset request

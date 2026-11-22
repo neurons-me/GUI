@@ -30,7 +30,7 @@ export type AgentIdentity = {
   privateKey: CryptoKey;
   createdAt: number;
   /** `pending` until the resource confirmed the registration; only `registered` identities can approve anything. */
-  status?: 'pending' | 'registered';
+  status?: 'pending' | 'registered' | 'local-test';
   /** The resource (origin) the identity registers with. */
   resource?: string;
   /** The `@` handle the identity proves under. */
@@ -67,8 +67,60 @@ export async function listIdentities(namespace?: string): Promise<AgentIdentity[
     req.onerror = () => reject(req.error);
   });
   db.close();
-  // Only confirmed identities: a pending one cannot approve anything (and its seed is not handed to any caller).
-  return all.filter((i) => i.status !== 'pending' && (!namespace || i.namespace === namespace));
+  // Only confirmed identities can approve anything. A pending one still holds a seed; a local-test
+  // identity was never registered with a resource and must not be offered to approve a request.
+  return all.filter((i) => (i.status === 'registered' || !i.status) && (!namespace || i.namespace === namespace));
+}
+
+function isHomeIdentity(i: AgentIdentity): boolean {
+  return i.status === 'registered' || i.status === 'local-test' || !i.status;
+}
+
+/** Identities the keys home can show: confirmed ones, plus a disposable local test .me. Never pending. */
+export async function listHomeIdentities(): Promise<AgentIdentity[]> {
+  const db = await openDb();
+  const all = await new Promise<AgentIdentity[]>((resolve, reject) => {
+    const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result as AgentIdentity[]);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return all.filter(isHomeIdentity);
+}
+
+/**
+ * A disposable test identity for this origin only: generated in the browser, never sent
+ * anywhere, never registered with a resource. The seed is used once to derive the
+ * identity hash and is not stored. Existing local-test identities are reused so this
+ * never overwrites or multiplies them.
+ */
+export async function newLocalTestIdentity(): Promise<AgentIdentity> {
+  const existing = (await listHomeIdentities()).find((i) => i.status === 'local-test');
+  if (existing) return existing;
+  const seedBytes = new Uint8Array(32);
+  crypto.getRandomValues(seedBytes);
+  let seed = Array.from(seedBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  seedBytes.fill(0);
+  const handle = 'test';
+  const root = 'local';
+  const pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])) as CryptoKeyPair;
+  const agentKey = String(((await crypto.subtle.exportKey('jwk', pair.publicKey)) as JsonWebKey).x || '');
+  const keyId = await keyIdOf(agentKey);
+  const { identityHash, claimedNamespace } = await proveWith(seed, handle, root, '{}');
+  seed = '';
+  const identity: AgentIdentity = {
+    identityHash,
+    namespace: root,
+    claimedNamespace,
+    keyId,
+    agentKey,
+    privateKey: pair.privateKey,
+    createdAt: Date.now(),
+    status: 'local-test',
+    handle,
+  };
+  await put(identity);
+  return identity;
 }
 
 /** The registration this agent has not finished with `resource` under `namespace`, if any (the most recent). */
