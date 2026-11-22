@@ -451,25 +451,47 @@ const LeftSidebar = ({
   };
 
   if (view === 'mobile') {
-    // One closed-drawer handle: the site's brand (opens the bar), or the identity QR (opens its
-    // card), or nothing when that mark is already in the top bar. The standard menu button is only
-    // a fallback when the app gave no mark at all.
-    const closedHandle = collapsedHandle !== undefined ? collapsedHandle : (customToggle ? customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) }) : brand);
+    // One closed-drawer handle. The default is the standard menu button; the brand and the
+    // identity QR keep their own actions. `collapsedHandle` is opt-in (a custom mark, or null
+    // for no handle). A mark that opens the bar is a real <button aria-label="Open navigation">.
+    const closedHandle = collapsedHandle !== undefined ? collapsedHandle : (customToggle ? customToggle({ view: 'mobile', toggle: () => setMobileOpen(true) }) : null);
     const handleKind = closedHandle == null
       ? (collapsedHandle === null ? 'none' : 'menu')
       : (collapsedHandleOpensBar ? 'brand' : 'identity');
     const handleTop = navInset > 0 ? toggleOffset : 8;
     const openDrawer = () => setMobileOpen(true);
     const handleBox = closedHandle != null ? (
+      collapsedHandleOpensBar ? (
+      <Box
+        component="button"
+        type="button"
+        data-gui-node-id={`${adminNodeId}.toggle.mobile`}
+        data-gui-component="toggle"
+        data-gui-mobile-handle={handleKind}
+        aria-label="Open navigation"
+        onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); openDrawer(); }}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 48,
+          height: 48,
+          padding: 0,
+          bgcolor: 'background.nav',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: navInset > 0 ? '0 0 12px 0' : 2,
+          overflow: 'hidden',
+          cursor: 'pointer',
+        }}
+      >
+        {closedHandle}
+      </Box>
+      ) : (
       <Box
         data-gui-node-id={`${adminNodeId}.toggle.mobile`}
         data-gui-component="toggle"
         data-gui-mobile-handle={handleKind}
-        role={collapsedHandleOpensBar ? 'button' : undefined}
-        tabIndex={collapsedHandleOpensBar ? 0 : undefined}
-        aria-label={collapsedHandleOpensBar ? 'Open navigation' : undefined}
-        onClick={collapsedHandleOpensBar ? (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); openDrawer(); } : undefined}
-        onKeyDown={collapsedHandleOpensBar ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDrawer(); } } : undefined}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -481,11 +503,12 @@ const LeftSidebar = ({
           borderColor: 'divider',
           borderRadius: navInset > 0 ? '0 0 12px 0' : 2,
           overflow: 'hidden',
-          cursor: collapsedHandleOpensBar ? 'pointer' : 'default',
+          cursor: 'default',
         }}
       >
         {closedHandle}
       </Box>
+      )
     ) : handleKind === 'menu' ? (
       <IconButton
         aria-label="Open navigation"

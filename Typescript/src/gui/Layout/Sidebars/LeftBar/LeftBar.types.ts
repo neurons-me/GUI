@@ -53,10 +53,11 @@ export type LeftBarProps = {
    */
   togglePlacement?: 'header' | 'footer';
   /**
-   * The single corner mark while the mobile drawer is closed. `undefined` uses `brand` when there is
-   * one, else the standard "Open navigation" button. `null` draws no handle (the mark already lives
-   * in the top bar). A node is drawn as the handle: with `collapsedHandleOpensBar` (default true)
-   * a press opens the drawer; when false the node keeps its own action (the identity QR opens its card).
+   * The single corner mark while the mobile drawer is closed. `undefined` (the default) keeps the
+   * standard `<button aria-label="Open navigation">` — the brand and the identity QR keep their
+   * own actions and are not this control. `null` draws no handle. A node is drawn as the handle:
+   * with `collapsedHandleOpensBar` (default true) it is that same standard button, with the node
+   * inside; when false the node keeps its own action (the identity QR opens its card).
    */
   collapsedHandle?: ReactNode | null;
   collapsedHandleOpensBar?: boolean;

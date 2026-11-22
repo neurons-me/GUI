@@ -480,33 +480,18 @@ export function FloatingMark({ corner, children }: { corner: _Corner; children: 
 }
 
 /**
- * The closed-drawer corner mark on a narrow screen: the site's brand (a press opens the bar),
- * or nothing when the identity QR already sits in the top bar (it keeps its own action).
- * When there is no brand and the QR is in the left bar, leave `collapsedHandle` unset so the
- * bar uses that mark, which opens the identity card.
+ * The closed-drawer handle on a narrow screen: leave `collapsedHandle` unset so LeftBar keeps
+ * the standard "Open navigation" button. The site's brand and the identity QR keep their own
+ * actions (navigate, open the identity card) and are not this control. Pass `collapsedHandle`
+ * explicitly only when an app wants a custom mark in that button, or `null` for no handle.
  */
 export function collapsedBarHandleProps(opts: {
   narrow: boolean;
   brand?: React.ReactNode;
   identitySlot: string;
 }): { collapsedHandle?: React.ReactNode | null; collapsedHandleOpensBar: boolean } {
-  if (!opts.narrow) return { collapsedHandleOpensBar: true };
-  if (opts.brand && React.isValidElement(opts.brand)) {
-    return {
-      collapsedHandle: React.cloneElement(opts.brand as React.ReactElement<Record<string, unknown>>, {
-        compact: true,
-        showLabel: false,
-        floating: true,
-        href: null,
-        to: null,
-      } as Partial<Record<string, unknown>>),
-      collapsedHandleOpensBar: true,
-    };
-  }
-  const inTop = opts.identitySlot === 'top.start' || opts.identitySlot === 'top.end';
-  const floating = typeof opts.identitySlot === 'string' && opts.identitySlot.startsWith('float:');
-  // The floating QR is already the visible handle; do not add a hamburger beside it.
-  return { collapsedHandle: (inTop || floating) ? null : undefined, collapsedHandleOpensBar: false };
+  void opts;
+  return { collapsedHandleOpensBar: true };
 }
 
 export type SiteBrandProps = {
