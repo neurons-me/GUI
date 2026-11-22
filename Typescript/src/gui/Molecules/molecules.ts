@@ -107,6 +107,8 @@ import SearchField from '@/gui/Molecules/SearchField/SearchField';
 export type { SearchFieldProps, SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.types';
 import Gauge, { type GaugeProps } from '@/gui/Molecules/Gauge/Gauge';
 export type { GaugeProps } from '@/gui/Molecules/Gauge/Gauge';
+import Grid2 from '@/gui/Molecules/Grid2/Grid2';
+export type { Grid2Props } from '@/gui/Molecules/Grid2/Grid2.types';
 type MoleculesRegistry = {
   Dialog: typeof Dialog;
   Hero: typeof Hero;
@@ -137,6 +139,7 @@ type MoleculesRegistry = {
   InspectorToggle: typeof InspectorToggle;
   SearchField: typeof SearchField;
   Gauge: typeof Gauge;
+  Grid2: typeof Grid2;
 };
 
 const Molecules: MoleculesRegistry = {
@@ -167,6 +170,7 @@ const Molecules: MoleculesRegistry = {
   InspectorToggle,
   SearchField,
   Gauge,
+  Grid2,
 };
 
 export {
@@ -197,6 +201,7 @@ export {
   InspectorToggle,
   SearchField,
   Gauge,
+  Grid2,
 };
 
 export type {

@@ -98,6 +98,7 @@ import ContentResolver from "@/gui/Layout/Content/Content.resolver";
 import CodeBlockResolver from "@/gui/Molecules/CodeBlock/CodeBlock.resolver";
 import CollapseResolver, { meta as CollapseMeta } from "@/gui/Molecules/Collapse/Collapse.resolver";
 import GridResolver, { meta as GridMeta } from "@/gui/Molecules/Grid/Grid.resolver";
+import Grid2Resolver, { meta as Grid2Meta } from "@/gui/Molecules/Grid2/Grid2.resolver";
 import ListResolver, { meta as ListMeta } from "@/gui/Molecules/List/List.resolver";
 import ListItemResolver, { meta as ListItemMeta } from "@/gui/Molecules/List/ListItem/ListItem.resolver";
 import ListItemButtonResolver, { meta as ListItemButtonMeta } from "@/gui/Molecules/List/ListItemButton/ListItemButton.resolver";
@@ -202,6 +203,7 @@ export const GuiRegistry = createRegistry([
   CodeBlockResolver,
   withMeta(CollapseResolver, CollapseMeta),
   withMeta(GridResolver, GridMeta),
+  withMeta(Grid2Resolver, Grid2Meta),
   withMeta(ListResolver, ListMeta),
   withMeta(ListItemResolver, ListItemMeta),
   withMeta(ListItemButtonResolver, ListItemButtonMeta),
