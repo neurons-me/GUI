@@ -4,7 +4,7 @@ import { flattenGuiDocument, renderGuiDocumentPage, GUI_DOCUMENT } from './guiDo
 import { ThemeSettingsContext, GuiPageContext } from './themeSettings';
 import Theme from '@/gui/Theme/Theme';
 import Layout from '@/gui/Layout/Layout';
-import ThemeLauncher, { ThemeSettingsSection } from '@/gui/Theme/Launcher/ThemeLauncher';
+import ThemeLauncher from '@/gui/Theme/Launcher/ThemeLauncher';
 import { SeedSessionProvider, useOptionalSeedSessionContext } from '@/react/session/SeedSessionProvider';
 import QRConnect from '@/gui/All.This/Cleaker/QRConnect';
 import { Me, useOptionalMeRuntimeContext } from '@/react/Me';
@@ -467,7 +467,6 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity:
       barModes={barModes}
       onChooseBarMode={chooseBarMode}
       layout={{ address: position, brand: brandLabel ? { label: brandLabel } : undefined }}
-      settingsExtra={themeIn === 'card' ? <ThemeSettingsSection /> : undefined}
       view={qrMenuView}
       onViewChange={setQrMenuView}
       onSignOut={qrSignIn && namespace ? undefined : signOut}

@@ -87,6 +87,17 @@ async function main() {
       }
       check('after unfolding, Show less is available', await less.count() >= 1);
     }
+
+    await page.getByRole('button', { name: 'QR settings' }).click();
+    const settings = await page.evaluate(() => {
+      const panel = document.querySelector('[data-cleaker-panel]');
+      if (!panel) return { ok: false, reason: 'no panel' };
+      const title = (panel.textContent || '').includes('QR.Position');
+      const rows = Boolean(panel.querySelector('[data-keys-row-mode-setting]'));
+      const themes = Boolean(panel.querySelector('[data-theme-settings]'));
+      return { ok: title && rows && themes, title, rows, themes };
+    });
+    check('settings show QR.Position, the row/column switch, and themes', Boolean(settings.ok), JSON.stringify(settings));
   } catch (e) {
     failed += 1;
     console.log(`FAIL  harness run  — ${e && e.stack ? e.stack : e}`);

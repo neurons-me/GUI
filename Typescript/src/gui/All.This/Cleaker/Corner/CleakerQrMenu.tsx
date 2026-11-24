@@ -21,6 +21,7 @@ import {
   type BarMode,
 } from '@/gui/Layout/Position/barMode';
 import { prefersReducedMotion } from '@/gui/Theme/motion';
+import { ThemeSettingsSection } from '@/gui/Theme/Launcher/ThemeLauncher';
 import { QrMenuMotionCtx } from './menuMotion';
 import {
   MENU_SIDE_GUTTER,
@@ -114,7 +115,7 @@ export type CleakerQrMenuProps = {
    * follow the tree.
    */
   width?: number;
-  /** More settings under the QR's position (e.g. the Theme section), shown in the same settings view. */
+  /** More settings under the QR's position, after the Theme section (which is always shown). */
   settingsExtra?: React.ReactNode;
   /**
    * The open view, when the owner keeps it (controlled). Moving the QR to another corner re-mounts the card in the new
@@ -962,7 +963,12 @@ export default function CleakerQrMenu({
         </Box>
         </Box>
       ) : null}
-      {view === 'position' && settingsExtra ? settingsExtra : null}
+      {view === 'position' ? (
+        <>
+          <ThemeSettingsSection />
+          {settingsExtra}
+        </>
+      ) : null}
       </Box>
     </Paper>
     </QrMenuMotionCtx.Provider>
