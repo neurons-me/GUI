@@ -134,7 +134,7 @@ function chunkRows<T>(items: readonly T[], cap: number): T[][] {
  * (never wraps alone). When everything fits, no "…". Extended so an
  * active item is never hidden.
  */
-function visibleBlock<T>(items: T[], blocks: number, cap: number, pageSize: number | undefined, isActive: (t: T) => boolean): T[] {
+export function visibleBlock<T>(items: T[], blocks: number, cap: number, pageSize: number | undefined, isActive: (t: T) => boolean): T[] {
   const room = pageSize ? blocks * pageSize : blocks * cap - 1; // slots after "+"
   const n = items.length <= room ? items.length : (pageSize ? room : room - 1);
   const i = items.findIndex(isActive);
@@ -312,7 +312,7 @@ function useFollowOpenedRow(
 
 /** Shared by every level of the keys tree. */
 type TreeCtx = {
-  namespace: string; cap: number; inMenu?: boolean; /** `rows` wraps in the card; `scroll` is one horizontal row. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; filtering?: boolean; saved: ServiceId[];
+  namespace: string; cap: number; inMenu?: boolean; /** `rows` wraps the current block; `scroll` allows horizontal overflow of that block. Paging (+ / …) is always on. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; filtering?: boolean; saved: ServiceId[];
   custom: CustomKeyGroup[]; sel: string[]; adding: string | null; access?: KeyAccessProp;
   nid: (path: string) => string; anchor: (path: string) => HTMLElement | undefined; setAnchor: (path: string) => (el: HTMLElement | null) => void;
   pick: (depth: number, child: KeyChild) => void; startAdd: (level: string) => void; closeCard: () => void;
@@ -515,7 +515,7 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
   const wrap = inMenu && rowMode === 'rows';
   const scroll = inMenu && rowMode === 'scroll';
   const ctx: TreeCtx = {
-    namespace, cap: scroll ? 1e6 : cap, inMenu, rowMode, fixed, leaves: visibleLeaves, saved, custom, sel, adding, access, filtering: Boolean(searchQuery),
+    namespace, cap, inMenu, rowMode, fixed, leaves: visibleLeaves, saved, custom, sel, adding, access, filtering: Boolean(searchQuery),
     nid, anchor: (p) => anchors.current.get(p), setAnchor, pick, startAdd, closeCard, onCreated, revealPath,
     readers: [me, publicMetaReader(readPublicMeta(namespace))].filter(Boolean) as MeReader[],
     pending,
@@ -733,9 +733,12 @@ function KeysLevel({ prefix }: { prefix: string }) {
   const collapseTimer = React.useRef(0);
   React.useEffect(() => () => window.clearTimeout(collapseTimer.current), []);
   const isActive = (ch: KeyChild) => ch === selected;
-  const visible = c.inMenu ? children : visibleBlock(children, shown, c.cap, c.fixed, isActive);
+  // Same paging in the identity card as in a free-standing tree: "+" first, a
+  // block of children, "…" / "Show less" last. Being inside the panel no longer
+  // dumps every child on one row.
+  const visible = visibleBlock(children, shown, c.cap, c.fixed, isActive);
   const firstBlock = visibleBlock(children, 1, c.cap, c.fixed, isActive).length;
-  const fullyShown = !c.inMenu && shown > 1 && visible.length === children.length;
+  const fullyShown = shown > 1 && visible.length === children.length;
   const showLess = () => {
     const leaving = visible.length - firstBlock;
     if (leaving <= 0 || prefersReducedMotion()) { setShown(1); return; }
