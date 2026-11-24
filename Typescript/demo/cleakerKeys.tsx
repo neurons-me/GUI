@@ -122,6 +122,7 @@ function KeysTree({
       fullPosition={`${namespace} @ ${window.location.host}`}
       layout={{ address: namespace }}
       nodeId="GUI.window.layout.marks.identity.menu"
+      onSignOut={() => {}}
       trigger={(
         <BarBrandCell
           component="button"
@@ -148,7 +149,6 @@ function KeysTree({
         }}
         onNavigate={() => {}}
         onLogout={() => {}}
-        hideSignOut
       />
       {message && (
         <Typography data-agent="facebook-connect-status" variant="body2" sx={{ mt: 1.5, px: 0.5, color: 'text.secondary' }}>

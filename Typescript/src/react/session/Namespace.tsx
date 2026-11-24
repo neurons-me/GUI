@@ -2177,6 +2177,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               barModes={barModes}
               onChooseBarMode={chooseBarMode}
               onClose={() => setQrMenuOpen(false)}
+              onSignOut={authenticated ? () => { ctx?.logout(); setQrMenuOpen(false); } : undefined}
               layout={{
                 left: layoutLeftIcons,
                 search: true,

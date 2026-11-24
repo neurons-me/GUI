@@ -111,16 +111,15 @@ function SiteNotes() {
 }
 const SITE_APP: AppDeclaration = { id: 'site', namespace: 'apps.site', title: 'Neurons', theme: 'neurons.me', views: { home: SiteHome, notes: SiteNotes } };
 const SITE_NAV = [{ route: 'home', label: 'Home', icon: 'home' }, { route: 'notes', label: 'Notes', icon: 'sticky_note_2' }];
-// Keys belongs in the identity QR.me card (not the content-area overlay). Once signed in, that card shows the
-// signed-in view and the same IdentityTree as Pieces/QR.me → Signed In Long Collection (wrapping rows, … / Show
-// less; demo values as dots; keys.netget hidden). The QR follows the open public path. The left-bar Keys item
-// opens the same card with the tree already unfolded. With `connect` off, the card still opens (the menu as
-// before) so the tree can be tried without the helper.
+// Keys belongs in the identity QR.me card (not the content-area overlay). Once signed in, that card is the
+// same QR.me panel as Pieces/QR.me → Signed In Long Collection: the QR, the IdentityTree paging with "+"
+// first and "…" / "Show less" last, and Sign out as the logout icon under the gear. Demo values are dots;
+// keys.netget is hidden. The QR follows the open public path. The left-bar Keys item opens the same card
+// with the tree already unfolded. With `connect` off, the card still opens so the tree can be tried
+// without the helper.
 const KEYS_ROUTE = { route: '/keychain', label: 'Keys', icon: 'key' };
-// A few saved services (brand-colored nodes); the rest of the long list stays unsaved so the root "+" shows them as
-// presets (PayPal Live, WhatsApp, OpenAI, LinkedIn, Grok, npm, Twilio). `meta` is the old Graph API key, still readable.
-// The full long collection (everything saved) is Pieces/QR.me → "Signed In Long Collection".
-const LONG_SAVED: ServiceId[] = ['twitch', 'paypal', 'meta', 'google', 'github'];
+// Same saved collection as Pieces/QR.me → "Signed In Long Collection", so the two stories show one card.
+const LONG_SAVED: ServiceId[] = ['twitch', 'paypal', 'paypalLive', 'meta', 'whatsapp', 'google', 'openai', 'linkedin', 'grok', 'github', 'npm', 'sms'];
 const LONG_CUSTOM = [...META_KEY_GROUPS, ...DEMO_CUSTOM_GROUPS];
 // "Connect your .me" on the identity QR itself (AppShell `identityConnect`): while not connected, tapping the corner QR
 // asks the identity agent (another origin, in a window it opens) which .me is yours; once you approve, the QR carries

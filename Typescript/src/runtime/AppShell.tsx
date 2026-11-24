@@ -496,7 +496,6 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity:
           identityHash={connected?.identityHash ?? session?.identityHash}
           onNavigate={(to) => { setQrMenuOpen(false); goRoute(to); }}
           onLogout={signOut}
-          hideSignOut
           onSignIn={() => setQrSignIn(true)}
         />
       )}

@@ -1,9 +1,9 @@
-// Card-mode login status: the username's root tree under the QR
-// (keys, wallet, profile, contacts + Sign out), or a Sign in action
-// when there is no session. Used on the landing and inside CleakerQrMenu.
+// Card-mode login status: the QR and the username's root tree
+// (keys, wallet, profile, contacts), or a Sign in action when there is
+// no session. Sign out is the logout icon under the gear on CleakerQrMenu,
+// not a button in this card. Used on the landing and inside that panel.
 import React from 'react';
 import Box from '@/gui/Atoms/Box/Box';
-import Icon from '@/gui/Atoms/Icon/Icon';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import QRme, { type QRmeProps } from '@/gui/All.This/me/QR/QR.me';
 import IdentityIconRow from './IdentityIconRow';
@@ -26,12 +26,11 @@ export type MeLoginStatusProps = {
   };
   identityHash?: string | null;
   onNavigate: (to: string) => void;
-  onLogout: () => void;
+  /** Kept so callers can pass the same handler they give the panel's logout icon. Not drawn here. */
+  onLogout?: () => void;
   onSignIn?: () => void;
   /** When set, replaces the default icon row under the QR (IdentityTree already includes that row). */
   tree?: React.ReactNode;
-  /** Sign out lives elsewhere (the card's icon under its gear): no Sign out button here. */
-  hideSignOut?: boolean;
 };
 
 export default function MeLoginStatus({
@@ -40,10 +39,8 @@ export default function MeLoginStatus({
   qr,
   identityHash,
   onNavigate,
-  onLogout,
   onSignIn,
   tree,
-  hideSignOut = false,
 }: MeLoginStatusProps) {
   return (
     <Box data-me-login="" sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 0, pb: 0, flex: '1 1 auto', minHeight: 0, overflow: 'visible', '& [data-qr-anchor]': { flex: '0 0 auto' } }}>
@@ -79,31 +76,6 @@ export default function MeLoginStatus({
           <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id={`${nodeId}.identityHash`}>
             {identityHash || ''}
           </Typography>
-          {!hideSignOut && <Box sx={{ display: 'flex', gap: 1, mt: '8px' }}>
-            <Box
-              component="button"
-              type="button"
-              onClick={onLogout}
-              data-gui-node-id={`${nodeId}.logout`}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                p: 1,
-                px: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Icon name="logout" fontSize="1rem" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
-            </Box>
-          </Box>}
         </>
       ) : (
         <Box sx={{ display: 'flex', gap: 1, mt: '13px' }}>

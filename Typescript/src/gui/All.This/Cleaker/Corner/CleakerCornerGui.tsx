@@ -152,6 +152,24 @@ function CleakerIdentityMenu({
   );
 }
 
+/** Same panel as everywhere else: Sign out is the logout icon under the gear. */
+function CornerQrMenu({
+  onClose,
+  children,
+  ...menu
+}: React.ComponentProps<typeof CleakerQrMenu> & { onClose: () => void }) {
+  const session = useOptionalSeedSessionContext();
+  return (
+    <CleakerQrMenu
+      {...menu}
+      onClose={onClose}
+      onSignOut={session?.authenticated ? () => { session.logout(); onClose(); } : undefined}
+    >
+      {children}
+    </CleakerQrMenu>
+  );
+}
+
 function CornerSession({ namespace, endpoint, children }: { namespace: string | null; endpoint: string; children: React.ReactNode }) {
   const existing = useOptionalSeedSessionContext();
   if (existing || !namespace) return <>{children}</>;
@@ -359,7 +377,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
       }}
     >
       <Box sx={{ position: 'fixed', zIndex: 2147483000, ...panelAt }} data-cleaker-qr-menu="">
-        <CleakerQrMenu
+        <CornerQrMenu
           fullPosition={namespace ? `${namespace}${resolved.source === 'address' ? ' (address)' : ''} @ ${pageAddress}` : pageAddress}
           statusText={message || identityStatusLabel || label}
           showNamespaceForm={!namespace}
@@ -385,7 +403,7 @@ function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: 
             onClose={closePanel}
             goRoute={goRoute}
           />
-        </CleakerQrMenu>
+        </CornerQrMenu>
       </Box>
     </ClickAwayListener>
   );

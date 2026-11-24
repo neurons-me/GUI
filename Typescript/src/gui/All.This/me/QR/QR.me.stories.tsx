@@ -1,8 +1,6 @@
 import * as React from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import Box from '@/gui/Atoms/Box/Box';
-import Icon from '@/gui/Atoms/Icon/Icon';
-import Typography from '@/gui/Atoms/Typography/Typography';
 import IdentityTree from '@/gui/All.This/Cleaker/IdentityTree';
 import { DEMO_CUSTOM_GROUPS, DEMO_NS, META_KEY_GROUPS, META_MANY_PAGES, Seeded, type DemoCustomGroup } from '@/gui/All.This/Cleaker/Keys/serviceKeys.storyFixtures';
 import type { KeyAccess } from '@/gui/All.This/Cleaker/Keys/keyTree';
@@ -47,51 +45,60 @@ export const Default: Story = {};
 const withQrPath = (base: string, segments: string[]) =>
   `${base.replace(/\/+$/, '')}${segments.length ? `/${segments.map(encodeURIComponent).join('/')}` : ''}`;
 
-/** The signed-in card: the QR follows the open branch of the keys tree (path only — never values). */
+/** The signed-in QR.me card: the same panel everywhere (close, gear, logout
+ *  icon under the gear). The QR follows the open branch of the keys tree
+ *  (path only — never values). The tree pages with "+" first and "…" / "Show
+ *  less" last. */
 function SignedInCard({ args, access, pending }: { args: React.ComponentProps<typeof QRme>; access?: KeyAccess; pending?: string[] }) {
   const [path, setPath] = React.useState<string[]>([]);
+  const value = withQrPath(String(args.value), path);
+  const perimeter = args.perimeterLabel ? withQrPath(args.perimeterLabel, path) : undefined;
   return (
-    <>
-      <QRme
-        {...args}
-        value={withQrPath(String(args.value), path)}
-        perimeterLabel={args.perimeterLabel ? withQrPath(args.perimeterLabel, path) : undefined}
+    <CleakerQrMenu
+      fullPosition={`${perimeter ?? args.perimeterLabel ?? args.username ?? ''} @ ${typeof window !== 'undefined' ? window.location.host : ''}`}
+      statusText={typeof args.statusLabel === 'string' ? args.statusLabel : undefined}
+      showNamespaceForm={false}
+      corner="top-left"
+      onMoveTo={() => {}}
+      onClose={() => {}}
+      onSignOut={() => {}}
+      layout={{ address: perimeter ?? (typeof args.perimeterLabel === 'string' ? args.perimeterLabel : undefined), search: true }}
+    >
+      <MeLoginStatus
+        nodeId="story.signedin"
+        authenticated
+        qr={{
+          value,
+          username: args.username,
+          status: args.status,
+          statusLabel: args.statusLabel,
+          perimeterLabel: perimeter,
+          perimeterRootLabel: 'cleaker.me',
+          diameter: args.diameter,
+        }}
+        identityHash="7f3a…c91e"
+        onNavigate={storyNavigate}
+        onLogout={() => {}}
+        tree={(
+          <IdentityTree
+            nodeId="story.signedin"
+            username={args.username ?? 'jabellae'}
+            namespace={DEMO_NS}
+            onNavigate={storyNavigate}
+            onPathChange={setPath}
+            access={access}
+            pending={pending}
+          />
+        )}
       />
-      <IdentityTree nodeId="story.signedin" username={args.username ?? 'jabellae'} namespace={DEMO_NS} onNavigate={storyNavigate} onPathChange={setPath} access={access} pending={pending} />
-    </>
+    </CleakerQrMenu>
   );
 }
 
 const signedInRender = (saved: ServiceId[], custom: DemoCustomGroup[] = [], access?: KeyAccess) => (args: React.ComponentProps<typeof QRme>) => (
     <Seeded saved={saved} custom={custom}>{() => (
-    <Box sx={{ width: '100%', maxWidth: 360, mx: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, py: 6 }}>
+    <Box sx={{ minHeight: 560, position: 'relative', bgcolor: 'background.default', p: 2 }}>
       <SignedInCard args={args} access={access} />
-      <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id="story.signedin.identityHash">
-        7f3a…c91e
-      </Typography>
-      <Box
-        component="button"
-        type="button"
-        data-gui-node-id="story.signedin.logout"
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          mt: '8px',
-          p: 1,
-          px: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1,
-          background: 'transparent',
-          color: 'inherit',
-          cursor: 'pointer',
-          '&:hover': { bgcolor: 'action.hover' },
-        }}
-      >
-        <Icon name="logout" fontSize="1rem" />
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
-      </Box>
     </Box>
     )}</Seeded>
   );
@@ -188,7 +195,6 @@ export const RailMenu: Story = {
             identityHash="7f3a…c91e"
             onNavigate={() => {}}
             onLogout={() => {}}
-            hideSignOut
           />
         </CleakerQrMenu>
       </Box>
