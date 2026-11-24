@@ -39,7 +39,7 @@ import * as React from 'react';
 import { useOptionalMe } from '@/react/useMe';
 import { readMeUsername } from '@/react/meIdentity';
 import { namespaceAddress } from '@/react/namespaceAddress';
-import { SeedSessionProvider, type ResolveSeedFromCredentials } from '@/react/session/SeedSessionProvider';
+import { SeedSessionProvider, useOptionalSeedSessionContext, type ResolveSeedFromCredentials, type SeedSessionContextValue } from '@/react/session/SeedSessionProvider';
 import Namespace, { type NamespaceProps } from '@/react/session/Namespace';
 import type { GuiDocument } from '@/runtime/guiDocument';
 import type { CapabilityResolvers } from '@/runtime/capabilities';
@@ -90,9 +90,18 @@ export type CleakerProps = {
   capabilities?: CapabilityResolvers;
   /** Opaque to the GUI: when it changes the capabilities are resolved again (an app with several targets says which is selected). */
   capabilityScope?: string;
+  /**
+   * When set, the document (and its pages, brand, rail policy, and resolvers) is only given to the shell if this
+   * returns true. The check runs inside the session, so the app can offer its document by who is signed in and where
+   * they are in the tree — not by which door they arrived through. Until it answers, the document is not offered.
+   * Omit it and the document is always applied, as before.
+   */
+  offerDocument?: (ctx: { session: SeedSessionContextValue | null }) => boolean | Promise<boolean>;
+  /** Called when whether the document is offered changes, so the app can follow (e.g. a door's URL mapping). */
+  onOfferDocument?: (offered: boolean) => void;
 };
 
-export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, brand, identityCorner, semanticPath, namespaceSource, capabilities, capabilityScope }: CleakerProps) {
+export default function Cleaker({ sx, namespace: namespaceProp, transport, resolveSeedFromCredentials, document, pages, footerExtras, hideBarItems, brand, identityCorner, semanticPath, namespaceSource, capabilities, capabilityScope, offerDocument, onOfferDocument }: CleakerProps) {
   const found = useOptionalMe();
   const namespace = String(namespaceProp || '').trim();
   const username = readMeUsername(found?.me);
@@ -129,7 +138,7 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
       sessionBackend="cleaker"
       context={found.me as object | null}
     >
-      <Namespace
+      <OfferedNamespace
         sx={sx}
         cleakerEndpoint={cleakerEndpoint}
         netgetMonadOrigin={transportOrigin}
@@ -144,7 +153,58 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         footerExtras={footerExtras}
         capabilities={capabilities}
         capabilityScope={capabilityScope}
+        offerDocument={offerDocument}
+        onOfferDocument={onOfferDocument}
       />
     </SeedSessionProvider>
+  );
+}
+
+/** Applies the document only when `offerDocument` says so; otherwise the shell is the namespace itself. */
+function OfferedNamespace({
+  document,
+  pages,
+  hideBarItems,
+  brand,
+  capabilities,
+  capabilityScope,
+  offerDocument,
+  onOfferDocument,
+  ...namespaceProps
+}: NamespaceProps & {
+  offerDocument?: CleakerProps['offerDocument'];
+  onOfferDocument?: CleakerProps['onOfferDocument'];
+}) {
+  const session = useOptionalSeedSessionContext();
+  const sessionRef = React.useRef(session);
+  sessionRef.current = session;
+  const [offer, setOffer] = React.useState(() => !offerDocument);
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!offerDocument) {
+        if (!cancelled) setOffer(true);
+        return;
+      }
+      try {
+        const ok = await offerDocument({ session: sessionRef.current });
+        if (!cancelled) setOffer(Boolean(ok));
+      } catch {
+        if (!cancelled) setOffer(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [offerDocument, session?.authenticated, session?.semanticNamespace]);
+  React.useEffect(() => { onOfferDocument?.(offer); }, [offer, onOfferDocument]);
+  return (
+    <Namespace
+      {...namespaceProps}
+      document={offer ? document : undefined}
+      pages={offer ? pages : undefined}
+      hideBarItems={offer ? hideBarItems : undefined}
+      brand={offer ? brand : undefined}
+      capabilities={offer ? capabilities : undefined}
+      capabilityScope={offer ? capabilityScope : undefined}
+    />
   );
 }
