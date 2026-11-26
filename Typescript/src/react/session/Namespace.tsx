@@ -81,7 +81,7 @@ import { isMenuBoundsChrome } from '@/gui/All.This/Cleaker/Corner/menuSize';
 import { readBrandPosition, readQrMePosition, writeBrandPosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { documentBarModes, readBarModes, writeBarMode, type BarMode, type LayoutBarId } from '@/gui/Layout/Position/barMode';
 import MeLoginStatus from '@/gui/All.This/Cleaker/MeLoginStatus';
-import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition, drawnPosition } from '@/react/positionExpression';
+import { positionExpression as composePosition, shownNamespace, cardNamespace, unresolvedPosition, drawnPosition, isBoundToPage } from '@/react/positionExpression';
 import { requireCleakerEndpoint, deriveNamespaceRootLabel, LANDING_ID, type DocumentPageProps } from './documentPages';
 import { GuiPage, GUI_THEMES_ROUTE } from '@/gui/All.This/GUI/GuiPages';
 import { ThemeSettingsContext, GuiPageContext } from '@/runtime/themeSettings';
@@ -142,11 +142,17 @@ export interface NamespaceProps {
   favicon?: boolean;
   /**
    * The site's brand (the author's mark: whose page this is), apart from the person's QR (Roles-and-Territories.md §3).
-   * With it, the QR is the person's mark placed at `identityCorner` and the brand takes the other end, linking to `/`;
-   * the position is split between them (who beside the QR, `@where` beside the brand). Without it, the shell is as
-   * before: the QR leads the left bar and the whole position is written in the top bar.
+   * Shown only when this page is not the namespace's own door (the origin has not answered for the shown namespace):
+   * then the QR is the person's mark at `identityCorner` and the brand takes the other end, linking to `/`;
+   * the position is split between them (who beside the QR, `@where` beside the brand). When the page is the
+   * namespace, the brand is not drawn: the QR leads the left bar and the whole position is written in the top bar.
    */
   brand?: { label: string; icon?: string; glyph?: string; logo?: string };
+  /**
+   * A namespace the shell should start by showing (the card's typed root, a story control). Naming it is not a
+   * confirmation: until this page answers for it, the position stays `namespace @ surface`.
+   */
+  initialNamespace?: string;
   /** The person's corner for their QR (default top-left). */
   identityCorner?: MarkCorner;
   /**
@@ -1594,13 +1600,26 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     if (isNamespaceLanding) setQrMenuOpen(false);
   }, [isNamespaceLanding]);
   const currentNodePath = location.pathname && location.pathname !== '/' ? location.pathname : '';
-  // The namespace the person SELECTED and that actually connected (the card's typed root, promoted by
-  // handleBeatleNamespaceResolved): it, not the address bar, is what the badge reads. Only confirmed ones land here, so
-  // the badge cannot name a namespace nothing answered for.
-  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(null);
+  // The namespace the person selected (the card's typed root, a story control, or one a door already answered for).
+  // Naming it is not a confirmation: until this page answers for it, the position stays `namespace @ surface`.
+  const [selectedNamespace, setSelectedNamespace] = useState<string | null>(() => {
+    const start = String(props.initialNamespace || '').trim();
+    return start || null;
+  });
+  useEffect(() => {
+    const next = String(props.initialNamespace || '').trim();
+    if (!next) return;
+    setSelectedNamespace(next);
+  }, [props.initialNamespace]);
+  // The card also records the choice as the selected link. Prefer that name when it is not merely
+  // this page's address, so the shell follows the card even if the typed-root callback was reset.
+  const linkNamespace = String(ctx?.selectedLink?.namespace || '').trim();
+  const selectedFromLink = linkNamespace && linkNamespace.toLowerCase() !== String(namespaceRootLabel || '').toLowerCase()
+    ? linkNamespace
+    : '';
   const positionNaming = {
     authenticated: authenticated ? session?.semanticNamespace : null,
-    selected: selectedNamespace,
+    selected: selectedFromLink || selectedNamespace,
     root: {
       status: monadOff ? 'off' : verifiedRoot.status,
       cleakerEndpoint: verifiedRoot.cleakerEndpoint,
@@ -1803,6 +1822,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const handleSelectedNamespaceAnswered = useCallback((namespace: string) => {
     setSelectedNamespace(namespace);
   }, []);
+  // The person typed or chose a namespace on the card: the shell names it immediately. That is not a confirmation
+  // (verifiedRoot is not promoted). If this page does not answer for it, the layout becomes a site with the brand.
+  const handleNamespaceSelected = useCallback((namespace: string) => {
+    const next = String(namespace || '').trim();
+    setSelectedNamespace(next || null);
+  }, []);
 
   // The left bar's own elements come from the document (`GUI.window.layout.bars.left`): what leads the bar ("back to the
   // start of everything"), then what the namespace declares, then what closes it (a session-gated Keychain,
@@ -1827,7 +1852,24 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   );
 
   // What the landing is given. The same object feeds the landing route and the identity card dialog.
-  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, onSelectedNamespaceAnswered: handleSelectedNamespaceAnswered, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }), qrMenu: { corner: identityCorner, onMoveTo: moveIdentityCorner, onMoveBrand: props.brand ? moveBrandCorner : undefined, barModes, onChooseBarMode: chooseBarMode } };
+  // Case 1 vs 2 is not fixed by which story is open. When this page's own origin answers for the shown
+  // namespace, the shell is the namespace's door (no site brand). When the shown namespace is another name
+  // (for example cleaker.me typed at localhost:6006), the same shell is a site with .GUI: the brand appears
+  // and the namespace sits beside the QR.
+  const pageIsTheNamespace = Boolean(positionIdentity) && isBoundToPage({
+    namespace: positionIdentity,
+    pageOrigin,
+    root: {
+      status: monadOff ? 'off' : verifiedRoot.status,
+      cleakerEndpoint: verifiedRoot.cleakerEndpoint,
+      answeredNamespace: verifiedRoot.answeredNamespace,
+      confirmedLabel: verifiedRoot.confirmedLabel,
+      lastAttemptFailed: verifiedRoot.lastAttemptFailed,
+    },
+  });
+  const siteBrand = pageIsTheNamespace ? undefined : props.brand;
+
+  const landingProps = { ...props, onBeatleNamespaceResolved: handleBeatleNamespaceResolved, onSelectedNamespaceAnswered: handleSelectedNamespaceAnswered, onNamespaceSelected: handleNamespaceSelected, sharedRootStatus: verifiedRoot.status, sharedRootBinding: { cleakerEndpoint: verifiedRoot.cleakerEndpoint, answeredNamespace: verifiedRoot.answeredNamespace, confirmedLabel: verifiedRoot.confirmedLabel, lastAttemptFailed: verifiedRoot.lastAttemptFailed }, doorLayers, doorOff: monadOff, doorChecking: monadChecking, probeDoor: () => probeDoorLayers({ origin: pageOrigin, monadTransport: verifiedRoot.transportOrigin, fetchImpl: connectionSeams.fetchImpl }), qrMenu: { corner: identityCorner, onMoveTo: moveIdentityCorner, onMoveBrand: siteBrand ? moveBrandCorner : undefined, barModes, onChooseBarMode: chooseBarMode } };
 
   // Every page the document declares under GUI.window.layout.content: what renders and
   // where it is served both come from the document. The GUI's own pages nest (`/GUI`, `/GUI/themes`, ...): every routed
@@ -1919,17 +1961,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     identity: identityCorner,
     bars: { top: barModes.top !== 'off', left: barModes.left !== 'off' },
     narrow: narrowBars,
-    brand: Boolean(props.brand),
+    brand: Boolean(siteBrand),
     brandCorner: brandAt,
   });
   const marksPlacement = marksPlacementRaw.identity === 'corner'
     ? { ...marksPlacementRaw, identity: `float:${identityCorner}` as const }
     : marksPlacementRaw;
-  brandShownRef.current = props.brand
+  brandShownRef.current = siteBrand
     ? (brandAt ?? (marksPlacement.brand !== 'none' && marksPlacement.brand !== 'corner' ? cornerOfSlot(marksPlacement.brand, identityCorner) : null))
     : null;
   // On a narrow screen with no site brand, the QR is the only corner handle, including on the landing.
-  const identityOpensMenu = !isNamespaceLanding || (narrowBars && !props.brand);
+  const identityOpensMenu = !isNamespaceLanding || (narrowBars && !siteBrand);
   const positionBrand = (
     <BarBrandCell
       ref={qrCellRef}
@@ -1991,7 +2033,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // position as the NRP writes it, short. The surface appears only when the namespace is not bound to this origin; the
   // full, unambiguous form is its title.
   // With a brand the position is split between the marks (below), so the top bar does not write it whole.
-  const topBarLeftElements = props.brand ? [] : (positionExpression || resolvingNamespace)
+  const topBarLeftElements = siteBrand ? [] : (positionExpression || resolvingNamespace)
     ? [
         topBarPosition(
           // No home icon: being at the namespace is being home. The address is the way back to `/`.
@@ -2019,11 +2061,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const splitIdentityText = resolvingNamespace
     ? <IdentityText title={positionExpressionFull} primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
     : <IdentityText title={positionExpressionFull} primary={splitWho.primary} secondary={splitWho.secondary} />;
-  const joinIdentity = Boolean(props.brand) && marksPlacement.identity === 'left.brand' && !isNamespaceLanding;
+  const joinIdentity = Boolean(siteBrand) && marksPlacement.identity === 'left.brand' && !isNamespaceLanding;
   // Without a brand the head's text is where you are. Off the landing the QR is a button (its menu): QR + text are that
   // one button. On the landing the QR does nothing by itself, so the one element is the text's own link (the identity
   // page), open bar only (the rail keeps the bare QR).
-  const joinPosition = !props.brand && marksPlacement.identity === 'left.brand';
+  const joinPosition = !siteBrand && marksPlacement.identity === 'left.brand';
   const positionHeadText = (
     <LeftBarPosition
       component="span"
@@ -2043,15 +2085,15 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         : joinPosition
           ? <IdentityButton mark={positionBrand} text={positionHeadText} openProps={isNamespaceLanding ? { component: Link, to: IDENTITY_ROUTE, type: undefined, 'aria-label': 'Open identity' } : undefined} />
           : positionBrand,
-      identityText: joinIdentity ? undefined : props.brand ? (
+      identityText: joinIdentity ? undefined : siteBrand ? (
         <Box component={Link} to={IDENTITY_ROUTE} title={positionExpressionFull} data-position-expression={positionExpressionFull} sx={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
           {resolvingNamespace
             ? <IdentityText primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
             : <IdentityText primary={splitWho.primary} secondary={splitWho.secondary} />}
         </Box>
       ) : undefined,
-      brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} floating={typeof marksPlacement.brand === 'string' && marksPlacement.brand.startsWith('float:')} /> : undefined,
-      brandText: props.brand && splitParts.where ? <WhereText title={positionExpressionFull} where={atWhere(splitParts.where)} /> : undefined,
+      brand: siteBrand ? <SiteBrand label={siteBrand.label} icon={siteBrand.icon} glyph={siteBrand.glyph} logo={siteBrand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} floating={typeof marksPlacement.brand === 'string' && marksPlacement.brand.startsWith('float:')} /> : undefined,
+      brandText: siteBrand && splitParts.where ? <WhereText title={positionExpressionFull} where={atWhere(splitParts.where)} /> : undefined,
     },
     { topText: !narrowBars },
   );
@@ -2086,12 +2128,12 @@ const GUI: React.FC<NamespaceProps> = (props) => {
           togglePlacement: marksPlacement.brand === 'left.footer' ? 'footer' : 'header',
           ...collapsedBarHandleProps({
             narrow: narrowBars,
-            brand: props.brand ? <SiteBrand label={props.brand.label} icon={props.brand.icon} glyph={props.brand.glyph} logo={props.brand.logo} /> : undefined,
+            brand: siteBrand ? <SiteBrand label={siteBrand.label} icon={siteBrand.icon} glyph={siteBrand.glyph} logo={siteBrand.logo} /> : undefined,
             identitySlot: marksPlacement.identity,
           }),
           // Shown while the bar is open: with a brand, the text of the mark in the bar's head (who, or @where); without
           // one, where you are written out, and the way to the identity page.
-          header: props.brand ? marks.leftHeader : joinPosition ? undefined : (
+          header: siteBrand ? marks.leftHeader : joinPosition ? undefined : (
             <LeftBarPosition
               besideMark={!!marks.leftBrand}
               component={Link}
@@ -2142,7 +2184,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
         <ThemeKernelMirror session={session} />
         {/* The page is the namespace: the tab's icon is its QR. With an app's brand (app view) the brand is the icon
             (SiteBrand sets it). props.favicon === false leaves the page's own. */}
-        <NamespaceFavicon value={positionQrValue} enabled={props.favicon !== false && !props.brand} />
+        <NamespaceFavicon value={positionQrValue} enabled={props.favicon !== false && !siteBrand} />
         <Routes>
           {/* Every page is declared by the GUI document and rendered through the
               same renderer mount(spec) uses. */}
@@ -2174,8 +2216,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
               showNamespaceForm={false}
               corner={identityCorner}
               onMoveTo={moveIdentityCorner}
-              onMoveBrand={props.brand ? moveBrandCorner : undefined}
-              otherCorner={props.brand ? (brandAt ?? (marksPlacement.brand !== 'none' ? cornerOfSlot(marksPlacement.brand, identityCorner) : null)) : null}
+              onMoveBrand={siteBrand ? moveBrandCorner : undefined}
+              otherCorner={siteBrand ? (brandAt ?? (marksPlacement.brand !== 'none' ? cornerOfSlot(marksPlacement.brand, identityCorner) : null)) : null}
               barModes={barModes}
               onChooseBarMode={chooseBarMode}
               onClose={() => setQrMenuOpen(false)}
@@ -2184,7 +2226,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 left: layoutLeftIcons,
                 search: true,
                 address: positionExpression || undefined,
-                brand: props.brand ? { label: props.brand.label, icon: typeof props.brand.icon === 'string' ? props.brand.icon : undefined } : undefined,
+                brand: siteBrand ? { label: siteBrand.label, icon: typeof siteBrand.icon === 'string' ? siteBrand.icon : undefined } : undefined,
               }}
             >
               <MeLoginStatus

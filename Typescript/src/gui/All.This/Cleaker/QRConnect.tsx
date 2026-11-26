@@ -281,6 +281,8 @@ export type QRConnectProps = DocumentPageProps & {
   onBeatleNamespaceResolved?: (namespace: string) => void;
   /** Another host answered for the selected namespace: the shell shows it as selected (useQRConnect's onRemoteResolved). */
   onSelectedNamespaceAnswered?: (namespace: string) => void;
+  /** The person typed or chose a namespace on the card: the shell names it immediately (not a confirmation). */
+  onNamespaceSelected?: (namespace: string) => void;
   sharedRootStatus?: CleakerRootStatus;
   /**
    * What the shared verified root confirmed (verifiedRoot.cleakerEndpoint / .answeredNamespace). The label abbreviates
@@ -321,7 +323,7 @@ export type QRConnectProps = DocumentPageProps & {
   qrMenu?: Pick<CleakerQrMenuProps, 'corner' | 'onMoveTo' | 'onMoveBrand' | 'otherCorner' | 'barModes' | 'onChooseBarMode' | 'layout'>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, qrMenu, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, onNamespaceSelected, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, qrMenu, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -396,9 +398,10 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // that is this page's, or that host's for another.
   const selectNamespace = useCallback((root: string) => {
     setNamespaceOverride(root);
+    onNamespaceSelected?.(root);
     const remote = remoteRootFor(root, { localRoot: deriveNamespaceRootLabel(resolvedEndpoint), confirmedRoot: sharedRootBinding?.confirmedLabel ?? null });
     seedSessionCtx?.selectLink({ namespace: root, ...(remote ? { transport: `https://${remote}` } : {}) });
-  }, [resolvedEndpoint, sharedRootBinding?.confirmedLabel, seedSessionCtx]);
+  }, [resolvedEndpoint, sharedRootBinding?.confirmedLabel, seedSessionCtx, onNamespaceSelected]);
   // The namespace this card acts on, in order: the one the person SELECTED (the link), the one the service at this
   // origin ANSWERED for (a current confirmation), and only then the address -- which is a namespace only when someone
   // declared it so (`namespaceSource`). `namespaceReady` is false while all that is the address: the card then resolves

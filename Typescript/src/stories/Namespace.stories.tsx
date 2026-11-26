@@ -43,16 +43,29 @@ const DEMO_SEED = 'storybook-demo:namespace';
 // rule, with a fake door. The real thing is a page served by the namespace's own door (cleaker.me/, or localhost/ with
 // a local monad); what such a door must answer, and how to verify it, is in packages/GUI/docs/Namespace.md.
 //
+// The layout is not fixed to this story. Type another namespace (the pencil, or the `namespace` control) — for example
+// `cleaker.me` at localhost:6006. This page does not answer for that name, so the shell becomes case 2: the site's
+// brand, and the namespace beside the QR. The top bar then shows that namespace, not the word `namespace`. Naming it
+// is not a confirmation.
+//
 // namespaceSource="address": the host (localhost) is NOT declared as the namespace; until the door answers, the shell
 // says it is resolving instead of naming the host.
 const PAGE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
 setActiveNamespaceRoot(DEMO_NAMESPACE);
 
-const Root = () => (
+type DoorArgs = { namespace: string; brand: string };
+
+const Root = ({ namespace = '', brand = 'Storybook' }: DoorArgs) => (
   <Theme>
     <ConnectionSeamsContext.Provider value={demoNamespaceSeams}>
       <SeedSessionProvider transportOrigin={PAGE_ORIGIN} sessionBackend="cleaker" fetchImpl={demoNamespaceFetch}>
-        <Namespace namespaceSource="address" cleakerEndpoint={PAGE_ORIGIN} netgetMonadOrigin={PAGE_ORIGIN} />
+        <Namespace
+          namespaceSource="address"
+          cleakerEndpoint={PAGE_ORIGIN}
+          netgetMonadOrigin={PAGE_ORIGIN}
+          initialNamespace={namespace || undefined}
+          brand={brand ? { label: brand } : undefined}
+        />
       </SeedSessionProvider>
     </ConnectionSeamsContext.Provider>
   </Theme>
@@ -73,11 +86,16 @@ export default meta;
 //   3 · a site without .GUI (any page)       -> CleakerOnAnyPage (Cleaker's bars + the namespace's routes over the page)
 export const Default: StoryObj<typeof meta> = {
   name: '1 · Namespace only (simulated door)',
-  render: () => <Root />,
+  args: { namespace: '', brand: 'Storybook' },
+  argTypes: {
+    namespace: { control: 'text', description: 'Another namespace than the one this page answers for (cleaker.me at localhost:6006) turns this into example 2: the site brand, and that namespace beside the QR.' },
+    brand: { control: 'text', description: "the site's brand; shown only when the namespace is not this page" },
+  },
+  render: (args) => <Root {...(args as DoorArgs)} />,
   parameters: {
     docs: {
       description: {
-        story: 'Simulated: a demo door at this page\'s own origin answers as the namespace `namespace`. The real case is a page served by the namespace\'s own door; see packages/GUI/docs/Namespace.md.',
+        story: 'Simulated: a demo door at this page\'s own origin answers as the namespace `namespace`. Type another namespace (cleaker.me) and the shell becomes example 2: the site\'s brand plus that namespace. The real case is a page served by the namespace\'s own door; see packages/GUI/docs/Namespace.md.',
       },
     },
   },

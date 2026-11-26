@@ -136,6 +136,12 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   assert.equal(atPage.compact, 'namespace');
   // the same confirmation does not cover a namespace the monad did not answer for
   assert.equal(isBoundToPage({ namespace: 'cleaker.me', pageOrigin: 'http://localhost:6006', root: doorRoot }), false);
+  // typing cleaker.me at Storybook (localhost:6006): the shell names that namespace, and the page is a site, not its door
+  assert.equal(shownNamespace({ selected: 'cleaker.me', root: doorRoot, guess: 'namespace', guessIsProvisional: true }), 'cleaker.me');
+  const asSite = positionExpression({ namespace: 'cleaker.me', page: page('http://localhost:6006/'), root: doorRoot });
+  assert.equal(asSite.bound, false);
+  assert.match(asSite.compact, /cleaker\.me/);
+  assert.match(asSite.compact, /@/);
   // re-checking that namespace at that same door keeps the binding while it waits (no `namespace @ surface` flicker);
   // another door, another namespace, a failed or unconfirmed state: a new question, it goes through 'checking'
   const cur = { status: 'confirmed', cleakerEndpoint: 'http://localhost:6006', facts: atDoor };
