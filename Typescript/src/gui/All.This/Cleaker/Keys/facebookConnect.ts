@@ -1,10 +1,11 @@
-// Facebook connect for the approval window: PKCE login, token exchange, and
-// writing Pages / Instagram references into the encrypted keys vault.
-// Secrets and tokens stay in memory only, go only to graph.facebook.com, and
-// are sealed with the existing vault. Never logged, never written to
-// localStorage or sessionStorage in the clear.
+// Facebook connect for the approval window: PKCE login, server-side token
+// exchange, and writing Pages / Instagram references into the encrypted keys vault.
+// The App Secret never enters this module. The window posts the OAuth code to
+// /oauth/facebook/exchange; the server talks to graph.facebook.com. User tokens
+// stay in memory only and are sealed with the existing vault. Never logged,
+// never written to localStorage or sessionStorage in the clear.
 import {
-  getCustomKeys, hasCustomKeys, listCustomKeyGroups, sanitizeKeyPath, saveCustomKeys,
+  hasCustomKeys, listCustomKeyGroups, sanitizeKeyPath, saveCustomKeys,
   removeCustomKeys, setCustomKeyDisplay, setCustomKeyStatus, type ServiceFields,
 } from './serviceKeyVault';
 
@@ -28,6 +29,17 @@ export type FacebookOAuthSession = {
  * Facebook's pages cut `window.opener` (Cross-Origin-Opener-Policy), so postMessage to the opener is not enough.
  */
 export const FACEBOOK_RETURN_CHANNEL = 'me.facebook.oauth';
+export const FACEBOOK_EXCHANGE_PATH = '/oauth/facebook/exchange';
+export const FACEBOOK_APP_PATH = '/oauth/facebook/app';
+
+function exchangeOrigin(explicit?: string, redirectUri?: string): string {
+  if (explicit) return explicit.replace(/\/$/, '');
+  if (redirectUri) {
+    try { return new URL(redirectUri).origin; } catch { /* ignore */ }
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return '';
+}
 
 export type FacebookPkce = { verifier: string; challenge: string; method: 'S256' };
 
@@ -219,9 +231,7 @@ export function readFacebookReturn(params: URLSearchParams, session: FacebookOAu
   return { ok: true, code };
 }
 
-type TokenReply = { access_token?: string; expires_in?: number; error?: { message?: string; code?: number } | string; error_description?: string };
-
-function tokenError(data: TokenReply, fallback: string): FacebookConnectError {
+function tokenError(data: { error?: { message?: string; code?: number } | string; error_description?: string }, fallback: string): FacebookConnectError {
   const err = data.error;
   const code = typeof err === 'object' && err ? err.code : undefined;
   const message = (typeof err === 'object' && err?.message) || data.error_description || (typeof err === 'string' ? err : '') || fallback;
@@ -229,70 +239,36 @@ function tokenError(data: TokenReply, fallback: string): FacebookConnectError {
   return { ok: false, code, message };
 }
 
-async function readTokenResponse(res: Response): Promise<TokenReply> {
-  const text = await res.text();
-  const trimmed = text.trim();
-  if (trimmed.startsWith('{')) {
-    try { return JSON.parse(trimmed) as TokenReply; } catch { return { error_description: trimmed.slice(0, 200) }; }
-  }
-  const q = new URLSearchParams(trimmed);
-  const access_token = q.get('access_token') ?? undefined;
-  const expires_in = q.has('expires_in') ? Number(q.get('expires_in')) : undefined;
-  if (access_token) return { access_token, expires_in: Number.isFinite(expires_in) ? expires_in : undefined };
-  return { error_description: q.get('error_description') || q.get('error') || trimmed.slice(0, 200) };
-}
-
-export async function exchangeFacebookCode(opts: {
+export async function exchangeFacebookCodeViaServer(opts: {
   code: string;
   redirectUri: string;
   verifier: string;
-  clientId: string;
-  clientSecret: string;
-  scopes?: string;
-  now?: number;
+  origin?: string;
   fetch?: FetchLike;
 }): Promise<{ ok: true; user: FacebookUserToken } | FacebookConnectError> {
   const run = opts.fetch ?? fetch;
-  const tokenUrl = `${FACEBOOK_GRAPH}/${FACEBOOK_API_VERSION}/oauth/access_token`;
-
-  const shortAttempt = async (withSecret: boolean) => {
-    const q = new URLSearchParams({
-      client_id: opts.clientId,
-      redirect_uri: opts.redirectUri,
-      code: opts.code,
-      code_verifier: opts.verifier,
+  const base = exchangeOrigin(opts.origin, opts.redirectUri);
+  if (!base) return { ok: false, message: 'Could not exchange the Facebook code.' };
+  try {
+    const res = await run(`${base}${FACEBOOK_EXCHANGE_PATH}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        code: opts.code,
+        redirectUri: opts.redirectUri,
+        verifier: opts.verifier,
+      }),
     });
-    if (withSecret) q.set('client_secret', opts.clientSecret);
-    const res = await run(`${tokenUrl}?${q}`, { method: 'GET', mode: 'cors' });
-    return readTokenResponse(res);
-  };
-
-  let short = await shortAttempt(false);
-  if (!short.access_token) short = await shortAttempt(true);
-  if (!short.access_token) return tokenError(short, 'Could not exchange the Facebook code.');
-
-  const longQ = new URLSearchParams({
-    grant_type: 'fb_exchange_token',
-    client_id: opts.clientId,
-    client_secret: opts.clientSecret,
-    fb_exchange_token: short.access_token,
-  });
-  const longRes = await run(`${tokenUrl}?${longQ}`, { method: 'GET', mode: 'cors' });
-  const long = await readTokenResponse(longRes);
-  if (!long.access_token) return tokenError(long, 'Could not exchange for a long-lived token.');
-
-  const now = opts.now ?? Date.now();
-  const seconds = long.expires_in && Number.isFinite(long.expires_in) ? long.expires_in : 60 * 24 * 60 * 60;
-  // Public field is the UTC calendar day of that instant: expires_in is a duration, not a local date.
-  const end = new Date(now + seconds * 1000);
-  const expires = `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`;
-  return { ok: true, user: { token: long.access_token, expires, scopes: opts.scopes ?? FACEBOOK_SCOPES } };
+    const data = await res.json() as { ok?: boolean; token?: string; expires?: string; scopes?: string; message?: string };
+    if (!data?.ok || typeof data.token !== 'string' || typeof data.expires !== 'string') {
+      return { ok: false, message: typeof data?.message === 'string' ? data.message : 'Could not exchange the Facebook code.' };
+    }
+    return { ok: true, user: { token: data.token, expires: data.expires, scopes: data.scopes ?? FACEBOOK_SCOPES } };
+  } catch {
+    return { ok: false, message: 'Could not exchange the Facebook code.' };
+  }
 }
 
-/**
- * The person's id, name and picture, with the same user token and the same way as me/accounts.
- * Best effort: any failure returns null and the connect goes on without it. The token is never logged.
- */
 export async function fetchFacebookProfile(opts: { accessToken: string; fetch?: FetchLike }): Promise<FacebookProfile | null> {
   const run = opts.fetch ?? fetch;
   const url = `${FACEBOOK_GRAPH}/${FACEBOOK_API_VERSION}/me?${new URLSearchParams({
@@ -456,6 +432,7 @@ export function slugPageName(name: string, id?: string, taken?: Set<string>): st
   return slug;
 }
 
+/** True when this namespace still has a user-level .keys.meta.app id+secret. The connect button no longer depends on this; the App Secret lives only on the exchange server. */
 export function hasFacebookAppCredentials(namespace: string): boolean {
   if (!hasCustomKeys(namespace, 'meta.app')) return false;
   const g = listCustomKeyGroups(namespace).find((x) => x.name === 'meta.app');
@@ -466,10 +443,20 @@ export function hasFacebookAppCredentials(namespace: string): boolean {
   return hasId && hasSecret;
 }
 
-export async function publicFacebookAppId(namespace: string): Promise<string | null> {
-  const g = listCustomKeyGroups(namespace).find((x) => x.name === 'meta.app');
-  const id = g?.publicValues?.id?.trim();
-  return id || null;
+/** The public App ID from the exchange server. Never a secret. */
+export async function publicFacebookAppId(opts?: { origin?: string; fetch?: FetchLike }): Promise<string | null> {
+  const run = opts?.fetch ?? fetch;
+  const base = exchangeOrigin(opts?.origin, undefined);
+  if (!base) return null;
+  try {
+    const res = await run(`${base}${FACEBOOK_APP_PATH}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const data = await res.json() as { appId?: unknown };
+    const id = typeof data.appId === 'string' ? data.appId.trim() : '';
+    return id || null;
+  } catch {
+    return null;
+  }
 }
 
 function expiresFromDays(iso: string): string {
@@ -607,28 +594,23 @@ export async function finishFacebookConnect(opts: {
   passphrase: string;
   now?: number;
   fetch?: FetchLike;
+  origin?: string;
 }): Promise<{ ok: true; added: string[]; updated: string[]; disconnected: string[]; migrated: string[] } | FacebookConnectError> {
-  const app = await getCustomKeys(opts.session.namespace, 'meta.app', opts.passphrase);
-  if (!app) return { ok: false, message: 'Could not open .keys.meta.app. Check the passphrase.' };
-  const clientId = String(app.id || '').trim();
-  const clientSecret = String(app.secret || '').trim();
-  if (!clientId || !clientSecret) return { ok: false, message: 'Add your App ID and App Secret under .keys.meta.app first.' };
-
-  const exchanged = await exchangeFacebookCode({
+  const exchanged = await exchangeFacebookCodeViaServer({
     code: opts.code,
     redirectUri: opts.session.redirectUri,
     verifier: opts.session.verifier,
-    clientId,
-    clientSecret,
-    now: opts.now,
+    origin: opts.origin,
     fetch: opts.fetch,
   });
   if (!exchanged.ok) return exchanged;
 
   const listed = await listFacebookAccounts({ accessToken: exchanged.user.token, fetch: opts.fetch });
+
   if (!listed.ok) return listed;
   const profile = await fetchFacebookProfile({ accessToken: exchanged.user.token, fetch: opts.fetch });
-  const appInfo = await fetchFacebookApp({ appId: clientId, accessToken: exchanged.user.token, fetch: opts.fetch });
+  const appId = await publicFacebookAppId({ origin: opts.origin ?? exchangeOrigin(opts.origin, opts.session.redirectUri), fetch: opts.fetch });
+  const appInfo = appId ? await fetchFacebookApp({ appId, accessToken: exchanged.user.token, fetch: opts.fetch }) : null;
 
   const out = await applyFacebookAccounts({
     namespace: opts.session.namespace,
@@ -639,7 +621,7 @@ export async function finishFacebookConnect(opts: {
   });
   // meta.app is user-made: its fields (id, secret, redirect) are never re-saved here. Only its public display
   // info (the App's name + icon) is set, beside the fields, so the node and card can show it.
-  if (out.ok && appInfo) {
+  if (out.ok && appInfo && hasCustomKeys(opts.session.namespace, 'meta.app')) {
     setCustomKeyDisplay(opts.session.namespace, 'meta.app', appInfo);
     try { window.dispatchEvent(new CustomEvent('cleaker:service-keys-changed', { detail: { namespace: opts.session.namespace } })); } catch { /* non-browser */ }
   }

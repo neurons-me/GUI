@@ -44,6 +44,7 @@ import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { hasIdentityVault } from '@/core/identity/localIdentityVault';
 import IdentityTree from './IdentityTree';
+import { useFacebookConnect } from './Keys/useFacebookConnect';
 import MeLoginStatus from './MeLoginStatus';
 import CleakerQrMenu, { type CleakerQrMenuProps } from './Corner/CleakerQrMenu';
 import { hideKeysInTree, isRootOwnerView } from './Keys/keyVisibility';
@@ -161,8 +162,10 @@ function LandingSignedInTree({
   rootLabel?: string;
   onNavigate: (to: string) => void;
 }) {
+  const facebook = useFacebookConnect(namespace);
   const showNamespaceKeys = isRootOwnerView(namespace, rootLabel, Boolean(rootLabel && hasIdentityVault(rootLabel)));
   return (
+    <>
     <IdentityTree
       nodeId={nodeId}
       username={username || String(namespace).split('.')[0] || namespace}
@@ -172,7 +175,14 @@ function LandingSignedInTree({
       hide={(rel) => hideKeysInTree(rel, showNamespaceKeys)}
       showNamespaceKeys={showNamespaceKeys}
       rootNamespace={rootLabel}
+      facebookConnect={facebook.facebookConnect}
     />
+    {facebook.pagesNotice ? (
+      <Typography data-facebook-pages-notice="" variant="body2" sx={{ mt: 1.5, px: 0.5, color: 'text.secondary' }}>
+        {facebook.pagesNotice}
+      </Typography>
+    ) : null}
+    </>
   );
 }
 

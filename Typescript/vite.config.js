@@ -8,6 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { facebookExchangeMiddleware } from './server/facebookExchange.mjs';
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { playwright } from '@vitest/browser-playwright';
@@ -37,6 +38,17 @@ export default defineConfig({
     // Storybook renders source TSX directly, so forcing the classic runtime causes
     // `ReferenceError: React is not defined` in any component that only imports hooks.
     react({ jsxRuntime: 'automatic' }),
+    // Server-only: App Secret stays in process.env.META_APP_SECRET and is never
+    // added to the client bundle. Dev/demo/preview only (configureServer).
+    {
+      name: 'facebook-oauth-exchange',
+      configureServer(server) {
+        server.middlewares.use(facebookExchangeMiddleware());
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use(facebookExchangeMiddleware());
+      },
+    },
     // demo/ has more than one HTML entry (index.html, claimFlow.html) --
     // Vite's dev-server SPA fallback only ever serves index.html for an
     // unmatched path, which breaks claimFlow.main.tsx's own client-side

@@ -23,21 +23,8 @@ import { BarBrandCell, FloatingMark, QrBadge, marksInBars } from '@/gui/Layout/P
 import { placeMarks, type MarkCorner, type MarkSlot } from '@/gui/Layout/Position/placeMarks';
 import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { positionQrValue } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
-import { keyNoticeFromGroup, listCustomKeyGroups } from '@/gui/All.This/Cleaker/Keys/serviceKeyVault';
 import { hideKeysInTree } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
-import { SERVICE_KEYS_CHANGED_EVENT } from '@/gui/All.This/Cleaker/Keys/ServiceKeysSection';
-import {
-  beginFacebookConnect, facebookCallbackAvailable, facebookRedirectUri,
-  hasFacebookAppCredentials, markFacebookSessionPopup, publicFacebookAppId, refreshFacebookAppDisplay,
-} from '@/gui/All.This/Cleaker/Keys/facebookConnect';
-
-/** meta.user saved = connected; its public expiry/status gives the notice (read from the index, no secret). */
-function facebookState(namespace: string): { connected: boolean; notice?: 'expiring' | 'dead' } {
-  const user = listCustomKeyGroups(namespace).find((g) => g.name === 'meta.user');
-  if (!user) return { connected: false };
-  const n = keyNoticeFromGroup(user);
-  return { connected: true, ...(n === 'expiring' || n === 'dead' ? { notice: n } : {}) };
-}
+import { useFacebookConnect } from '@/gui/All.This/Cleaker/Keys/useFacebookConnect';
 
 /** `https://<name>.cleaker.me/` + the open branch → `…/keys/meta/user`. Public path only, never a value. */
 const withQrPath = (base: string, segments: string[]) =>
@@ -53,61 +40,25 @@ function KeysTree({
   open: boolean;
   onOpenChange: (next: boolean) => void;
 }) {
-  const [enabled, setEnabled] = React.useState(() => hasFacebookAppCredentials(namespace));
-  const [fb, setFb] = React.useState(() => facebookState(namespace));
   const [path, setPath] = React.useState<string[]>([]);
   const treeSearch = useQrTreeSearch();
   const qrBase = React.useMemo(() => positionQrValue(namespace, ''), [namespace]);
   const qrValue = withQrPath(qrBase, path);
-  const [message, setMessage] = React.useState<string | undefined>();
   const username = namespace.split('.')[0] || namespace;
-
-  React.useEffect(() => {
-    const refresh = () => { setEnabled(hasFacebookAppCredentials(namespace)); setFb(facebookState(namespace)); void refreshFacebookAppDisplay(namespace); };
-    void refreshFacebookAppDisplay(namespace);
-    window.addEventListener(SERVICE_KEYS_CHANGED_EVENT, refresh);
-    const onMsg = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data && event.data.type === 'me.facebook.connected') refresh();
-    };
-    window.addEventListener('message', onMsg);
-    return () => {
-      window.removeEventListener(SERVICE_KEYS_CHANGED_EVENT, refresh);
-      window.removeEventListener('message', onMsg);
-    };
-  }, [namespace]);
-
-  const onClick = React.useCallback(async () => {
-    setMessage(undefined);
-    if (!hasFacebookAppCredentials(namespace)) {
-      setMessage('Add your App ID and App Secret under .keys.meta.app first.');
-      return;
-    }
-    const clientId = await publicFacebookAppId(namespace);
-    if (!clientId) {
-      setMessage('Add your App ID and App Secret under .keys.meta.app first.');
-      return;
-    }
-    const available = await facebookCallbackAvailable(window.location.origin);
-    const redirectUri = facebookRedirectUri(window.location.origin, available);
-    const { url } = await beginFacebookConnect({ namespace, clientId, redirectUri });
-    markFacebookSessionPopup(true);
-    const popup = window.open(url, 'facebook-connect', 'width=600,height=720');
-    if (!popup) { markFacebookSessionPopup(false); window.location.assign(url); }
-  }, [namespace]);
+  const facebook = useFacebookConnect(namespace);
 
   const identityTree = (
     <IdentityTree
       nodeId="cleaker.keys"
       username={username}
       namespace={namespace}
-      onNavigate={() => { /* the agent shows keys only */ }}
+      onNavigate={() => { /* the window shows keys only */ }}
       access="edit"
       hide={(rel) => hideKeysInTree(rel, false)}
       onPathChange={setPath}
       initialOpen
       filterQuery={treeSearch?.query}
-      facebookConnect={{ enabled, onClick, connected: fb.connected, ...(fb.notice ? { notice: fb.notice } : {}) }}
+      facebookConnect={facebook.facebookConnect}
     />
   );
 
@@ -150,9 +101,9 @@ function KeysTree({
         onNavigate={() => {}}
         onLogout={() => {}}
       />
-      {message && (
+      {(facebook.facebookConnect?.message || facebook.pagesNotice) && (
         <Typography data-agent="facebook-connect-status" variant="body2" sx={{ mt: 1.5, px: 0.5, color: 'text.secondary' }}>
-          {message}
+          {facebook.facebookConnect?.message || facebook.pagesNotice}
         </Typography>
       )}
     </CornerMark>

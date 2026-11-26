@@ -4,9 +4,9 @@ import {
   getCustomKeys, listCustomKeyGroups, lockServiceKeys, saveCustomKeys, setCustomKeyDisplay, setCustomKeyStatus,
 } from '../src/gui/All.This/Cleaker/Keys/serviceKeyVault';
 import {
-  FACEBOOK_SCOPES, applyFacebookAccounts, beginFacebookConnect, clearFacebookSession,
-  exchangeFacebookCode, facebookAuthUrl, facebookRedirectUri, finishFacebookConnect,
-  generatePkce, hasFacebookAppCredentials, isFacebookOAuthReturn, isMetaGraphUrl,
+  FACEBOOK_SCOPES, FACEBOOK_EXCHANGE_PATH, FACEBOOK_APP_PATH, applyFacebookAccounts, beginFacebookConnect, clearFacebookSession,
+  exchangeFacebookCodeViaServer, facebookAuthUrl, facebookRedirectUri, finishFacebookConnect,
+  generatePkce, hasFacebookAppCredentials, isFacebookOAuthReturn, isMetaGraphUrl, publicFacebookAppId,
   fetchFacebookProfile, listFacebookAccounts, markFacebookSessionPopup, writeFacebookSession, randomState, safeProfilePicture, readFacebookReturn, readFacebookSession, slugPageName, slugSegment, fetchFacebookApp, refreshFacebookAppDisplay,
 } from '../src/gui/All.This/Cleaker/Keys/facebookConnect';
 
@@ -51,6 +51,21 @@ function graphFetch(script: (url: URL, calls: FetchCall[]) => { status?: number;
     calls.push({ url: url.toString(), method: String(init?.method || 'GET') });
     assert.ok(isMetaGraphUrl(url.toString()), `fetch left Meta: ${url.origin}`);
     const out = script(url, calls);
+    const body = typeof out.body === 'string' ? out.body : JSON.stringify(out.body);
+    return new Response(body, { status: out.status ?? 200, headers: { 'content-type': 'application/json' } });
+  };
+  return { run, calls };
+}
+
+
+function connectFetch(script: (url: URL, init: RequestInit | undefined, calls: FetchCall[]) => { status?: number; body: unknown }) {
+  const calls: FetchCall[] = [];
+  const run: typeof fetch = async (input, init) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? String(input) : (input as Request).url);
+    calls.push({ url: url.toString(), method: String(init?.method || 'GET') });
+    const local = url.pathname === FACEBOOK_EXCHANGE_PATH || url.pathname === FACEBOOK_APP_PATH;
+    if (!local) assert.ok(isMetaGraphUrl(url.toString()), `fetch left Meta: ${url.origin}`);
+    const out = script(url, init, calls);
     const body = typeof out.body === 'string' ? out.body : JSON.stringify(out.body);
     return new Response(body, { status: out.status ?? 200, headers: { 'content-type': 'application/json' } });
   };
@@ -110,35 +125,33 @@ await test('F3 session stores only PKCE + namespace, never secrets; state must m
   assert.equal(readFacebookSession(), null);
 });
 
-await test('F4 exchange tries PKCE first, then secret, then long token — only to graph.facebook.com', async () => {
-  const { run, calls } = graphFetch((url, all) => {
-    if (url.pathname.endsWith('/oauth/access_token') && !url.searchParams.get('grant_type')) {
-      if (!url.searchParams.get('client_secret')) return { status: 400, body: { error: { message: 'Missing client_secret', code: 1 } } };
-      assert.equal(url.searchParams.get('code'), 'the-code');
-      assert.equal(url.searchParams.get('code_verifier'), 'ver');
-      assert.equal(url.searchParams.get('client_secret'), APP_SECRET);
-      return { body: { access_token: SHORT_TOKEN, expires_in: 3600 } };
-    }
-    if (url.searchParams.get('grant_type') === 'fb_exchange_token') {
-      assert.equal(url.searchParams.get('fb_exchange_token'), SHORT_TOKEN);
-      assert.equal(url.searchParams.get('client_secret'), APP_SECRET);
-      return { body: { access_token: USER_TOKEN, expires_in: 60 * 24 * 60 * 60 } };
+await test('F4 the window exchanges the code with the server, never with Facebook and never with the App Secret', async () => {
+  const { run, calls } = connectFetch((url, init) => {
+    if (url.pathname === FACEBOOK_EXCHANGE_PATH) {
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      assert.equal(init?.method, 'POST');
+      assert.equal(body.code, 'the-code');
+      assert.equal(body.verifier, 'ver');
+      assert.equal(body.redirectUri, 'http://127.0.0.1:5320/oauth/callback');
+      assert.ok(!('clientSecret' in body) && !('client_secret' in body) && !('secret' in body) && !('appSecret' in body));
+      const dumped = JSON.stringify(body) + url.toString();
+      for (const s of SECRETS) assert.ok(!dumped.includes(s), 'App Secret must not leave the window');
+      return { body: { ok: true, token: USER_TOKEN, expires: '2027-01-15' } };
     }
     throw new Error(`unexpected ${url}`);
   });
-  const out = await exchangeFacebookCode({
-    code: 'the-code', redirectUri: 'http://127.0.0.1:5320/oauth/callback', verifier: 'ver',
-    clientId: '123', clientSecret: APP_SECRET, now: Date.parse('2026-11-15T22:00:00-06:00'), fetch: run,
+  const out = await exchangeFacebookCodeViaServer({
+    code: 'the-code', redirectUri: 'http://127.0.0.1:5320/oauth/callback', verifier: 'ver', fetch: run,
   });
   assert.equal(out.ok, true);
   if (out.ok) {
     assert.equal(out.user.token, USER_TOKEN);
-    // now 2026-11-15T22:00:00-06:00 + 60 days = 2027-01-15T04:00:00Z
     assert.equal(out.user.expires, '2027-01-15');
     assert.equal(out.user.scopes, FACEBOOK_SCOPES);
   }
-  assert.equal(calls.length, 3);
-  assert.ok(calls.every((c) => new URL(c.url).hostname === 'graph.facebook.com'));
+  assert.equal(calls.length, 1);
+  assert.equal(new URL(calls[0].url).pathname, FACEBOOK_EXCHANGE_PATH);
+  assert.notEqual(new URL(calls[0].url).hostname, 'graph.facebook.com');
 });
 
 await test('F5 me/accounts paginates and rejects a non-Meta next URL', async () => {
@@ -218,22 +231,25 @@ await test('F6 apply writes user + pages + instagram refs, reconnect marks missi
   assert.equal(slugPageName('El Buen Tono'), 'el-buen-tono');
 });
 
-await test('F7 finishFacebookConnect runs the full sequence; 190 is a plain error; secrets stay off non-Meta hosts and localStorage', async () => {
-  await saveCustomKeys(NS, 'meta.app', { id: '123456789', secret: APP_SECRET, redirect: 'http://127.0.0.1:5320/agent.html' }, PW);
+await test('F7 finishFacebookConnect runs the full sequence without a user-level App Secret; a failed exchange stays a plain error', async () => {
   const { session } = await beginFacebookConnect({ namespace: NS, clientId: '123456789', redirectUri: 'http://127.0.0.1:5320/agent.html' });
-  const { run, calls } = graphFetch((url) => {
-    if (url.pathname.endsWith('/oauth/access_token') && !url.searchParams.get('grant_type')) {
-      return { body: { access_token: SHORT_TOKEN, expires_in: 3600 } };
+  const { run, calls } = connectFetch((url, init) => {
+    if (url.pathname === FACEBOOK_EXCHANGE_PATH) {
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      assert.ok(!('secret' in body) && !('client_secret' in body) && !('clientSecret' in body));
+      for (const s of SECRETS) assert.ok(!JSON.stringify(body).includes(s));
+      return { body: { ok: true, token: USER_TOKEN, expires: '2027-01-15' } };
     }
-    if (url.searchParams.get('grant_type') === 'fb_exchange_token') {
-      return { body: { access_token: USER_TOKEN, expires_in: 5184000 } };
-    }
+    if (url.pathname === FACEBOOK_APP_PATH) return { body: { appId: '123456789' } };
     if (url.pathname.endsWith('/me/accounts')) {
       return { body: { data: [{ id: '111', name: 'elbuentono', access_token: PAGE_TOKEN }] } };
     }
     if (url.pathname.endsWith('/me')) {
       assert.equal(url.searchParams.get('fields'), 'id,name,picture.type(large)');
       return { body: { id: '4242', name: 'Test Person', picture: { data: { url: 'https://scontent.xx.fbcdn.net/v/t1/p.jpg?oh=1', is_silhouette: false } } } };
+    }
+    if (url.pathname.endsWith('/123456789')) {
+      return { body: { id: '123456789', name: 'Cleaker' } };
     }
     throw new Error(`unexpected ${url}`);
   });
@@ -244,17 +260,23 @@ await test('F7 finishFacebookConnect runs the full sequence; 190 is a plain erro
   assert.equal(me.publicValues!.name, 'Test Person');
   assert.equal(me.publicValues!.picture, 'https://scontent.xx.fbcdn.net/v/t1/p.jpg?oh=1');
   assert.ok(!JSON.stringify(me).includes(USER_TOKEN), 'the user token is not public');
-  assert.ok(calls.every((c) => new URL(c.url).hostname === 'graph.facebook.com'));
+  assert.ok(calls.some((c) => new URL(c.url).pathname === FACEBOOK_EXCHANGE_PATH));
+  assert.ok(calls.every((c) => {
+    const host = new URL(c.url).hostname;
+    return host === 'graph.facebook.com' || new URL(c.url).pathname.startsWith('/oauth/facebook/');
+  }));
+  assert.ok(calls.every((c) => !c.url.includes('client_secret')));
   assertNoPlaintext();
 
-  const { run: dead } = graphFetch(() => ({ status: 400, body: { error: { message: 'Invalid OAuth access token', code: 190 } } }));
-  const err = await exchangeFacebookCode({
-    code: 'bad', redirectUri: session.redirectUri, verifier: session.verifier,
-    clientId: '123456789', clientSecret: APP_SECRET, fetch: dead,
+  const { run: dead } = connectFetch((url) => {
+    if (url.pathname === FACEBOOK_EXCHANGE_PATH) return { status: 400, body: { ok: false, message: 'Invalid OAuth access token (error 190)' } };
+    throw new Error(`unexpected ${url}`);
+  });
+  const err = await exchangeFacebookCodeViaServer({
+    code: 'bad', redirectUri: session.redirectUri, verifier: session.verifier, fetch: dead,
   });
   assert.equal(err.ok, false);
   if (!err.ok) {
-    assert.equal(err.code, 190);
     assert.match(err.message, /error 190/);
   }
 });
@@ -413,9 +435,9 @@ await test('F13 meta.app gets the App name + icon as display info; id/secret/red
   const before = listCustomKeyGroups(NS).find((g) => g.name === 'meta.app')!;
   const { session } = await beginFacebookConnect({ namespace: NS, clientId: '123456789', redirectUri: REDIRECT });
   const LOGO = 'https://static.xx.fbcdn.net/rsrc.php/app-logo.png';
-  const { run, calls } = graphFetch((url) => {
-    if (url.pathname.endsWith('/oauth/access_token') && !url.searchParams.get('grant_type')) return { body: { access_token: SHORT_TOKEN, expires_in: 3600 } };
-    if (url.searchParams.get('grant_type') === 'fb_exchange_token') return { body: { access_token: USER_TOKEN, expires_in: 5184000 } };
+  const { run, calls } = connectFetch((url) => {
+    if (url.pathname === FACEBOOK_EXCHANGE_PATH) return { body: { ok: true, token: USER_TOKEN, expires: '2027-01-15' } };
+    if (url.pathname === FACEBOOK_APP_PATH) return { body: { appId: '123456789' } };
     if (url.pathname.endsWith('/me/accounts')) return { body: { data: [] } };
     if (url.pathname.endsWith('/me')) return { body: { id: '4242', name: 'Test Person' } };
     if (url.pathname.endsWith('/123456789')) {
@@ -436,7 +458,8 @@ await test('F13 meta.app gets the App name + icon as display info; id/secret/red
   assert.deepEqual(vals, { id: '123456789', secret: APP_SECRET, redirect: REDIRECT }, 'secret kept, nothing added');
   const appCall = calls.find((c) => new URL(c.url).pathname.endsWith('/123456789'))!;
   assert.ok(!appCall.url.includes(APP_SECRET), 'the app call never carries the secret');
-  assert.ok(calls.every((c) => new URL(c.url).hostname === 'graph.facebook.com'));
+  assert.ok(calls.every((c) => new URL(c.url).hostname === 'graph.facebook.com' || new URL(c.url).pathname.startsWith('/oauth/facebook/')));
+  assert.ok(calls.every((c) => !c.url.includes('client_secret')));
   assertNoPlaintext();
   // The user edits meta.app later (re-save replaces fields): display stays. A status change keeps it too.
   await saveCustomKeys(NS, 'meta.app', { id: '123456789', secret: APP_SECRET, redirect: 'https://cleaker.me/oauth/callback' }, PW);

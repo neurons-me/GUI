@@ -28,6 +28,7 @@ import { querySearchGraph } from '@/runtime/searchGraph';
 import IdentityTree from '@/gui/All.This/Cleaker/IdentityTree';
 import { hideKeysInTree, isRootOwnerView } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
 import { hasIdentityVault } from '@/core/identity/localIdentityVault';
+import { useFacebookConnect } from '@/gui/All.This/Cleaker/Keys/useFacebookConnect';
 import { QrTreeSearchProvider, useQrTreeSearch } from '@/gui/All.This/Cleaker/qrTreeSearch';
 import { SelectionProvider, useOptionalSelection } from '@/runtime/selection';
 import { RuntimeInspector } from '@/runtime/inspector';
@@ -1550,6 +1551,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   const isNamespaceLanding = location.pathname === '/' || location.pathname === IDENTITY_ROUTE;
   const [qrMenuOpen, setQrMenuOpen] = useState(false);
   const treeSearch = useQrTreeSearch();
+  const facebook = useFacebookConnect(authenticated && session?.semanticNamespace ? String(session.semanticNamespace) : null);
   useEffect(() => {
     if (treeSearch && treeSearch.openTick > 0) setQrMenuOpen(true);
   }, [treeSearch?.openTick]);
@@ -2209,6 +2211,7 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     rootNamespace={namespaceRootLabel}
                     initialOpen={Boolean(treeSearch?.query.trim())}
                     filterQuery={treeSearch?.query}
+                    facebookConnect={facebook.facebookConnect}
                   />
                 ) : undefined}
                 onNavigate={(to) => { setQrMenuOpen(false); navigate(to); }}
@@ -2216,6 +2219,11 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                 onSignIn={() => { setQrMenuOpen(false); if (location.pathname !== '/') navigate('/'); }}
               />
             </CleakerQrMenu>
+              {facebook.pagesNotice ? (
+                <Typography data-facebook-pages-notice="" variant="body2" sx={{ mt: 1.5, px: 0.5, color: 'text.secondary' }}>
+                  {facebook.pagesNotice}
+                </Typography>
+              ) : null}
           </Box>
         </ClickAwayListener>
       )}
