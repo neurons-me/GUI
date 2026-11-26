@@ -1618,9 +1618,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
     namespace: positionIdentity,
     // the SEMANTIC path only: `currentNodePath` is where the GUI navigated, not a node of the namespace
     path: props.semanticPath ?? '/',
-    page: typeof window !== 'undefined'
-      ? { origin: window.location.origin, host: window.location.host, protocol: window.location.protocol, pathname: window.location.pathname }
-      : null,
+    // the page's exact place: path, query and fragment are part of the surface
+    page: typeof window !== 'undefined' ? window.location : null,
     root: {
       status: monadOff ? 'off' : verifiedRoot.status,
       cleakerEndpoint: verifiedRoot.cleakerEndpoint,

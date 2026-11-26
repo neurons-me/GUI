@@ -140,12 +140,13 @@ export function cornerEndpoint(resolved: ResolvedNamespace, page?: Pick<PageAddr
 }
 
 /** `me @ where`, or `where` alone while no namespace is chosen, or the namespace alone when the page IS it. */
-export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string; pathname?: string }, source?: NamespaceSource): string {
+export function cornerLabel(namespace: string | null, page: { host: string; protocol: string; hostname: string; pathname?: string; search?: string; hash?: string }, source?: NamespaceSource): string {
   const where = unresolvedPosition(page);
   if (!namespace) return where;
   // an address is shown as one, never as the namespace the page declared
   if (source === 'address') return `${namespace} (address)`;
-  return namespace === page.hostname ? namespace : `${namespace} @ ${where}`;
+  // the page IS the namespace only at its root; anywhere inside it, where you are is still shown
+  return namespace === page.hostname && where === unresolvedPosition({ protocol: page.protocol, host: page.host }) ? namespace : `${namespace} @ ${where}`;
 }
 
 export function qrSvg(value: string): string {

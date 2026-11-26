@@ -3,7 +3,7 @@
 // Four things, kept apart (and kept apart internally; only the DISPLAY is abbreviated):
 //   namespace   which .me you are reading
 //   path        which node of it (the semantic path)
-//   surface     where the page was loaded from (the address bar's origin)
+//   surface     where the page IS: its exact place (host + path + query + fragment), as the address bar shows it
 //   binding     whether that origin has been CHECKED to answer for that namespace
 //
 // What the NRP says (neurons-me.github.io/docs/NRP):
@@ -16,8 +16,9 @@
 //     which the parser reads as surface "localhost/netget". A bare surface is a hostname; with a port or scheme it is a
 //     quoted URI.
 //
-// When is `@ surface` left out?  Only when the namespace is BOUND to this very origin:
-//     cleaker.me/ @ cleaker.me   ->   cleaker.me/
+// When is `@ surface` left out?  Only when the namespace is BOUND to this very origin AND the page is at that origin's
+// root (no path, query or fragment) -- the surface then says nothing the namespace does not:
+//     cleaker.me @ cleaker.me   ->   cleaker.me        (but cleaker.me @ cleaker.me/users stays: that is where you are)
 // "Bound" is a checked fact, not a resemblance of names: the origin the page came from (scheme + host + port, exactly)
 // is the transport that was verified for the namespace, AND that transport answered for that namespace (its own
 // /__surface says so). Two hosts that look alike, a different port, `www.`, a handle under a host: none is bound
@@ -28,13 +29,19 @@
 // Short on purpose (every character of the label is drawn around a QR):
 //   * the namespace's root is the namespace itself: `cleaker.me`, not `cleaker.me/` (the parser's canonical form drops
 //     the root slash; a path is shown only when it is not the root);
-//   * the surface is a bare `host` or `host:port` (both valid bare surfaces); the scheme is written only when it is news:
-//     `http:` on a host that is not loopback (`"http://cleaker.me"`). `https:` is the default and loopback http is the
-//     norm for a local page, so neither is printed. The scheme is still part of the origin the binding compares
-//     (exactly); it is only left out of the text. IPv6 literals are not bare surfaces and stay quoted.
+//   * the surface is the page's exact place, written bare (`neurons-me.github.io/Cleaker`, `localhost:5173/users`);
+//     the scheme is written only when it is news: `http:` on a host that is not loopback (`"http://cleaker.me/x"`).
+//     The scheme is still part of the origin the binding compares (exactly); it is only left out of the text. IPv6
+//     literals are not bare surfaces and stay quoted. A trailing `/` and `index.html` are dropped (same document).
 //
-// The path is the SEMANTIC path only. A GUI route (`/netget`, `/users`) is where the page navigates, not a node of the
-// namespace, and is never printed here unless the door declares it (the main server's door does: see the caller).
+// The surface rule lives in cleaker (`surfaceOf`, `node.position()`): one rule for every place that draws a position.
+// The place is never shortened here -- a highlighted section of a page has to lead back to exactly that section
+// (`es.wikipedia.org/wiki/Pastor_alemán#Historia`); a long label is for the drawing to trim (QR.me trims the middle).
+//
+// The PATH (`namespace/path`) is the SEMANTIC path only. A GUI route (`/netget`, `/users`) is not a node of the
+// namespace: it is part of the SURFACE (where the page is), after the `@`, never before it.
+
+import { surfaceOf, type PagePlace } from 'cleaker';
 
 /** `scheme://host[:port]` of a URL string, lowercased; '' when it is not one. */
 export function originOf(url: string): string {
@@ -105,41 +112,35 @@ function onlySchemeDiffers(pageOrigin: string, endpoint: string): boolean {
  */
 export function fileSurface(page: { protocol: string; pathname?: string } | null | undefined): { compact: string; full: string } | null {
   if (!page || String(page.protocol || '').toLowerCase().replace(/:?$/, ':') !== 'file:') return null;
-  const path = String(page.pathname || '');
-  if (!path || path === '/') return { compact: 'file://', full: '"file:///"' };
-  const segments = path.split('/').filter(Boolean);
-  let name = segments[segments.length - 1] || '';
-  try { name = decodeURIComponent(name); } catch { /* keep it as written */ }
-  return { compact: name || 'file://', full: `"file://${path}"` };
+  return surfaceOf({ protocol: 'file:', host: '', pathname: page.pathname });
 }
 
-const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|[^.:\s]+\.localhost)(?::\d+)?$/i;
+/** A page's location: window.location, a URL, or a plain object with these parts. */
+export type PageLocation = PagePlace & { origin?: string };
 
 /**
- * The surface as the grammar writes it, as short as it can be: a bare `host` or `host:port`; quoted with its scheme only
- * when the scheme is news (`http:` on a non-loopback host), is the REASON the page is not bound to the namespace
- * (`forceScheme`), or the host is not a bare token (an IPv6 literal).
+ * The surface as the grammar writes it (cleaker's `surfaceOf`): the page's exact place, bare when the scheme is the usual
+ * one; quoted with its scheme when the scheme is news (`http:` on a non-loopback host), is the REASON the page is not
+ * bound to the namespace (`forceScheme`), or the host is not a bare token (an IPv6 literal).
  */
-export function surfaceToken(pageUrl: { host: string; protocol: string; pathname?: string }, forceScheme = false): string {
-  const file = fileSurface(pageUrl);
-  if (file) return forceScheme ? file.full : file.compact;
-  const host = String(pageUrl.host || '').trim().toLowerCase();
-  if (!host) return '';
-  const scheme = String(pageUrl.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
-  const schemeIsNews = scheme === 'http:' && !LOOPBACK.test(host);
-  if (forceScheme || schemeIsNews || host.startsWith('[')) return `"${scheme}//${host}"`;
-  return host;
+export function surfaceToken(pageUrl: PageLocation, forceScheme = false): string {
+  return surfaceOf(pageUrl, { forceScheme })?.compact ?? '';
+}
+
+/** The page is at its origin's root: no path, query or fragment beyond what the surface drops as noise. */
+function atOriginRoot(page: PageLocation): boolean {
+  return surfaceOf(page)?.compact === surfaceOf({ protocol: page.protocol, host: page.host })?.compact;
 }
 
 export type PositionExpression = {
   /** What is drawn: short, abbreviated where it is safe to. */
   compact: string;
   /**
-   * Unambiguous, for copying or executing: namespace, semantic path and the page's FULL origin (scheme included, quoted),
-   * whether or not the two coincide. The compact form is not to be pasted anywhere that has to mean the same thing.
+   * Unambiguous, for copying or executing: namespace, semantic path and the page's exact place (scheme included,
+   * quoted), whether or not the two coincide. The compact form is not to be pasted anywhere that has to mean the same thing.
    */
   full: string;
-  /** The namespace is bound to the page's own origin (checked), so `compact` leaves the surface out. */
+  /** The namespace is bound to the page's own origin (checked). `compact` leaves the surface out when the page is at its root. */
   bound: boolean;
 };
 
@@ -151,7 +152,8 @@ export function positionExpression(input: {
   namespace: string;
   /** Semantic path; '' or '/' is the root. */
   path?: string;
-  page: { origin: string; host: string; protocol: string; pathname?: string } | null;
+  /** The page's location (window.location works as is): path, query and fragment are part of the surface. */
+  page: (PageLocation & { origin: string }) | null;
   root: RootCheck | null | undefined;
 }): PositionExpression {
   const ns = String(input.namespace || '').trim();
@@ -165,10 +167,10 @@ export function positionExpression(input: {
   // a file is never bound to a namespace: it is a place on this device, not a door any namespace answers at
   if (file) return { compact: `${base} @ ${file.compact}`, full: `${base} @ ${file.full}`, bound: false };
   if (!page || !page.host) return { compact: base, full: base, bound: false };
-  const scheme = String(page.protocol || 'http:').toLowerCase().replace(/:?$/, ':');
-  const full = `${base} @ "${scheme}//${String(page.host).trim().toLowerCase()}"`;
+  const full = `${base} @ ${surfaceOf(page)?.full ?? ''}`;
   const bound = isBoundToPage({ namespace: ns, pageOrigin: page.origin, root: input.root });
-  if (bound) return { compact: base, full, bound: true };
+  // bound and at the origin's root: the surface adds nothing. Bound but somewhere inside it: that place is still shown.
+  if (bound) return { compact: atOriginRoot(page) ? base : `${base} @ ${surfaceToken(page)}`, full, bound: true };
   // Not collapsed. If the SCHEME is the only reason (same host and port, confirmed for this namespace), it is printed:
   // `x @ x` would show that a difference exists and then hide which one.
   const schemeExplains = confirmationCovers(ns, input.root) && onlySchemeDiffers(page.origin, input.root!.cleakerEndpoint);
@@ -180,7 +182,7 @@ export function positionExpression(input: {
  * a `.me` answers; until then nothing stands in for it -- the `.me` is not guessed from the address (see
  * shownNamespace), and no placeholder is shown. `?` only when there is no page at all.
  */
-export function unresolvedPosition(page: { host: string; protocol: string; pathname?: string } | null | undefined): string {
+export function unresolvedPosition(page: PageLocation | null | undefined): string {
   const where = page ? surfaceToken(page) : '';
   return where || '?';
 }

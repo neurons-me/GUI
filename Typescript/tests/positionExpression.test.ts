@@ -236,6 +236,31 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   assert.equal(unresolvedPosition({ host: '', protocol: 'file:' }), 'file://');
 }
 
+// ── the surface is the EXACT place: path, query and fragment (cleaker's surfaceOf) ─────────────────────────────────────
+{
+  const at = (url: string) => { const u = new URL(url); return { origin: u.origin, host: u.host, protocol: u.protocol, pathname: u.pathname, search: u.search, hash: u.hash }; };
+  const root = confirmed('https://cleaker.me', 'cleaker.me');
+  // another site, inside it: where you are, exactly
+  assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://neurons-me.github.io/Cleaker/'), root }), 'cleaker.me @ neurons-me.github.io/Cleaker');
+  const wiki = positionExpression({ namespace: 'ana.cleaker.me', page: at('https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia'), root: null });
+  assert.equal(wiki.compact, 'ana.cleaker.me @ es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia', 'a section of a page is a place');
+  assert.equal(wiki.full, 'ana.cleaker.me @ "https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia"');
+  // bound: collapses only at the origin's root; a route inside it is still where you are (after the @, not a node)
+  assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://cleaker.me/'), root }), 'cleaker.me');
+  assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://cleaker.me/index.html'), root }), 'cleaker.me', 'index.html is the root document');
+  const inside = positionExpression({ namespace: 'cleaker.me', page: at('https://cleaker.me/users?q=ana'), root });
+  assert.deepEqual(inside, { compact: 'cleaker.me @ cleaker.me/users?q=ana', full: 'cleaker.me @ "https://cleaker.me/users?q=ana"', bound: true });
+  assert.equal(positionLabel({ namespace: 'cleaker.me', path: '/profile', page: at('https://cleaker.me/#notes'), root }), 'cleaker.me/profile @ cleaker.me#notes');
+  // the route never becomes the namespace's path: the parser reads it as the surface
+  const parsed: any = parseNRPExpression('cleaker.me @ neurons-me.github.io/Cleaker');
+  assert.equal(parsed.syntaxValid, true);
+  assert.equal(parsed.ast.namespace.value, 'cleaker.me');
+  assert.equal(parsed.ast.surface, 'neurons-me.github.io/Cleaker');
+  // nothing answered yet: the place alone
+  const { unresolvedPosition } = await import('../src/react/positionExpression');
+  assert.equal(unresolvedPosition(at('http://localhost:5173/users#keys')), 'localhost:5173/users#keys');
+}
+
 console.log('positionExpression: ok');
 
 

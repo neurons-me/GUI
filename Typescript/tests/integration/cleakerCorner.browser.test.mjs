@@ -112,6 +112,8 @@ async function main() {
       await page.goto(`${demo.origin}/cleakerCorner.html`);
       await page.waitForSelector('[data-cleaker]');
       const host = new URL(demo.origin).host;
+      // the surface is the page's EXACT place (cleaker's surfaceOf): host + path + query + fragment
+      const placeOf = (url) => { const u = new URL(url); return u.host + u.pathname.replace(/\/index\.html?$/i, '/').replace(/\/+$/, '') + u.search + u.hash; };
       const addressLabel = `${new URL(demo.origin).hostname} (address)`;
       check('1.1 one element appears, with its own shadow root', await page.evaluate(() => document.querySelectorAll('[data-cleaker]').length === 1 && !!document.querySelector('[data-cleaker]').shadowRoot));
       await page.waitForFunction(() => ['ok', 'off'].includes(document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state')), null, { timeout: 8000 }).catch(() => {});
@@ -150,7 +152,7 @@ async function main() {
       await submit('cleaker.me');
       await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
       const chosen = await inShadow(page, `return { label: shadow.querySelector('.label .text').textContent, state: shadow.querySelector('.dot').getAttribute('data-state'), value: shadow.querySelector('.qr').getAttribute('data-value') }`);
-      check('2.2 choosing cleaker.me: `cleaker.me @ <page>`, it answered, the QR says both (namespace + at=<page>)', chosen.label === `cleaker.me @ ${host}` && chosen.state === 'ok' && /^https:\/\/cleaker\.me/.test(chosen.value) && new URL(chosen.value).searchParams.get('at') === demo.origin, JSON.stringify(chosen));
+      check('2.2 choosing cleaker.me: `cleaker.me @ <page>`, it answered, the QR says both (namespace + at=<page>)', chosen.label === `cleaker.me @ ${placeOf(page.url())}` && chosen.state === 'ok' && /^https:\/\/cleaker\.me/.test(chosen.value) && new URL(chosen.value).searchParams.get('at') === demo.origin, JSON.stringify(chosen));
       const events = await page.evaluate(() => window.__events);
       check('2.3 the page is told which namespace answered (cleaker:namespace event)', events.length >= 1 && events.every((e) => e === 'cleaker.me'), JSON.stringify(events));
       check('2.4 only its public /__surface was asked', cleaker.calls.every((c) => /\/__surface/.test(c.path)) && cleaker.calls.length >= 1, JSON.stringify(cleaker.calls.map((c) => c.path)));
@@ -161,7 +163,7 @@ async function main() {
       await inShadow(page, `shadow.querySelector('.qr').click(); shadow.querySelector('input').value = ''; shadow.querySelector('form').requestSubmit()`);
       await page.reload();
       await page.waitForSelector('[data-cleaker]');
-      check('2.6 choosing none shows the page\'s address alone, also after a reload', (await label(page)) === host, await label(page));
+      check('2.6 choosing none shows the page\'s address alone, also after a reload', (await label(page)) === placeOf(page.url()), await label(page));
       await context.close();
     }
     // the author starts it with no namespace: data-namespace="" / namespace: null
@@ -169,7 +171,7 @@ async function main() {
       const { context, page } = await newPage();
       await page.goto(`${demo.origin}/cleakerCorner.html?namespace=`);
       await page.waitForSelector('[data-cleaker]');
-      check('2.7 an author can start it with no namespace', (await label(page)) === new URL(demo.origin).host, await label(page));
+      check('2.7 an author can start it with no namespace', (await label(page)) === `${new URL(demo.origin).host}/cleakerCorner.html?namespace=`, await label(page));
       await context.close();
     }
 
