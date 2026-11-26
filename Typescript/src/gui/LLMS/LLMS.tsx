@@ -29,6 +29,7 @@ function useVars(mode: 'theme' | 'css' | undefined): React.CSSProperties {
   const fg = v('text-primary', p.text.primary), syn = (r: string, base: string) => (css ? `var(--me-syn-${r}, ${mix(base, 78, fg)})` : mix(base, 78, fg));
   return {
     '--llms-fg': fg, '--llms-fg2': v('text-secondary', p.text.secondary), '--llms-grid': v('divider', p.divider),
+    '--llms-edge': mix(v('text-secondary', p.text.secondary), 70, v('primary-main', p.primary.main)),
     '--llms-acc': v('primary-main', p.primary.main), '--llms-bg': v('background-default', p.background.default),
     '--llms-paper': v('background-paper', p.background.paper), '--llms-ok': v('success-main', p.success.main),
     '--llms-path': syn('path', v('info-main', p.info.main)), '--llms-num': syn('number', v('warning-main', p.warning.main)),
@@ -143,7 +144,12 @@ type VB = [number, number, number, number];
 function Graph({ height, className }: { height?: number; className?: string }) {
   const c = useLLMS(), { props } = c, [big, setBig] = useState(false);
   const model: LLMSGraphModel | undefined = big && props.expandedGraph ? props.expandedGraph : props.graph;
-  const L = useMemo(() => layout(model?.nodes ?? []), [model]);
+  const theme = useTheme();
+  const space = useMemo(() => {
+    const px = (v: string | number) => (typeof v === 'number' ? v : parseFloat(String(v)) || 0);
+    return { column: Math.max(34, px(theme.spacing(6))), row: Math.max(22, px(theme.spacing(3))) };
+  }, [theme]);
+  const L = useMemo(() => layout(model?.nodes ?? [], space), [model, space]);
   const stat = props.graphMode === 'static', g0 = height ?? props.graphHeight ?? 180, h0 = stat ? Math.min(g0, Math.round(L.H + 40)) : g0, h = big ? Math.round(h0 * 1.9) : h0;
   const box = useRef<HTMLDivElement>(null), svg = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState<[number, number]>([320, h0]);
@@ -186,7 +192,8 @@ function Graph({ height, className }: { height?: number; className?: string }) {
       <div ref={box} className={`llms-gv${drag ? ' drag' : ''}${stat ? ' static' : ''}`} style={{ height: h }} {...(stat ? {} : { onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up })}>
         <svg ref={svg} viewBox={vb.map((n) => n.toFixed(1)).join(' ')} role="img" aria-label={c.labels.graph}>
           {L.rows.map((r) => { if (r.p === '' ) return null; const par = P.get(parentOf(r.p) ?? '') ?? P.get('')!;
-            return <path key={`e${r.p}`} d={`M${X(par.d) + 5} ${Y(par)} C${X(r.d) - 22} ${Y(par)} ${X(r.d) - 22} ${Y(r)} ${X(r.d) - 4} ${Y(r)}`} fill="none" stroke="var(--llms-grid)" strokeWidth={1.3} />; })}
+            const ax = L.tx(par), bx = X(r.d) - 4, cx = ax + Math.max(8, (bx - ax) * 0.6);
+            return <path key={`e${r.p}`} d={`M${ax} ${Y(par)} C${cx} ${Y(par)} ${cx} ${Y(r)} ${bx} ${Y(r)}`} fill="none" stroke="var(--llms-edge)" strokeWidth={1.6} />; })}
           {depPaths}
           {L.rows.map((r) => <GNode key={`n${r.p}`} r={r} x={X(r.d)} y={Y(r)} der={derived(r)} ch={!props.pending && c.m.changed.has(r.p)} val={props.pending ? '' : L.val(r)} onTap={() => tapNode(r)} />)}
         </svg>

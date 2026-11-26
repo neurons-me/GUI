@@ -150,7 +150,10 @@ export function opTokens(o: LLMSOp, m: Model): SynToken[] {
 export interface GRow { p: string; k: string; d: number; y: number; node?: LLMSNode; kids: number }
 export interface GLayout { rows: GRow[]; X: number[]; W: number; H: number; rx: number; ry: number; RH: number; CH: number; tx: (r: GRow) => number; val: (r: GRow) => string }
 
-export function layout(nodes: LLMSNode[]): GLayout {
+/** Optional column/row rhythm in px, from the .GUI theme. Both are floors: never tighter than the previous layout. */
+export type LayoutSpace = { column?: number; row?: number };
+
+export function layout(nodes: LLMSNode[], space?: LayoutSpace): GLayout {
   type T = { k: string; c: Record<string, T>; order: string[]; leaf?: LLMSNode; y?: number; d?: number; p?: string };
   const root: T = { k: '.me', c: {}, order: [] };
   nodes.forEach((lf) => { const ss = segs(lf.path); let n = root;
@@ -163,9 +166,10 @@ export function layout(nodes: LLMSNode[]): GLayout {
   lay(root, 1, '');
   const ry = Math.max(0, (y - 1) / 2);
   rows.push({ p: '', k: '.me', d: 0, y: ry, kids: root.order.length });
-  const RH = 22, CH = 6.4, XS: number[] = [12, 0];
+  const RH = Math.max(22, space?.row ?? 22), CH = 6.4, XS: number[] = [12, 0];
+  const COL = Math.max(34, space?.column ?? 34);
   rows.forEach((r) => { if (r.kids) XS[r.d + 1] = Math.max(XS[r.d + 1] ?? 0, r.k.length); });
-  for (let q = 1; q < XS.length; q++) XS[q] = XS[q - 1] + 34 + CH * (XS[q] ?? 0);
+  for (let q = 1; q < XS.length; q++) XS[q] = XS[q - 1] + COL + CH * (XS[q] ?? 0);
   const val = (r: GRow) => (r.node?.masked ? '●●●' : String(J(r.node?.value)).slice(0, 22));
   const tx = (r: GRow) => XS[r.d] + 10 + CH * (r.k.length + (r.node ? 1 + val(r).length : 0));
   const W = rows.reduce((mx, r) => Math.max(mx, tx(r) + 10), 120);

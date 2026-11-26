@@ -16,4 +16,8 @@ assert.equal(relOf(es, 'menu.total', ['menu.total']), 2);
 const L = layout([{ path: 'a.b', value: 1 }, { path: 'a.c', value: 2 }, { path: 'd[0].e', value: 'x' }]);
 assert.ok(L.rows.some((r) => r.p === '' && r.k === '.me'));
 assert.ok(L.rows.some((r) => r.p === 'd[0]' && r.k === 'd[0]'));
+const tight = layout([{ path: 'cafe.coffee', value: 45 }]);
+const air = layout([{ path: 'cafe.coffee', value: 45 }], { column: 48, row: 24 });
+assert.ok(air.X[1] - air.X[0] > tight.X[1] - tight.X[0]);
+assert.ok(air.RH >= tight.RH);
 console.log('llmsModel ok');
