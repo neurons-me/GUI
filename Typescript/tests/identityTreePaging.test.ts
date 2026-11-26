@@ -2,7 +2,7 @@
 // "+" first, a block of children, "…" last (then "Show less" once everything
 // is shown). Being inside the panel must not dump every child on one row.
 import assert from 'node:assert/strict';
-import { rowCapacity, visibleBlock } from '../src/gui/All.This/Cleaker/IdentityTree';
+import { rowCapacity, visibleBlock } from '../src/gui/All.This/Cleaker/identityTreePaging';
 
 const kids = (n: number) => Array.from({ length: n }, (_, i) => `k${i}`);
 const none = () => false;
