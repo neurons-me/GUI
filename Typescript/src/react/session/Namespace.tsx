@@ -46,7 +46,7 @@ import { setGuiLocalKernel } from '@/runtime/guiLocalKernel';
 import { Me } from '@/react/Me';
 import { useOptionalMe } from '@/react/useMe';
 import { useThemeContext } from '@/gui-internals/Contexts/ThemeContext';
-import { BarBrandCell, CompactAt, FloatingMark, IdentityButton, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, collapsedBarHandleProps, marksInBars, placeMarks, cornerOfSlot, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
+import { BarBrandCell, CompactAt, FloatingMark, IdentityText, LeftBarPosition, QrBadge, SiteBrand, TopBarPosition, WhereText, atWhere, collapsedBarHandleProps, marksInBars, placeMarks, cornerOfSlot, splitPosition, topBarPosition, useNarrowBars, whoLines, type MarkCorner } from '@/gui/Layout/Position/Position';
 import { endpointForRoot } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import NamespaceFavicon from './namespaceFavicon';
@@ -1554,7 +1554,17 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // Other namespace routes still open the identity panel (status, corners). Sidebar options that go to the
   // namespace render in the content area. On an app, those same options open as a modal (AppShell).
   const IDENTITY_ROUTE = '/.me';
-  const isNamespaceLanding = location.pathname === '/' || location.pathname === IDENTITY_ROUTE;
+  // The surface is the browser's path. useLocation alone misses a history.pushState (the router
+  // does not hear it); popstate and the router's own navigations both land here.
+  const [surfacePath, setSurfacePath] = useState(location.pathname);
+  useEffect(() => { setSurfacePath(window.location.pathname); }, [location.pathname]);
+  useEffect(() => {
+    const sync = () => setSurfacePath(window.location.pathname);
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+  const isNamespaceLanding = surfacePath === '/' || surfacePath === IDENTITY_ROUTE;
+
   const [qrMenuOpen, setQrMenuOpen] = useState(false);
   const treeSearch = useQrTreeSearch();
   const facebook = useFacebookConnect(authenticated && session?.semanticNamespace ? String(session.semanticNamespace) : null);
@@ -2056,40 +2066,19 @@ const GUI: React.FC<NamespaceProps> = (props) => {
   // in, the namespace below), @where beside the brand. Text only where the bar shows text; icons only, the marks alone.
   const splitParts = splitPosition(positionExpression || '');
   const splitWho = whoLines(splitParts.who, authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : null);
-  // In the left bar's head the QR and its text are ONE button (the QR's action: its menu). On the landing the QR is
-  // not a button, so the text keeps its own link there.
+  // The corner QR is its own control (the menu, off the landing). The text beside it, shown while the bar is
+  // open, is a separate link to the identity page. They are never one element: a joined cell would nest or
+  // overlap those targets, and with the bar open a click on the brand would land on the text.
   const splitIdentityText = resolvingNamespace
     ? <IdentityText title={positionExpressionFull} primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
     : <IdentityText title={positionExpressionFull} primary={splitWho.primary} secondary={splitWho.secondary} />;
-  const joinIdentity = Boolean(siteBrand) && marksPlacement.identity === 'left.brand' && !isNamespaceLanding;
-  // Without a brand the head's text is where you are. Off the landing the QR is a button (its menu): QR + text are that
-  // one button. On the landing the QR does nothing by itself, so the one element is the text's own link (the identity
-  // page), open bar only (the rail keeps the bare QR).
-  const joinPosition = !siteBrand && marksPlacement.identity === 'left.brand';
-  const positionHeadText = (
-    <LeftBarPosition
-      component="span"
-      besideMark={false}
-      title={positionExpressionFull}
-      data-position-expression={positionExpressionFull}
-      data-gui-component="namespace"
-    >
-      {resolvingNamespace ? (positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved) : positionExpression}
-    </LeftBarPosition>
-  );
   const marks = marksInBars(
     marksPlacement,
     {
-      identity: joinIdentity
-        ? <IdentityButton mark={positionBrand} text={splitIdentityText} />
-        : joinPosition
-          ? <IdentityButton mark={positionBrand} text={positionHeadText} openProps={isNamespaceLanding ? { component: Link, to: IDENTITY_ROUTE, type: undefined, 'aria-label': 'Open identity' } : undefined} />
-          : positionBrand,
-      identityText: joinIdentity ? undefined : siteBrand ? (
+      identity: positionBrand,
+      identityText: siteBrand ? (
         <Box component={Link} to={IDENTITY_ROUTE} title={positionExpressionFull} data-position-expression={positionExpressionFull} sx={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
-          {resolvingNamespace
-            ? <IdentityText primary={positionStatus === 'checking' ? 'resolviendo…' : positionUnresolved} />
-            : <IdentityText primary={splitWho.primary} secondary={splitWho.secondary} />}
+          {splitIdentityText}
         </Box>
       ) : undefined,
       brand: siteBrand ? <SiteBrand label={siteBrand.label} icon={siteBrand.icon} glyph={siteBrand.glyph} logo={siteBrand.logo} to="/" compact={marksPlacement.brand !== 'left.brand'} floating={typeof marksPlacement.brand === 'string' && marksPlacement.brand.startsWith('float:')} /> : undefined,
@@ -2132,8 +2121,8 @@ const GUI: React.FC<NamespaceProps> = (props) => {
             identitySlot: marksPlacement.identity,
           }),
           // Shown while the bar is open: with a brand, the text of the mark in the bar's head (who, or @where); without
-          // one, where you are written out, and the way to the identity page.
-          header: siteBrand ? marks.leftHeader : joinPosition ? undefined : (
+          // one, where you are written out. That text is the way to the identity page; the QR beside it is not.
+          header: siteBrand ? marks.leftHeader : (
             <LeftBarPosition
               besideMark={!!marks.leftBrand}
               component={Link}

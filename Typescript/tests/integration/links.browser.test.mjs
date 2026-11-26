@@ -304,7 +304,7 @@ async function main() {
       await selectLink(page, 'a.test');
       await page.waitForTimeout(600);
       check('6.7d back on A: monad0 again', (await kindOf()) === 'monad0', `kind: ${await kindOf()}`);
-      // each control does one thing: the brand goes to the identity page and never expands the bar; the arrow expands it and never navigates
+      // each control does one thing: the expand arrow never navigates; off the landing the corner QR opens the menu, and the text beside it is the link to the identity page
       const arrowBeforeNav = await page.evaluate(() => {
         const arrow = document.querySelector('button[aria-label="Expand sidebar"], button[aria-label="Collapse sidebar"]');
         const brand = document.querySelector('[data-gui-node-id="GUI.window.layout.bars.left.identity"]');
