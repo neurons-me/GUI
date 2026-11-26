@@ -21,6 +21,11 @@ met. **Open** marks what is not decided.
 result or proof; each server verifies and authorizes. The app never holds the seed, an unlock secret or a reusable
 session.
 
+> Proposed change ([App-Session-Contract.md](App-Session-Contract.md) D0, recommended by the owner): after approval the
+> app may hold a **resource session**. A resource server issues it for one app origin, with listed scopes and limits,
+> and it is revocable. The app still never holds the **agent's** own session or state, the seed, an unlock secret, the
+> agent key, or anything that signs as the identity.
+
 ## 2. App → agent
 
 | | Requirement | Negative tests |
@@ -38,6 +43,56 @@ session.
 | R6 | What is signed is exactly what was shown: one canonical encoding built from the approved operation; the host cannot change destination, namespace, method, query, payload or audience after approval. | N8 |
 | R7 | The signed bytes start with the v2 tag (`me-proof/2\n` + canonical JSON) and include: `v, op, method, path, query, bodyHash, nonce, issuedAt, expiresAt, origin, audience, keyId` (fields per [Identity-Proof-Migration.md](Identity-Proof-Migration.md) §1). A v2 message can never parse as v1. | N9 |
 | R8 | The signing key is the **agent key** registered in the keychain (section 5), not the HKDF branch key a page can derive from a typed secret. | N10 |
+
+## 3a. Admitted writes (`call`): one envelope, operations the agent admits explicitly
+
+**Status:** local prototype, 2026-11-15 (GUI only: `src/agent/protocol.ts`, `admittedOperations.ts`, `approval.ts`,
+`approvalKernel.ts`, `demo/agent.main.ts`). Nothing deployed; the monad and netget do not accept it yet.
+
+**A common request format, not a signer of arbitrary content.** Every app uses the same envelope for a write:
+
+| Field | Meaning |
+|---|---|
+| requesting origin | `MessageEvent.origin`, as the browser reports it to the agent; never a field of the message |
+| `audience` | the authority that verifies **and authorizes** (an origin; its URL is how to reach it, not all of its identity) |
+| `kind` | an id from the agent's admitted-operations table |
+| `method`, `path` | must equal what the admitted operation derives from the body |
+| `body`, `bodyHash` | the exact parameters; `bodyHash = sha256(canonicalBody(body))` (keys sorted at every level), recomputed by the agent |
+| `ttlMs` | bounded (5 s – 10 min) |
+| `appLabel` | optional app text: **untrusted, dropped at validation, never shown as the operation, never signed** |
+
+The signed bytes are `me-proof/2\n` + canonical JSON of
+`{v, op:"call", kind, identityHash, keyId, namespace, method, path, bodyHash, nonce, issuedAt, expiresAt, origin, audience}`
+(`namespace` is the approving identity's own namespace, chosen in the agent).
+
+**Admitted operations (`admittedOperations.ts`).** The agent accepts only kinds in its table. Each entry fixes the body's
+exact fields and schema, the only path, the agent's own wording, its effect rules and what the server decides. Anything
+else is refused before it is shown: an unknown kind, an extra or missing body field, another path, a bodyHash that does
+not match. First admitted kind: `netget.gateway.bootstrap`, body `{gatewayId, challenge}`, where `challenge` must be
+netget's `issueClaimChallenge` value (`{purpose:"gateway-claim", gatewayId, nonce, timestamp}`, canonical, same
+gatewayId); path `/api/v1/gateway/<gatewayId>/bootstrap`. A new app operation is a new table entry: the agent evolves.
+
+**What the person sees comes from the agent, not the app.** The operation's name and its effects come from the table
+entry. The effects are `.me` formulas evaluated in a **temporary kernel** created from an explicit public test seed
+(`agent-approval:public-test`): never persisted (an explicit seed is not written to `this.me.seed:v1`), nothing written to
+localStorage or IndexedDB, no identity material. The validated request's fields are written as facts (`request.*`), the
+agent's rules derive `effect.*`, and each effect is shown with its `me.explain()` trace (which request facts it came from).
+
+**Screen and signature from one frozen request (R6).** The request is copied out of the message, validated, deep-frozen,
+and its canonical approval bytes (`me-agent-approval/1\n` + canonical JSON of request id, origin and every operation field)
+and their digest are captured. Approving binds to that digest. Before signing, the digest is recomputed from the request
+pending at that moment; any change after it was shown (the app sending the same request id again with another field, a
+mutation) invalidates the approval and nothing is signed. A replacement is shown marked as changed, Approve is held for a
+moment, and the person approves again. No auto-sign and no saved grants in this cut; the app receives only
+`{bytes, signature}` and public identity fields.
+
+**`explain()` is traceability, never authorization.** It shows how a value was computed from facts; it does not make the
+facts true, and an app could produce a coherent explanation from false facts. Its output is not sent to the app or the
+server, and **a server must not accept an explanation (or any "authorized: true" value) as proof of authorization**.
+The authority verifies the signature, audience, origin, time, key status and replay, and then authorizes on its own
+current state (for the bootstrap: the install code was presented, the challenge is its own and unused, no other owner).
+The same `.me` + `explain()` approach can later model those server conditions from the state used to execute (monad,
+needs its own change and approval), alongside the transactional checks, not instead of them.
 
 ## 4. Agent → app: proof or result
 
@@ -199,5 +254,6 @@ current code and pass only when its requirement holds.
    several servers; refuse when unverifiable (section 6).
 4. **Recovery** for `agent-only` identities without a back door; whether an independent recovery authority exists
    (section 7).
+5. **The app's session after approval** (who, where, what, how long, how it is kept): [App-Session-Contract.md](App-Session-Contract.md).
 Plus, carried from the custody contract: transport details (popup handshake, return channel, browser support) and the
 exact first resource (the domain list) with its server-side projection.
