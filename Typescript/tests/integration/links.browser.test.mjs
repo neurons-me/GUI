@@ -53,7 +53,8 @@ const until = async (page, fn, arg, timeout = 3000) => {
 };
 
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
-const signedInAs = (page) => until(page, () => /Sign out/i.test(document.body.innerText), null, 2500);
+const hasSignOut = (page) => page.evaluate(() => !!document.querySelector('[data-cleaker-signout], button[aria-label="Sign out"]'));
+const signedInAs = (page) => until(page, () => !!document.querySelector('[data-cleaker-signout], button[aria-label="Sign out"]'), null, 2500);
 
 async function open(browser, harness, monads, { ns = 'a.test', transport = 'http://a.test', viewport } = {}) {
   const context = await browser.newContext(viewport ? { viewport } : undefined);
@@ -117,8 +118,8 @@ async function main() {
       if (selected) await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);
       const text = selected ? await bodyText(page) : '';
       check('1.2 the card is now about B', selected && /b\.test/.test(await cardTarget(page)), selected ? `target: ${await cardTarget(page)}` : notReached);
-      check('1.3 B does not borrow A\'s session', selected && !/Sign out/i.test(text) && (await page.locator('input[type=password]').count()) > 0,
-        selected ? (/Sign out/i.test(text) ? 'B\'s card shows A\'s session (Sign out)' : `form offered: ${(await page.locator('input[type=password]').count()) > 0}`) : notReached);
+      check('1.3 B does not borrow A\'s session', selected && !(await hasSignOut(page)) && (await page.locator('input[type=password]').count()) > 0,
+        selected ? ( (await hasSignOut(page)) ? 'B\'s card shows A\'s session (Sign out)' : `form offered: ${(await page.locator('input[type=password]').count()) > 0}`) : notReached);
       check('1.4 selecting B asked A for nothing', selected && a.count(/POST \/claims\/signIn/) === aOpensBefore, selected ? '' : notReached);
       const back = selected && await selectLink(page, 'a.test');
       check('1.5 selecting A again finds its session still open, unchanged', back && (await signedInAs(page)) && a.count(/POST \/claims\/signIn/) === aOpensBefore,
@@ -196,8 +197,8 @@ async function main() {
       releaseSignIn();                                     // A's reply arrives now, late
       await page.waitForTimeout(1500);
       const text = await bodyText(page);
-      check('4.1 the late reply does not make B look signed in', !/Sign out/i.test(text) && !/ana\.a\.test/.test(await cardTarget(page)),
-        /Sign out/i.test(text) ? 'B\'s card shows A\'s late session' : '');
+      check('4.1 the late reply does not make B look signed in', !(await hasSignOut(page)) && !/ana\.a\.test/.test(await cardTarget(page)),
+        (await hasSignOut(page)) ? 'B\'s card shows A\'s late session' : '');
       const back = await selectLink(page, 'a.test');
       check('4.2 it did land on A', back && (await signedInAs(page)) && /ana\.a\.test/.test(await bodyText(page)), back ? '' : 'could not select A');
       await context.close();
@@ -410,7 +411,7 @@ async function main() {
       check('8.1 two vaults with different identities: the card lists both and asks', shown && buttons === 2, `choices shown: ${buttons}`);
       check('8.2 nothing was sent while it was undecided', a.count(/POST \/claims\/signIn/) === 0, `sign-ins: ${a.count(/POST \/claims\/signIn/)}`);
       check('8.3 not signed in, and the stored vaults were not touched',
-        !/Sign out/i.test(await bodyText(page)) &&
+        !(await hasSignOut(page)) &&
         (await page.evaluate(() => JSON.stringify(Object.keys(localStorage).filter((k) => k.startsWith('this.me.identity-vault:')).sort().map((k) => [k, localStorage.getItem(k)])))) === before);
       if (shown) {
         await page.locator('[data-gui-node-id$=".vault-conflict"] button').first().click();
@@ -482,7 +483,7 @@ async function main() {
         shown ? '' : `server answered 403 to ${a.count(/POST \/claims\/signIn/)} sign-in(s) (sent ${sent}); card text: ${text.replace(/\s+/g, ' ').slice(0, 160)}`);
       const usable = await canSubmit(page);
       check(`11.${withVault ? 3 : 4} ${label}: not signed in, the form is usable again`,
-        !/Sign out/i.test(text) && usable, /Sign out/i.test(text) ? 'shows a session' : usable ? '' : 'submit stays disabled');
+        !(await hasSignOut(page)) && usable, (await hasSignOut(page)) ? 'shows a session' : usable ? '' : 'submit stays disabled');
       await context.close();
     }
 

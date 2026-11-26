@@ -21,7 +21,7 @@ function cardQrDiameterPx(): number {
 export type MeLoginStatusProps = {
   nodeId: string;
   authenticated: boolean;
-  qr: Pick<QRmeProps, 'value' | 'username' | 'status' | 'statusLabel' | 'perimeterLabel' | 'perimeterRootLabel'> & {
+  qr: Pick<QRmeProps, 'value' | 'username' | 'status' | 'statusLabel' | 'perimeterLabel' | 'perimeterRootLabel' | 'editableRoot' | 'editableRootValue' | 'onEditableRootChange' | 'perimeterHandleHref'> & {
     diameter?: number;
   };
   identityHash?: string | null;
@@ -67,6 +67,10 @@ export default function MeLoginStatus({
         statusLabel={qr.statusLabel}
         perimeterLabel={qr.perimeterLabel}
         perimeterRootLabel={qr.perimeterRootLabel}
+        perimeterHandleHref={qr.perimeterHandleHref}
+        editableRoot={qr.editableRoot}
+        editableRootValue={qr.editableRootValue}
+        onEditableRootChange={qr.onEditableRootChange}
         data-gui-node-id={`${nodeId}.qr`}
       />
       </Box>

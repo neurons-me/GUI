@@ -98,7 +98,7 @@ async function signIn(page, username, secret) {
   await page.fill('input[type=password]', secret);
   await page.click('button:has-text(".me"):not([disabled])', { timeout: 3000 });
 }
-const signedIn = (page) => until(page, () => /Sign out/i.test(document.body.innerText), null, 3000);
+const signedIn = (page) => until(page, () => !!document.querySelector('[data-cleaker-signout], button[aria-label="Sign out"]'), null, 3000);
 
 async function selectLink(page, namespace) {
   const edit = page.locator('button[aria-label="Edit namespace"]');
@@ -221,7 +221,7 @@ async function main() {
       a.grant('demo:admin', ana, 'two');
       await page.evaluate(() => window.__harness.setScope('two'));
       check('5.0 ana is granted at A (setup)', await until(page, () => !!document.querySelector('a[href="/admin"]'), null, 3500));
-      await page.click('button:has-text("Sign out")', { timeout: 3000 }).catch(() => {});
+      await page.locator('button[aria-label="Sign out"]').click({ timeout: 3000 }).catch(() => {});
       await settle(page, 900);
       check('5.1 after signing out: not offered', !(await hasLink(page, '/admin')), JSON.stringify(await rail(page)));
       await until(page, () => !!document.querySelector('input[type=password]'), null, 3000);

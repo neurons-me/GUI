@@ -125,6 +125,12 @@ export type CleakerQrMenuProps = {
   onViewChange?: (view: 'home' | 'position') => void;
   /** Sign out, as a small icon under the settings gear (instead of a button in the card's content). */
   onSignOut?: () => void;
+  /**
+   * `menu` (default): a floating, measured card in a corner.
+   * `page`: the same card as page content — same chrome, same spacing —
+   * not fixed, not dragged, height hugs its contents.
+   */
+  placement?: 'menu' | 'page';
 };
 
 export default function CleakerQrMenu({
@@ -155,6 +161,7 @@ export default function CleakerQrMenu({
   view: viewProp,
   onViewChange,
   onSignOut,
+  placement = 'menu',
 }: CleakerQrMenuProps) {
   const brand = layout?.brand ?? null;
   const coupled = placeMarks({
@@ -167,6 +174,7 @@ export default function CleakerQrMenu({
   const narrow = useNarrowBars();
   const title = positionTitle ?? 'QR.Position';
   const settings = settingsLabel ?? 'QR settings';
+  const embedded = placement === 'page';
   const [rowMode, setRowMode] = useKeysRowMode();
   const panelId = nodeId ?? GUI_QR_ID;
   const posId = positionNodeId ?? GUI_QR_POSITION_ID;
@@ -254,6 +262,7 @@ export default function CleakerQrMenu({
   };
 
   const placeSize = (w: number, h: number, commit = true) => {
+    if (embedded) return boxRef.current;
     const bounds = readMenuBounds();
     const availW = Math.max(0, bounds.right - bounds.left);
     const availH = Math.max(0, bounds.bottom - bounds.top);
@@ -291,6 +300,7 @@ export default function CleakerQrMenu({
   };
 
   const applyBox = (w: number, h: number, commit = true) => {
+    if (embedded) return boxRef.current;
     // A user drag moves the card as a rigid body; do not re-place around the
     // old QR axis (that is what left the header behind the paper).
     if (drag.current.active) {
@@ -657,22 +667,22 @@ export default function CleakerQrMenu({
     <Paper
       ref={paperRef}
       elevation={0}
-      role="dialog"
+      role={embedded ? "region" : "dialog"}
       aria-label=".me"
-      onPointerDown={onDragStart}
-      onPointerMove={onDragMove}
-      onPointerUp={onDragEnd}
-      onPointerCancel={onDragEnd}
+      onPointerDown={embedded ? undefined : onDragStart}
+      onPointerMove={embedded ? undefined : onDragMove}
+      onPointerUp={embedded ? undefined : onDragEnd}
+      onPointerCancel={embedded ? undefined : onDragEnd}
       sx={{
-        position: box ? 'fixed' : 'relative',
+        position: box && !embedded ? 'fixed' : 'relative',
         p: 0,
-        left: box ? box.left + offset.x : undefined,
-        top: box ? box.top + offset.y : undefined,
-        width: box?.w,
-        height: box?.h,
-        minWidth: box ? 0 : '17rem',
-        maxWidth: box ? undefined : (maxWidthPx ?? 'calc(100vw - 1.5rem)'),
-        maxHeight: box ? undefined : 'calc(100vh - 1.5rem)',
+        left: box && !embedded ? box.left + offset.x : undefined,
+        top: box && !embedded ? box.top + offset.y : undefined,
+        width: embedded ? undefined : box?.w,
+        height: embedded ? 'auto' : box?.h,
+        minWidth: box && !embedded ? 0 : '17rem',
+        maxWidth: box && !embedded ? undefined : (maxWidthPx ?? 'calc(100vw - 1.5rem)'),
+        maxHeight: embedded ? 'none' : (box ? undefined : 'calc(100vh - 1.5rem)'),
         overflow: 'hidden',
         overflowX: 'hidden',
         overflowY: 'hidden',
@@ -686,14 +696,15 @@ export default function CleakerQrMenu({
         borderColor: 'divider',
         boxShadow: 'none',
         borderRadius: '12px',
-        cursor: dragging ? 'grabbing' : 'grab',
-        userSelect: 'none',
-        touchAction: 'none',
+        cursor: embedded ? 'default' : (dragging ? 'grabbing' : 'grab'),
+        userSelect: embedded ? 'auto' : 'none',
+        touchAction: embedded ? 'auto' : 'none',
         transition: dragging ? 'none' : undefined,
         '& [data-qr-anchor], & [data-identity-row]': { transition: 'none' },
       }}
       data-cleaker-panel=""
-      data-cleaker-drag=""
+      data-cleaker-placement={placement}
+      data-cleaker-drag={embedded ? undefined : ''}
       data-menu-motion={settled ? 'settled' : 'busy'}
       data-gui-node-id={panelId}
     >

@@ -614,7 +614,9 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
           position: inMenu ? 'relative' : undefined,
           WebkitOverflowScrolling: inMenu ? 'touch' : undefined,
           boxSizing: 'border-box',
-          pb: inMenu && keysMounted ? '2rem' : 0,
+          // Bottom air is the panel body's side gutter. An extra 2rem here
+          // reserved a tall empty tail under the "+" when keys first open.
+          pb: 0,
           scrollPaddingBottom: inMenu ? '2rem' : undefined,
           ...(inMenu ? { '& > *': { flexShrink: 0 } } : {}),
         }}

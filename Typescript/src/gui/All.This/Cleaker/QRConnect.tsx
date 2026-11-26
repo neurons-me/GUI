@@ -1,7 +1,7 @@
 // QRConnect — the real, production ".me" identity card: QR +
 // namespace label + username/secret sign-in fields + a ".me"-style submit
 // button, plus "Register" / "Recover Account" links, and (once
-// authenticated) the signed-in identity readout + Sign out.
+// authenticated) the same QR.me card as the corner panel (logout icon under the gear).
 //
 // Extracted verbatim (2026-09-29) from `CleakerLandingHome`, the inline
 // component that used to live inside `@/react/session/Namespace.tsx`
@@ -27,7 +27,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { useInsets } from '@/gui-internals/Hooks';
 import Box from '@/gui/Atoms/Box/Box';
-import Icon from '@/gui/Atoms/Icon/Icon';
 import Button from '@/gui/Atoms/Button/Button';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import TextField from '@mui/material/TextField';
@@ -44,7 +43,10 @@ import { useMeLauncherView } from '@/react/session/MeLauncher';
 import { endpointForRoot, remoteRootFor } from '@/react/session/remoteRoot';
 import { linkQrValue } from '@/react/linkQr';
 import { hasIdentityVault } from '@/core/identity/localIdentityVault';
-import IdentityIconRow from './IdentityIconRow';
+import IdentityTree from './IdentityTree';
+import MeLoginStatus from './MeLoginStatus';
+import CleakerQrMenu, { type CleakerQrMenuProps } from './Corner/CleakerQrMenu';
+import { isLoginExcluded } from './Keys/keyVisibility';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -145,6 +147,91 @@ const LiveOwnProfile: React.FC<{ session: SeedSession; username: string }> = ({ 
 // re-verification instead of reporting success the instant Beatle's own
 // (weaker) mesh resolution does.
 
+
+function LandingSignedInTree({
+  nodeId,
+  namespace,
+  username,
+  onNavigate,
+}: {
+  nodeId: string;
+  namespace: string;
+  username: string;
+  onNavigate: (to: string) => void;
+}) {
+  return (
+    <IdentityTree
+      nodeId={nodeId}
+      username={username || String(namespace).split('.')[0] || namespace}
+      namespace={namespace}
+      onNavigate={onNavigate}
+      access="edit"
+      hide={isLoginExcluded}
+    />
+  );
+}
+
+function RoutedLandingSignedInTree(props: Omit<React.ComponentProps<typeof LandingSignedInTree>, 'onNavigate'>) {
+  const navigate = useNavigate();
+  return <LandingSignedInTree {...props} onNavigate={(to) => navigate(to)} />;
+}
+
+function LandingSignedInCard({
+  nodeId,
+  qr,
+  identityHash,
+  namespace,
+  username,
+  onLogout,
+  inRouter,
+  fullPosition,
+  statusText,
+  qrMenu,
+}: {
+  nodeId: string;
+  qr: React.ComponentProps<typeof MeLoginStatus>['qr'];
+  identityHash?: string | null;
+  namespace: string;
+  username: string;
+  onLogout?: () => void;
+  inRouter: boolean;
+  fullPosition: string;
+  statusText?: string;
+  qrMenu?: QRConnectProps['qrMenu'];
+}) {
+  const tree = namespace
+    ? (inRouter
+      ? <RoutedLandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} />
+      : <LandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} onNavigate={() => {}} />)
+    : undefined;
+  return (
+    <CleakerQrMenu
+      placement="page"
+      fullPosition={fullPosition || String(qr.perimeterLabel || username || '')}
+      statusText={statusText}
+      showNamespaceForm={false}
+      corner={qrMenu?.corner ?? 'top-left'}
+      onMoveTo={qrMenu?.onMoveTo ?? (() => {})}
+      onMoveBrand={qrMenu?.onMoveBrand}
+      otherCorner={qrMenu?.otherCorner}
+      barModes={qrMenu?.barModes}
+      onChooseBarMode={qrMenu?.onChooseBarMode}
+      onSignOut={onLogout}
+      layout={qrMenu?.layout ?? { search: true, address: typeof qr.perimeterLabel === 'string' ? qr.perimeterLabel : undefined }}
+    >
+      <MeLoginStatus
+        nodeId={nodeId}
+        authenticated
+        qr={qr}
+        identityHash={identityHash}
+        onNavigate={inRouter ? () => {} : () => {}}
+        onLogout={onLogout}
+        tree={tree}
+      />
+    </CleakerQrMenu>
+  );
+}
+
 function AfterSignInNext({
   authenticated,
   mode,
@@ -172,13 +259,6 @@ function AfterSignInNext({
     }
   }, [authenticated, mode, registrationComplete, recoveryComplete, navigate]);
   return null;
-}
-
-/** The identity's icon row, navigating with the router. Only rendered inside one (see `inRouter`): outside a router
- * (the QR menu on a page without routes) the routes it opens do not exist there. */
-function RoutedIdentityIconRow({ nodeId }: { nodeId: string }) {
-  const navigate = useNavigate();
-  return <IdentityIconRow nodeId={nodeId} onNavigate={navigate} />;
 }
 
 export type QRConnectProps = DocumentPageProps & {
@@ -218,9 +298,14 @@ export type QRConnectProps = DocumentPageProps & {
    * bar (AppShell): one QR, one status.
    */
   qrStatus?: 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
+  /**
+   * Chrome for the signed-in QR.me card (the same panel as the corner menu):
+   * corner, bars, brand. Omit in stories; the card still renders with defaults.
+   */
+  qrMenu?: Pick<CleakerQrMenuProps, 'corner' | 'onMoveTo' | 'onMoveBrand' | 'otherCorner' | 'barModes' | 'onChooseBarMode' | 'layout'>;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, qrMenu, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -549,7 +634,14 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   };
 
 
+  const signedInCard = Boolean(
+    authenticated
+    && (mode !== 'register' || registrationComplete)
+    && (mode !== 'recover' || recoveryComplete),
+  );
+
   const afterSignInNext = inRouter ? (
+
     <AfterSignInNext
       authenticated={authenticated}
       mode={mode}
@@ -596,7 +688,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
         // real breathing room without returning to the original excess.
         gap: 2.5,
         px: 3,
-        py: 6,
+        py: signedInCard ? 3 : 6,
         // The top bar holds nothing but the search icon, so the eye takes the whole window as the page: the room Content
         // reserved for that bar is given back below, which puts the middle of this group on the middle of the window
         // instead of half a bar lower.
@@ -613,7 +705,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
       {/* The QR is the one control for "where am I connected": clicking it runs its expression (see
           useQRConnect). Skipped in register/recover mode: Claim renders its own, previewing the username typed
           THERE, and RecoverAccount has no identity to preview yet. */}
-      {qrActive && (
+      {qrActive && !signedInCard && (
         <Box
           role="button"
           tabIndex={0}
@@ -690,46 +782,33 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
            likes seeing that public, checkable fingerprint next to their
            name, not just the name alone -- it just no longer repeats the
            name alongside it. */
-        <Box sx={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
-          {/* Card-mode root of this username's tree: keys, wallet, profile, contacts.
-              Service icons live on the keys screen; expanded .GUI puts more icons in the sidebars. */}
-          {inRouter ? <RoutedIdentityIconRow nodeId={nodeId} /> : null}
-          <Typography hidden variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }} data-gui-node-id={`${nodeId}.identityHash`}>
-            {label}
-          </Typography>
+        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <LandingSignedInCard
+            nodeId={nodeId}
+            qr={{
+              value: qrValue,
+              username: authenticatedHandle || ownUsername || undefined,
+              status: shownStatus,
+              statusLabel: shownStatusLabel,
+              perimeterLabel,
+              perimeterRootLabel: namespaceRootLabel,
+              perimeterHandleHref,
+              editableRoot: true,
+              editableRootValue: namespaceRootLabel,
+              onEditableRootChange: selectNamespace,
+            }}
+            identityHash={label}
+            namespace={semanticNamespace || (authenticatedHandle ? `${authenticatedHandle}.${namespaceRootLabel}` : '')}
+            username={authenticatedHandle || ownUsername || ''}
+            onLogout={onLogout}
+            inRouter={inRouter}
+            fullPosition={positionExpressionFull}
+            statusText={typeof shownStatusLabel === 'string' ? shownStatusLabel : undefined}
+            qrMenu={qrMenu}
+          />
           {activeSession && ownUsername && (
             <LiveOwnProfile session={activeSession} username={ownUsername} />
           )}
-          <Box sx={{ display: 'flex', gap: 1, mt: '8px' }}>
-            {/* Keychain moved to the shared sidebar (GUI in Namespace.tsx,
-                shown only once authenticated -- same condition as before,
-                just relocated) instead of living inline here. Sign out stays
-                -- it's an account action tied to this identity display,
-                not a navigation control. */}
-            <Box
-              component="button"
-              type="button"
-              onClick={onLogout}
-              data-gui-node-id={`${nodeId}.logout`}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                p: 1,
-                px: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Icon name="logout" fontSize="1rem" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Sign out</Typography>
-            </Box>
-          </Box>
         </Box>
       ) : namespaceReady && mode === 'register' ? (
         // Register has its own heading/copy (Claim.tsx) — showing
