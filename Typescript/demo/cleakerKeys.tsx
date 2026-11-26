@@ -24,7 +24,7 @@ import { placeMarks, type MarkCorner, type MarkSlot } from '@/gui/Layout/Positio
 import { readQrMePosition, writeQrMePosition } from '@/gui/Layout/Position/qrMePosition';
 import { positionQrValue } from '@/gui/All.This/Cleaker/Corner/cleakerCorner';
 import { keyNoticeFromGroup, listCustomKeyGroups } from '@/gui/All.This/Cleaker/Keys/serviceKeyVault';
-import { isLoginExcluded } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
+import { hideKeysInTree } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
 import { SERVICE_KEYS_CHANGED_EVENT } from '@/gui/All.This/Cleaker/Keys/ServiceKeysSection';
 import {
   beginFacebookConnect, facebookCallbackAvailable, facebookRedirectUri,
@@ -103,7 +103,7 @@ function KeysTree({
       namespace={namespace}
       onNavigate={() => { /* the agent shows keys only */ }}
       access="edit"
-      hide={isLoginExcluded}
+      hide={(rel) => hideKeysInTree(rel, false)}
       onPathChange={setPath}
       initialOpen
       filterQuery={treeSearch?.query}

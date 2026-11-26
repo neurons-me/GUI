@@ -26,7 +26,8 @@ import type { SearchFieldResult } from '@/gui/Molecules/SearchField/SearchField.
 import { forgetSearchRecent, readSearchRecent, rememberSearchRecent } from '@/gui/All.This/Cleaker/searchRecent';
 import { querySearchGraph } from '@/runtime/searchGraph';
 import IdentityTree from '@/gui/All.This/Cleaker/IdentityTree';
-import { isLoginExcluded } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
+import { hideKeysInTree, isRootOwnerView } from '@/gui/All.This/Cleaker/Keys/keyVisibility';
+import { hasIdentityVault } from '@/core/identity/localIdentityVault';
 import { QrTreeSearchProvider, useQrTreeSearch } from '@/gui/All.This/Cleaker/qrTreeSearch';
 import { SelectionProvider, useOptionalSelection } from '@/runtime/selection';
 import { RuntimeInspector } from '@/runtime/inspector';
@@ -2203,7 +2204,9 @@ const GUI: React.FC<NamespaceProps> = (props) => {
                     namespace={String(session.semanticNamespace)}
                     onNavigate={(to) => { setQrMenuOpen(false); navigate(to); }}
                     access="edit"
-                    hide={isLoginExcluded}
+                    hide={(rel) => hideKeysInTree(rel, isRootOwnerView(String(session.semanticNamespace), namespaceRootLabel, hasIdentityVault(namespaceRootLabel)))}
+                    showNamespaceKeys={isRootOwnerView(String(session.semanticNamespace), namespaceRootLabel, hasIdentityVault(namespaceRootLabel))}
+                    rootNamespace={namespaceRootLabel}
                     initialOpen={Boolean(treeSearch?.query.trim())}
                     filterQuery={treeSearch?.query}
                   />

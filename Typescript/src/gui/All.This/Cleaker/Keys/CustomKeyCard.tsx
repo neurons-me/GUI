@@ -21,6 +21,7 @@ import {
   firstGlyph, lastGlyph, getCustomKeys, hasCustomKeys, isPublicKeyField, removeCustomKeys, sanitizeKeyPath, saveCustomKeys,
   type CustomKeyGroup, type CustomKeyMark, type ServiceFields,
 } from './serviceKeyVault';
+import { isNamespaceOwnedKey, NAMESPACE_META_APP } from './keyVisibility';
 
 export interface CustomKeyCardProps {
   namespace: string;
@@ -106,14 +107,14 @@ export default function CustomKeyCard({ namespace, group = null, fieldPath, fiel
   // User-made groups with public display info beside their fields (meta.app: the App's name + icon from Facebook).
   const displayPhoto = !auto && existing ? profilePhotoSrc(group?.display?.picture) : undefined;
   const displayName = !auto && existing ? group?.display?.name?.trim() || undefined : undefined;
-  const builtinMark: CustomKeyMark | undefined = group?.name === 'meta.app' ? { kind: 'icon', name: 'apps' } : undefined;
+  const builtinMark: CustomKeyMark | undefined = (group?.name === 'meta.app' || group?.name === NAMESPACE_META_APP) ? { kind: 'icon', name: 'apps' } : undefined;
   const igUser = auto && group?.name.startsWith('meta.instagram.') ? group?.publicValues?.username?.trim() : undefined;
   const personName = auto ? (igUser ? `@${igUser.replace(/^@/, '')}` : group?.publicValues?.name?.trim() || undefined) : undefined;
   const [name, setName] = React.useState(group?.name ?? '');
   const [rows, setRows] = React.useState<Row[]>(() => {
     if (!group?.fields.length) return [newRow(), newRow()];
     return group.fields.map((f) => {
-      const r = newRow(f, true);
+      const r = newRow(f, existing);
       const id = sanitizeKeyPath(f);
       const pub = group.publicValues?.[id] ?? group.publicValues?.[f];
       if (pub) r.value = pub;
@@ -196,7 +197,7 @@ export default function CustomKeyCard({ namespace, group = null, fieldPath, fiel
             ? <ProfilePhoto src={displayPhoto} size={28} label={displayName} fallbackNode={<CustomMark mark={mark ?? builtinMark} />} />
             : <CustomMark mark={mark ?? builtinMark} />}
         </Box>
-        {existing ? (
+        {(existing || (group?.name && isNamespaceOwnedKey(group.name))) ? (
           <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <Typography variant={branch ? 'caption' : 'body2'} sx={{ fontWeight: 700, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName || groupName}</Typography>
             {displayName && <Typography variant="caption" data-display-path sx={{ fontFamily: 'monospace', color: 'text.secondary', lineHeight: 1.2 }}>.{groupName}</Typography>}

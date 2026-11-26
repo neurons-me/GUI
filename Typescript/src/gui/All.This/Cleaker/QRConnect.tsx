@@ -46,7 +46,7 @@ import { hasIdentityVault } from '@/core/identity/localIdentityVault';
 import IdentityTree from './IdentityTree';
 import MeLoginStatus from './MeLoginStatus';
 import CleakerQrMenu, { type CleakerQrMenuProps } from './Corner/CleakerQrMenu';
-import { isLoginExcluded } from './Keys/keyVisibility';
+import { hideKeysInTree, isRootOwnerView } from './Keys/keyVisibility';
 import Claim from '@/gui/All.This/Cleaker/Claim/Claim';
 import LinkIdentity, { linkableIdentities } from '@/gui/All.This/Cleaker/Claim/LinkIdentity';
 import RecoverAccount from '@/react/session/RecoverAccount';
@@ -152,13 +152,16 @@ function LandingSignedInTree({
   nodeId,
   namespace,
   username,
+  rootLabel,
   onNavigate,
 }: {
   nodeId: string;
   namespace: string;
   username: string;
+  rootLabel?: string;
   onNavigate: (to: string) => void;
 }) {
+  const showNamespaceKeys = isRootOwnerView(namespace, rootLabel, Boolean(rootLabel && hasIdentityVault(rootLabel)));
   return (
     <IdentityTree
       nodeId={nodeId}
@@ -166,7 +169,9 @@ function LandingSignedInTree({
       namespace={namespace}
       onNavigate={onNavigate}
       access="edit"
-      hide={isLoginExcluded}
+      hide={(rel) => hideKeysInTree(rel, showNamespaceKeys)}
+      showNamespaceKeys={showNamespaceKeys}
+      rootNamespace={rootLabel}
     />
   );
 }
@@ -199,10 +204,11 @@ function LandingSignedInCard({
   statusText?: string;
   qrMenu?: QRConnectProps['qrMenu'];
 }) {
+  const rootLabel = typeof qr.perimeterRootLabel === 'string' ? qr.perimeterRootLabel : undefined;
   const tree = namespace
     ? (inRouter
-      ? <RoutedLandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} />
-      : <LandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} onNavigate={() => {}} />)
+      ? <RoutedLandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} rootLabel={rootLabel} />
+      : <LandingSignedInTree nodeId={nodeId} namespace={namespace} username={username} rootLabel={rootLabel} onNavigate={() => {}} />)
     : undefined;
   return (
     <CleakerQrMenu

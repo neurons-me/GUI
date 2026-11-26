@@ -5,7 +5,7 @@ import { vaultStore } from './port-namespace/shim';
 import { saveServiceKeys, saveCustomKeys, lockServiceKeys } from '../src/gui/All.This/Cleaker/Keys/serviceKeyVault';
 import { validateOperation, AGENT_PROTOCOL } from '../src/agent/protocol';
 import { ApprovalInvalidated } from '../src/agent/approval';
-import { KEYS_LIST_TEXT, approvalForKeys, assertKeysApproval, isLoginExcluded, listKeysFor, validateKeysListRequest } from '../src/agent/keysList';
+import { KEYS_LIST_TEXT, approvalForKeys, assertKeysApproval, isKeysListExcluded, isLoginExcluded, listKeysFor, validateKeysListRequest } from '../src/agent/keysList';
 import { parseKeysGrant } from '../src/agent/requestOperation';
 
 let n = 0;
@@ -35,6 +35,15 @@ const wire = JSON.stringify(listing);
 ok(!wire.includes(SECRET) && !wire.includes(FIELD_VALUE) && !wire.includes('appSecret') && !wire.includes('secretKey'), 'K6 no value and no field name in the listing');
 ok(!wire.includes('netget'), 'K7 keys.netget is never listed');
 ok(isLoginExcluded('netget') && isLoginExcluded('netget.x') && !isLoginExcluded('netgetx') && !isLoginExcluded('meta.instagram'), 'K8 exclusion is by path segment');
+
+await saveCustomKeys(NS, 'namespace.meta.app', { secret: SECRET }, PW);
+await saveCustomKeys(NS, 'namespace.netget', { token: SECRET }, PW);
+lockServiceKeys();
+const listingNs = listKeysFor(NS);
+ok(!JSON.stringify(listingNs).includes('namespace'), 'K21 keys.namespace is never listed to an app');
+ok(!JSON.stringify(listingNs).includes(SECRET), 'K22 namespace listing still has no values');
+ok(isKeysListExcluded('namespace') && isKeysListExcluded('namespace.meta.app') && isKeysListExcluded('namespace.netget'), 'K23 all keys.namespace paths are list-excluded');
+ok(isLoginExcluded('namespace.netget') && !isLoginExcluded('namespace.meta.app'), 'K24 netget stays out of login; meta.app is visible to the root');
 
 // approval bound to the digest; a replacement invalidates it
 const v1 = await validateKeysListRequest('req-1', { action: 'keys.list', namespace: 'cleaker.me' }, 'https://app.example');

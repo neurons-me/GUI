@@ -48,6 +48,8 @@ export function templatesAt(prefix: string, saved: readonly ServiceId[]): Servic
 
 /** Human names and icons for built-in group levels. Unknown (custom) groups use their segment. */
 export const GROUP_INFO: Record<string, { name: string; service?: ServiceId; icon?: string }> = {
+  namespace: { name: 'Namespace', icon: 'account_tree' },
+  'namespace.meta': { name: 'Meta', service: 'meta' },
   meta: { name: 'Meta', service: 'meta' },
   paypal: { name: 'PayPal', service: 'paypal' },
   dev: { name: 'Developer APIs', icon: 'code' },

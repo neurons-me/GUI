@@ -15,11 +15,11 @@ import { deepFreeze, ApprovalInvalidated, type Approval } from './approval';
 import type { EffectRule, Fact } from './admittedOperations';
 import { listCustomKeyGroups, listSavedServices } from '../gui/All.This/Cleaker/Keys/serviceKeyVault';
 import { KEYS_ROOT, servicePath } from '../gui/All.This/Cleaker/Keys/keyPaths';
-import { isLoginExcluded } from '../gui/All.This/Cleaker/Keys/keyVisibility';
+import { isKeysListExcluded } from '../gui/All.This/Cleaker/Keys/keyVisibility';
 
 export const KEYS_LIST_BYTES_TAG = 'me-agent-keys-list/1\n';
 
-export { LOGIN_EXCLUDED_ROOTS, isLoginExcluded } from '../gui/All.This/Cleaker/Keys/keyVisibility';
+export { LOGIN_EXCLUDED_ROOTS, isLoginExcluded, isKeysListExcluded, isNamespaceOwnedKey } from '../gui/All.This/Cleaker/Keys/keyVisibility';
 
 export type ValidatedKeysList = Readonly<{
   requestId: string;
@@ -71,10 +71,10 @@ export function listKeysFor(namespace: string): KeyListing {
   const entries: KeyListing['entries'] = [];
   for (const id of listSavedServices(namespace)) {
     const path = servicePath(id);
-    if (!isLoginExcluded(path.slice(KEYS_ROOT.length + 1))) entries.push({ path, status: 'set' });
+    if (!isKeysListExcluded(path.slice(KEYS_ROOT.length + 1))) entries.push({ path, status: 'set' });
   }
   for (const g of listCustomKeyGroups(namespace)) {
-    if (!isLoginExcluded(g.name)) entries.push({ path: `${KEYS_ROOT}.${g.name}`, status: 'set' });
+    if (!isKeysListExcluded(g.name)) entries.push({ path: `${KEYS_ROOT}.${g.name}`, status: 'set' });
   }
   entries.sort((a, b) => a.path.localeCompare(b.path));
   return { resource: `${namespace}.${KEYS_ROOT}`, entries };

@@ -45,6 +45,7 @@ import { publicMetaReader, readPublicMeta, resolveNodeMeta, type MeReader, type 
 import { presetsAt } from './Keys/keyPresets';
 import { GROUP_INFO, accessFor, childrenAt, templatesAt, trimToExisting, type KeyAccessProp, type KeyChild, type KeyLeaf } from './Keys/keyTree';
 import { filterKeyLeaves, filterPersonalEntries } from './Keys/searchTreeFilter';
+import { isNamespaceOwnedKey, NAMESPACE_META_APP, NAMESPACE_META_APP_FIELDS } from './Keys/keyVisibility';
 import { useQrTreeSearch } from './qrTreeSearch';
 import { KEYS_ROOT, fieldPath, servicePath } from './Keys/keyPaths';
 import { orderByUsage, readKeyOrder, touchKey, type KeyOrderId } from './Keys/keyOrder';
@@ -88,6 +89,13 @@ export interface IdentityTreeProps {
    * (the gateway's own material). Hidden, not deleted: the vault is unchanged.
    */
   hide?: (relPath: string) => boolean;
+  /**
+   * When true, the tree shows `keys.namespace` (root-only). The Meta app leaf
+   * is always offered, and those groups are read from `rootNamespace` when set.
+   */
+  showNamespaceKeys?: boolean;
+  /** Vault of the namespace root (`cleaker.me`). Used for `keys.namespace` groups. */
+  rootNamespace?: string;
   /** Start with the keys branch already unfolded (a Keys view that is already the tree). */
   initialOpen?: boolean;
   /** Shown on the .keys.meta branch (approval window). No secrets in the label. */
@@ -287,7 +295,10 @@ function useFollowOpenedRow(
 
 /** Shared by every level of the keys tree. */
 type TreeCtx = {
-  namespace: string; cap: number; inMenu?: boolean; /** `rows` wraps the current block; `scroll` allows horizontal overflow of that block. Paging (+ / …) is always on. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; filtering?: boolean; saved: ServiceId[];
+  namespace: string;
+  /** Vault to use for a custom group (`keys.namespace` lives on the root vault). */
+  vaultOf: (groupName: string) => string;
+  cap: number; inMenu?: boolean; /** `rows` wraps the current block; `scroll` allows horizontal overflow of that block. Paging (+ / …) is always on. */ rowMode?: 'rows' | 'scroll'; fixed?: number; leaves: KeyLeaf[]; filtering?: boolean; saved: ServiceId[];
   custom: CustomKeyGroup[]; sel: string[]; adding: string | null; access?: KeyAccessProp;
   nid: (path: string) => string; anchor: (path: string) => HTMLElement | undefined; setAnchor: (path: string) => (el: HTMLElement | null) => void;
   pick: (depth: number, child: KeyChild) => void; startAdd: (level: string) => void; closeCard: () => void;
@@ -313,7 +324,7 @@ export const IdentityTreeSeedCtx = React.createContext<{
   custom: CustomKeyGroup[];
 } | null>(null);
 
-export default function IdentityTree({ nodeId, username: _username, namespace, onNavigate, pageSize, reorderOnUse = false, onPathChange, access, me, pending, hide, initialOpen = false, facebookConnect, filterQuery }: IdentityTreeProps) {
+export default function IdentityTree({ nodeId, username: _username, namespace, onNavigate, pageSize, reorderOnUse = false, onPathChange, access, me, pending, hide, showNamespaceKeys = false, rootNamespace, initialOpen = false, facebookConnect, filterQuery }: IdentityTreeProps) {
   const fixed = pageSize ? Math.max(1, Math.floor(pageSize)) : undefined;
   const treeRef = React.useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = React.useState(0);
@@ -353,15 +364,28 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
   /** The level whose "+" card is open ('' = keys), or null. */
   const [adding, setAdding] = React.useState<string | null>(null);
   const seed = React.useContext(IdentityTreeSeedCtx);
+  const namespaceVault = (showNamespaceKeys && rootNamespace) ? rootNamespace : namespace;
+  const mergeNamespaceKeys = (groups: CustomKeyGroup[]): CustomKeyGroup[] => {
+    const personal = groups.filter((g) => !isNamespaceOwnedKey(g.name));
+    if (!showNamespaceKeys) return personal;
+    const rootGroups = (namespaceVault !== namespace ? listCustomKeyGroups(namespaceVault) : groups)
+      .filter((g) => isNamespaceOwnedKey(g.name));
+    const names = new Set(rootGroups.map((g) => g.name));
+    const out = [...personal, ...rootGroups];
+    if (!names.has(NAMESPACE_META_APP)) {
+      out.push({ name: NAMESPACE_META_APP, fields: [...NAMESPACE_META_APP_FIELDS] });
+    }
+    return out;
+  };
   const listsFromVaultOrSeed = (): { saved: ServiceId[]; custom: CustomKeyGroup[] } => {
     const now = listSavedServices(namespace);
-    const groups = listCustomKeyGroups(namespace);
+    const groups = mergeNamespaceKeys(listCustomKeyGroups(namespace));
     // Keep the seed visible until the vault has caught up — a partial write
     // (one envelope of many) must not shrink the tree mid-paint.
     if (seed && (seed.saved.length || seed.custom.length)) {
       const caughtUp = seed.saved.every((s) => now.includes(s))
         && seed.custom.every((c) => groups.some((g) => g.name === c.name));
-      if (!caughtUp) return { saved: seed.saved, custom: seed.custom };
+      if (!caughtUp) return { saved: seed.saved, custom: mergeNamespaceKeys(seed.custom) };
     }
     return { saved: now, custom: groups };
   };
@@ -423,7 +447,7 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
     window.addEventListener(SERVICE_KEYS_CHANGED_EVENT, refresh);
     window.addEventListener('storage', refresh);
     return () => { window.removeEventListener(SERVICE_KEYS_CHANGED_EVENT, refresh); window.removeEventListener('storage', refresh); };
-  }, [namespace, seed]);
+  }, [namespace, seed, showNamespaceKeys, rootNamespace]);
 
   const focusNode = (path: string) => {
     const back = anchors.current.get(path)?.querySelector<HTMLElement>('button');
@@ -489,8 +513,11 @@ export default function IdentityTree({ nodeId, username: _username, namespace, o
   React.useLayoutEffect(() => { setInMenu(!!treeRef.current?.closest('[data-cleaker-panel]')); }, []);
   const wrap = inMenu && rowMode === 'rows';
   const scroll = inMenu && rowMode === 'scroll';
+  const vaultOf = (groupName: string) => (
+    showNamespaceKeys && isNamespaceOwnedKey(groupName) ? namespaceVault : namespace
+  );
   const ctx: TreeCtx = {
-    namespace, cap, inMenu, rowMode, fixed, leaves: visibleLeaves, saved, custom, sel, adding, access, filtering: Boolean(searchQuery),
+    namespace, vaultOf, cap, inMenu, rowMode, fixed, leaves: visibleLeaves, saved, custom, sel, adding, access, filtering: Boolean(searchQuery),
     nid, anchor: (p) => anchors.current.get(p), setAnchor, pick, startAdd, closeCard, onCreated, revealPath,
     readers: [me, publicMetaReader(readPublicMeta(namespace))].filter(Boolean) as MeReader[],
     pending,
@@ -851,7 +878,7 @@ function KeysLevel({ prefix }: { prefix: string }) {
           data-gui-node-id={c.nid(full('meta.connect-facebook'))}
           aria-label="Connect with Facebook"
           disabled={!c.facebookConnect.enabled}
-          title={c.facebookConnect.enabled ? 'Connect with Facebook' : 'Add your App ID and App Secret under .keys.meta.app first.'}
+          title={c.facebookConnect.enabled ? 'Connect with Facebook' : 'Facebook connect is not available.'}
           onClick={() => { if (c.facebookConnect?.enabled) c.facebookConnect.onClick(); }}
           sx={{
             display: 'inline-flex', alignItems: 'center', alignSelf: 'center', gap: 0.5, ml: 0.5, px: 1, py: 0.5,
@@ -947,7 +974,7 @@ function LeafCard({ leaf }: { leaf: KeyLeaf }) {
   const group = found && declared && declared.kind !== 'brand' ? { ...found, mark: declared } : found;
   return (
     <CustomKeyCard
-      key={leaf.name} namespace={c.namespace} group={group} access={access} tone="branch"
+      key={leaf.name} namespace={c.vaultOf(leaf.name)} group={group} access={access} tone="branch"
       connection={leaf.name === 'meta.user' && c.facebookConnect?.connected ? {
         ...(c.facebookConnect.notice ? { notice: c.facebookConnect.notice } : {}),
         enabled: c.facebookConnect.enabled,
@@ -966,7 +993,7 @@ function AddCard({ prefix }: { prefix: string }) {
   const head = prefix ? `${prefix}.` : '';
   return (
     <NewKeyCard
-      namespace={c.namespace} level={prefix} templates={templatesAt(prefix, c.saved)} tone="branch"
+      namespace={c.vaultOf(prefix ? `${prefix}.new` : '')} level={prefix} templates={templatesAt(prefix, c.saved)} tone="branch"
       soon={presetsAt(prefix, c.saved).filter((p) => p.kind === 'soon')}
       templateLabel={(id) => { const d = defOf(id); return `${d.name} · .${d.path.slice(head.length)}`; }}
       servicePath={(id, f) => fieldPath(id, f).slice(servicePath(id).length)} serviceNodeId={(id, f) => c.nid(fieldPath(id, f))}
