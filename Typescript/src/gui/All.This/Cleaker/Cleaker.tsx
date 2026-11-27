@@ -47,6 +47,7 @@ import type { LeftBarElement } from '@/gui/Layout/Sidebars/LeftBar/LeftBar.types
 import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import { parseCleakerNamespaceExpression } from './namespaceExpression';
+import ArrivedAt from './ArrivedAt';
 
 export type CleakerProps = {
   sx?: any;
@@ -156,6 +157,8 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         offerDocument={offerDocument}
         onOfferDocument={onOfferDocument}
       />
+      {/* opened from a shared QR (`?at=<exact place>`): offer to go there, never go on its own */}
+      <ArrivedAt />
     </SeedSessionProvider>
   );
 }
