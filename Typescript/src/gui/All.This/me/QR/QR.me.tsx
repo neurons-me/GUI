@@ -40,6 +40,18 @@ const QR_INSET_RATIO = 0.015;
 // dot sized and spaced by a single consistent ratio to the text around it
 // reads as one deliberate unit instead of an icon dropped in afterward.
 const GOLDEN_RATIO = 1.618;
+// Hard 2px ring around the QR face (the box-shadow on the non-topbar
+// face). Perimeter air is measured from this visible contour, not from
+// the face box, not as equal padding, and not by φ.
+const FACE_RING_PX = 2;
+// Typographic extents of the perimeter monospace, in em, taken from the
+// visible ink of tall glyphs (k, l, t) and of the lowercase body. The
+// path sits far enough out that the gutter between the hard ring and the
+// nearest ink is about one body-height of those same letters.
+const PERIMETER_ASCENT_EM = 0.72;
+const PERIMETER_BODY_EM = 0.62;
+const ROOT_EDIT_PENCIL_FONT_SIZE = '0.8rem';
+const ROOT_EDIT_PENCIL_EM = 0.8;
 
 /**
  * The exact size `<QRme variant="topbar">` will actually render at for a
@@ -225,6 +237,7 @@ const DIAMETER_BY_VARIANT = {
 // separate ring further out). Starts at (r, s) -- the bottom edge, just
 // past where the bottom-LEFT corner's own curve ends -- so the full
 // bottom edge is available before the text ever has to turn the corner.
+
 function buildPerimeterPath(s: number, r: number): string {
   return [
     `M ${r},${s}`,
@@ -233,6 +246,98 @@ function buildPerimeterPath(s: number, r: number): string {
     `L ${s},${r}`,
   ].join(' ');
 }
+
+type RootEditAnchor = {
+  underline: { left: number; top: number; width: number; height: number };
+  pencil: { left: number; top: number };
+  hit: { left: number; top: number; width: number; height: number };
+  form: { left: number; top: number };
+};
+
+// Sit the pencil and underline on the ROOT run — the thing the control
+// actually edits — instead of at the corner of the whole label's
+// axis-aligned bounding box (which, for a bottom-and-right path, is a
+// large empty rectangle with the pencil floating in mid-air).
+function measureRootEditAnchor(
+  textEl: SVGTextElement,
+  anchorStart: number,
+  anchorLen: number,
+  pencilPx: number,
+  gap: number,
+): RootEditAnchor | null {
+  if (typeof textEl.getNumberOfChars !== 'function' || typeof textEl.getExtentOfChar !== 'function') return null;
+  let n = 0;
+  try { n = textEl.getNumberOfChars(); } catch { return null; }
+  if (anchorLen <= 0 || anchorStart < 0 || anchorStart + anchorLen > n) return null;
+  const last = anchorStart + anchorLen - 1;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  try {
+    for (let i = anchorStart; i <= last; i += 1) {
+      const e = textEl.getExtentOfChar(i);
+      minX = Math.min(minX, e.x);
+      minY = Math.min(minY, e.y);
+      maxX = Math.max(maxX, e.x + e.width);
+      maxY = Math.max(maxY, e.y + e.height);
+    }
+  } catch {
+    return null;
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxY)) return null;
+  let end: { x: number; y: number };
+  let rotDeg = 0;
+  try {
+    end = textEl.getEndPositionOfChar(last);
+    rotDeg = textEl.getRotationOfChar(last);
+  } catch {
+    return null;
+  }
+  let rot = rotDeg % 360;
+  if (rot > 180) rot -= 360;
+  if (rot < -180) rot += 360;
+  const underlineH = 1.5;
+  const nearlyHorizontal = Math.abs(rot) < 35;
+  const nearlyVertical = Math.abs(Math.abs(rot) - 90) < 35;
+  let underline: RootEditAnchor['underline'];
+  let pencil: RootEditAnchor['pencil'];
+  if (nearlyHorizontal) {
+    const uTop = Math.max(maxY + 1, end.y + 2);
+    underline = { left: minX, top: uTop, width: Math.max(0, maxX - minX), height: underlineH };
+    // Hooked to the end of the underline, just outside the letters, so
+    // the path text that continues after the root is not interrupted
+    // and the pencil does not sit in a second, lower row of its own.
+    pencil = { left: maxX + Math.max(1, gap - 2), top: uTop - 2 };
+  } else if (nearlyVertical) {
+    const uLeft = Math.max(maxX + 1, end.x + 2);
+    underline = { left: uLeft, top: minY, width: underlineH, height: Math.max(0, maxY - minY) };
+    pencil = { left: uLeft + underlineH + 1, top: minY };
+  } else {
+    const rad = (rot * Math.PI) / 180;
+    const tx = Math.cos(rad);
+    const ty = Math.sin(rad);
+    const nx = -ty;
+    const ny = tx;
+    const uTop = Math.max(maxY + 1, end.y + 2);
+    underline = { left: minX, top: uTop, width: Math.max(0, maxX - minX), height: underlineH };
+    pencil = {
+      left: end.x + tx * gap + nx * (gap + 2),
+      top: end.y + ty * gap + ny * (gap + 2),
+    };
+  }
+  const hitLeft = Math.min(minX, underline.left, pencil.left) - 4;
+  const hitTop = Math.min(minY, underline.top, pencil.top) - 2;
+  const hitRight = Math.max(maxX, underline.left + underline.width, pencil.left + pencilPx) + 4;
+  const hitBottom = Math.max(maxY, underline.top + underline.height, pencil.top + pencilPx) + 2;
+  return {
+    underline,
+    pencil,
+    hit: { left: hitLeft, top: hitTop, width: hitRight - hitLeft, height: hitBottom - hitTop },
+    form: { left: minX - 10, top: minY - 7 },
+  };
+}
+
 
 function fallbackInitial(username: string, avatarFallback: string): string {
   const direct = String(avatarFallback || '').trim();
@@ -529,21 +634,31 @@ export default function QRme({
   // same ~11px at the default size (unchanged, already tuned) but only
   // ~15px expanded (+36%) -- still visibly bigger, not nearly as much.
   const perimeterFontSize = Math.max(9, Math.round(Math.sqrt(effectiveDiameter)));
-  // Tight to the QR on purpose -- an earlier circle-based version offset
-  // ~0.3x the diameter out and was flagged live as leaving visibly "too
-  // much air" between the QR and whatever sits below it on the page.
-  // Nudged up slightly (0.95 -> 1.1) on later feedback that the tightest
-  // version still read as a hair too close.
-  const ringOffset = showPerimeterLabel ? Math.round(perimeterFontSize * 1.1) : 0;
+  // Air is measured from visible contours: the hard FACE_RING_PX ring
+  // around the face, and the actual ink of the monospace (ascent toward
+  // the QR, body-height as the gutter). An earlier tight multiplier
+  // (1.1 × fontSize) left only ~4px of air — the label sat in the
+  // ring's glow. An even earlier circular offset of ~0.3 × diameter
+  // was too much space under the QR; this stays far below that.
+  const ringOffset = showPerimeterLabel
+    ? Math.round(FACE_RING_PX + perimeterFontSize * (PERIMETER_ASCENT_EM + PERIMETER_BODY_EM))
+    : 0;
   const perimeterPathSize = effectiveDiameter + ringOffset * 2;
   // Matches (scaled up slightly for the small extra offset) the QR
   // face's own 12px corner radius below, so the ring reads as hugging
   // that same shape rather than a differently-rounded one just outside it.
   const perimeterRadius = Math.max(8, Math.round(12 + ringOffset));
   // Room for the path itself plus the text sitting on it (glyphs extend
-  // roughly half their own height past the bare path line).
+  // roughly half their own height past the bare path line). When the
+  // root can be edited, also leave a slot outside the path so the
+  // pencil can sit at the end of the root (the thing it edits) instead
+  // of floating in the empty corner of the label's bounding box.
+  const rootEditPencilPx = ROOT_EDIT_PENCIL_EM * (Number(theme.typography.htmlFontSize) || 16);
+  const rootEditOutside = editableRoot && showPerimeterLabel
+    ? Math.ceil(rootEditPencilPx) + Math.max(4, Math.round(perimeterFontSize * 0.25))
+    : 0;
   const outerSize = showPerimeterLabel
-    ? perimeterPathSize + perimeterFontSize
+    ? perimeterPathSize + perimeterFontSize + rootEditOutside
     : effectiveDiameter;
   const perimeterInset = (outerSize - perimeterPathSize) / 2;
   // Sized and placed by a single ratio (φ) instead of the independent,
@@ -631,6 +746,53 @@ export default function QRme({
       // getBBox throws on a non-rendered element -- nothing to mirror yet.
     }
   }, [showPerimeterLabel, perimeterLabel, perimeterShown, perimeterRootLabel, perimeterFontSize, outerSize]);
+
+  const [rootEditAnchor, setRootEditAnchor] = React.useState<RootEditAnchor | null>(null);
+  const rootEditGap = typeof theme.spacing === 'function'
+    ? (parseFloat(String(theme.spacing(0.5))) || 4)
+    : 4;
+  React.useLayoutEffect(() => {
+    if (!editableRoot || !showPerimeterLabel) {
+      setRootEditAnchor(null);
+      return;
+    }
+    const el = perimeterTextRef.current;
+    if (!el) return;
+    const hasRootRun = perimeterRootStart >= 0 && perimeterRootText.length > 0;
+    const anchorStart = hasRootRun ? perimeterRootStart : 0;
+    const anchorLen = hasRootRun ? perimeterRootText.length : (shownLabel ? shownLabel.length : 0);
+    const next = measureRootEditAnchor(el, anchorStart, anchorLen, rootEditPencilPx, rootEditGap);
+    setRootEditAnchor((prev) => {
+      if (!prev && !next) return prev;
+      if (!next) return null;
+      if (
+        prev
+        && prev.underline.left === next.underline.left
+        && prev.underline.top === next.underline.top
+        && prev.underline.width === next.underline.width
+        && prev.pencil.left === next.pencil.left
+        && prev.pencil.top === next.pencil.top
+        && prev.hit.left === next.hit.left
+        && prev.hit.top === next.hit.top
+        && prev.hit.width === next.hit.width
+        && prev.hit.height === next.hit.height
+      ) return prev;
+      return next;
+    });
+  }, [
+    editableRoot,
+    showPerimeterLabel,
+    perimeterLabel,
+    perimeterShown,
+    perimeterRootLabel,
+    perimeterRootStart,
+    perimeterRootText,
+    shownLabel,
+    perimeterFontSize,
+    outerSize,
+    rootEditPencilPx,
+    rootEditGap,
+  ]);
 
   const handlePointerEnter = () => {
     if (hoverFlip) setHovered(true);
@@ -884,7 +1046,7 @@ export default function QRme({
                 // ringAccent (warning/error while `status` says so, the
                 // theme's own primary color otherwise) so this glow doubles
                 // as the QR's connection-status signal.
-                : `0 0 0 2px ${ringAccent}, 0 0 14px 3px ${withHexAlpha(ringAccent, '40')}, 0 8px 18px rgba(0,0,0,0.14)`,
+                : `0 0 0 ${FACE_RING_PX}px ${ringAccent}, 0 0 14px 3px ${withHexAlpha(ringAccent, '40')}, 0 8px 18px rgba(0,0,0,0.14)`,
             overflow: 'hidden',
           }}
         >
@@ -1083,9 +1245,11 @@ export default function QRme({
       </Box>
       </Box>
 
-      {/* The namespace is edited where it is written: a quiet pencil after it and an underline that breathes,
-          to say "this is a field". The whole label is the target, not only the pencil. */}
-      {editableRoot && perimeterTextBox && (
+      {/* The namespace is edited where it is written: a quiet pencil after the
+          root (the thing being edited) and an underline under that same run,
+          to say "this is a field". The target is the root, not the whole
+          L-shaped label box. */}
+      {editableRoot && rootEditAnchor && (
         editingRoot ? (
           <Box
             component="form"
@@ -1093,8 +1257,8 @@ export default function QRme({
             onClick={(event: React.MouseEvent) => event.stopPropagation()}
             sx={{
               position: 'absolute',
-              left: (perimeterTextBox?.x ?? 0) - 10,
-              top: (perimeterTextBox?.y ?? 0) - 7,
+              left: rootEditAnchor.form.left,
+              top: rootEditAnchor.form.top,
               zIndex: 2,
               display: 'flex',
               alignItems: 'center',
@@ -1152,10 +1316,10 @@ export default function QRme({
             onClick={(event: React.MouseEvent) => { event.stopPropagation(); openRootEditor(); }}
             sx={{
               position: 'absolute',
-              left: perimeterTextBox.x - 4,
-              top: perimeterTextBox.y - 2,
-              width: perimeterTextBox.width + 8 + 17,
-              height: perimeterTextBox.height + 4,
+              left: rootEditAnchor.hit.left,
+              top: rootEditAnchor.hit.top,
+              width: rootEditAnchor.hit.width,
+              height: rootEditAnchor.hit.height,
               zIndex: 2,
               p: 0,
               border: 0,
@@ -1175,10 +1339,10 @@ export default function QRme({
               className="qrme-root-edit-underline"
               sx={{
                 position: 'absolute',
-                left: 4,
-                bottom: 1,
-                width: perimeterTextBox.width,
-                height: '1.5px',
+                left: rootEditAnchor.underline.left - rootEditAnchor.hit.left,
+                top: rootEditAnchor.underline.top - rootEditAnchor.hit.top,
+                width: rootEditAnchor.underline.width,
+                height: rootEditAnchor.underline.height,
                 borderRadius: 1,
                 bgcolor: readable(ringAccent, theme.palette.primary.light),
                 // A breath, not a blink: one slow swell and settle (about 5s), never fully off, so it reads as calm
@@ -1191,9 +1355,14 @@ export default function QRme({
             <Box
               aria-hidden="true"
               className="qrme-root-edit-pencil"
-              sx={{ position: 'absolute', left: perimeterTextBox.width + 8, top: '50%', transform: 'translateY(-50%)', display: 'inline-flex' }}
+              sx={{
+                position: 'absolute',
+                left: rootEditAnchor.pencil.left - rootEditAnchor.hit.left,
+                top: rootEditAnchor.pencil.top - rootEditAnchor.hit.top,
+                display: 'inline-flex',
+              }}
             >
-              <Icon name="edit" fontSize="0.8rem" iconColor={theme.palette.text.primary} />
+              <Icon name="edit" fontSize={ROOT_EDIT_PENCIL_FONT_SIZE} iconColor={theme.palette.text.primary} />
             </Box>
           </Box>
         )
