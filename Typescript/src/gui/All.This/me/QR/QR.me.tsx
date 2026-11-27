@@ -172,8 +172,9 @@ export type QRmeProps = {
    */
   perimeterHandleHref?: string;
   /**
-   * Shows a small pencil affordance in the QR's corner, revealed on
-   * hover, that lets a person edit `editableRootValue` inline -- opt-in
+   * Shows a small pencil affordance after the last glyph of the
+   * perimeter label, revealed on hover of the card (or focus-visible),
+   * that lets a person edit `editableRootValue` inline -- opt-in
    * only (every other mount of this component, e.g. monad.ai.tsx's
    * decorative QR or the old Cleaker.tsx surface, keeps rendering exactly
    * as before). Exists because the namespace this QR encodes/displays is
@@ -248,44 +249,25 @@ function buildPerimeterPath(s: number, r: number): string {
 }
 
 type RootEditAnchor = {
-  underline: { left: number; top: number; width: number; height: number };
   pencil: { left: number; top: number };
   hit: { left: number; top: number; width: number; height: number };
   form: { left: number; top: number };
 };
 
-// Sit the pencil and underline on the ROOT run — the thing the control
-// actually edits — instead of at the corner of the whole label's
-// axis-aligned bounding box (which, for a bottom-and-right path, is a
-// large empty rectangle with the pencil floating in mid-air).
-function measureRootEditAnchor(
+// Sit the pencil just after the last glyph of the whole perimeter
+// label, continuing along the path (bottom, then up the right edge).
+// No underline — the affordance is the pencil, and only on hover.
+function measurePerimeterEditAnchor(
   textEl: SVGTextElement,
-  anchorStart: number,
-  anchorLen: number,
   pencilPx: number,
   gap: number,
+  fontSize: number,
 ): RootEditAnchor | null {
-  if (typeof textEl.getNumberOfChars !== 'function' || typeof textEl.getExtentOfChar !== 'function') return null;
+  if (typeof textEl.getNumberOfChars !== 'function' || typeof textEl.getEndPositionOfChar !== 'function') return null;
   let n = 0;
   try { n = textEl.getNumberOfChars(); } catch { return null; }
-  if (anchorLen <= 0 || anchorStart < 0 || anchorStart + anchorLen > n) return null;
-  const last = anchorStart + anchorLen - 1;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  try {
-    for (let i = anchorStart; i <= last; i += 1) {
-      const e = textEl.getExtentOfChar(i);
-      minX = Math.min(minX, e.x);
-      minY = Math.min(minY, e.y);
-      maxX = Math.max(maxX, e.x + e.width);
-      maxY = Math.max(maxY, e.y + e.height);
-    }
-  } catch {
-    return null;
-  }
-  if (!Number.isFinite(minX) || !Number.isFinite(maxY)) return null;
+  if (n <= 0) return null;
+  const last = n - 1;
   let end: { x: number; y: number };
   let rotDeg = 0;
   try {
@@ -294,48 +276,33 @@ function measureRootEditAnchor(
   } catch {
     return null;
   }
-  let rot = rotDeg % 360;
-  if (rot > 180) rot -= 360;
-  if (rot < -180) rot += 360;
-  const underlineH = 1.5;
-  const nearlyHorizontal = Math.abs(rot) < 35;
-  const nearlyVertical = Math.abs(Math.abs(rot) - 90) < 35;
-  let underline: RootEditAnchor['underline'];
-  let pencil: RootEditAnchor['pencil'];
-  if (nearlyHorizontal) {
-    const uTop = Math.max(maxY + 1, end.y + 2);
-    underline = { left: minX, top: uTop, width: Math.max(0, maxX - minX), height: underlineH };
-    // Hooked to the end of the underline, just outside the letters, so
-    // the path text that continues after the root is not interrupted
-    // and the pencil does not sit in a second, lower row of its own.
-    pencil = { left: maxX + Math.max(1, gap - 2), top: uTop - 2 };
-  } else if (nearlyVertical) {
-    const uLeft = Math.max(maxX + 1, end.x + 2);
-    underline = { left: uLeft, top: minY, width: underlineH, height: Math.max(0, maxY - minY) };
-    pencil = { left: uLeft + underlineH + 1, top: minY };
-  } else {
-    const rad = (rot * Math.PI) / 180;
-    const tx = Math.cos(rad);
-    const ty = Math.sin(rad);
-    const nx = -ty;
-    const ny = tx;
-    const uTop = Math.max(maxY + 1, end.y + 2);
-    underline = { left: minX, top: uTop, width: Math.max(0, maxX - minX), height: underlineH };
-    pencil = {
-      left: end.x + tx * gap + nx * (gap + 2),
-      top: end.y + ty * gap + ny * (gap + 2),
-    };
-  }
-  const hitLeft = Math.min(minX, underline.left, pencil.left) - 4;
-  const hitTop = Math.min(minY, underline.top, pencil.top) - 2;
-  const hitRight = Math.max(maxX, underline.left + underline.width, pencil.left + pencilPx) + 4;
-  const hitBottom = Math.max(maxY, underline.top + underline.height, pencil.top + pencilPx) + 2;
-  return {
-    underline,
-    pencil,
-    hit: { left: hitLeft, top: hitTop, width: hitRight - hitLeft, height: hitBottom - hitTop },
-    form: { left: minX - 10, top: minY - 7 },
+  const rad = (rotDeg * Math.PI) / 180;
+  const tx = Math.cos(rad);
+  const ty = Math.sin(rad);
+  // Inward normal (toward the letters / the QR): tangent rotated −90°.
+  const nxIn = ty;
+  const nyIn = -tx;
+  const mid = fontSize * 0.35;
+  const cx = end.x + tx * (gap + pencilPx / 2) + nxIn * mid;
+  const cy = end.y + ty * (gap + pencilPx / 2) + nyIn * mid;
+  const pencil = { left: cx - pencilPx / 2, top: cy - pencilPx / 2 };
+  const pad = 4;
+  const hit = {
+    left: pencil.left - pad,
+    top: pencil.top - pad,
+    width: pencilPx + pad * 2,
+    height: pencilPx + pad * 2,
   };
+  let formLeft = end.x - 10;
+  let formTop = end.y - 24;
+  try {
+    const first = textEl.getStartPositionOfChar(0);
+    formLeft = first.x - 10;
+    formTop = first.y - 24;
+  } catch {
+    // Keep the end-of-label fallback.
+  }
+  return { pencil, hit, form: { left: formLeft, top: formTop } };
 }
 
 
@@ -650,9 +617,8 @@ export default function QRme({
   const perimeterRadius = Math.max(8, Math.round(12 + ringOffset));
   // Room for the path itself plus the text sitting on it (glyphs extend
   // roughly half their own height past the bare path line). When the
-  // root can be edited, also leave a slot outside the path so the
-  // pencil can sit at the end of the root (the thing it edits) instead
-  // of floating in the empty corner of the label's bounding box.
+  // root can be edited, also leave a slot past the path so the pencil
+  // can sit after the last glyph, following the curve.
   const rootEditPencilPx = ROOT_EDIT_PENCIL_EM * (Number(theme.typography.htmlFontSize) || 16);
   const rootEditOutside = editableRoot && showPerimeterLabel
     ? Math.ceil(rootEditPencilPx) + Math.max(4, Math.round(perimeterFontSize * 0.25))
@@ -758,18 +724,12 @@ export default function QRme({
     }
     const el = perimeterTextRef.current;
     if (!el) return;
-    const hasRootRun = perimeterRootStart >= 0 && perimeterRootText.length > 0;
-    const anchorStart = hasRootRun ? perimeterRootStart : 0;
-    const anchorLen = hasRootRun ? perimeterRootText.length : (shownLabel ? shownLabel.length : 0);
-    const next = measureRootEditAnchor(el, anchorStart, anchorLen, rootEditPencilPx, rootEditGap);
+    const next = measurePerimeterEditAnchor(el, rootEditPencilPx, rootEditGap, perimeterFontSize);
     setRootEditAnchor((prev) => {
       if (!prev && !next) return prev;
       if (!next) return null;
       if (
         prev
-        && prev.underline.left === next.underline.left
-        && prev.underline.top === next.underline.top
-        && prev.underline.width === next.underline.width
         && prev.pencil.left === next.pencil.left
         && prev.pencil.top === next.pencil.top
         && prev.hit.left === next.hit.left
@@ -784,9 +744,6 @@ export default function QRme({
     showPerimeterLabel,
     perimeterLabel,
     perimeterShown,
-    perimeterRootLabel,
-    perimeterRootStart,
-    perimeterRootText,
     shownLabel,
     perimeterFontSize,
     outerSize,
@@ -819,6 +776,14 @@ export default function QRme({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
+        // The pencil lives at the end of the perimeter label and stays
+        // hidden until the card (or the control itself) is pointed at
+        // or keyboard-focused.
+        '& .qrme-root-edit-pencil': { opacity: 0, transition: 'opacity 160ms ease' },
+        '&:hover .qrme-root-edit-pencil, &:focus-within .qrme-root-edit-pencil': { opacity: 1 },
+        '@media (prefers-reduced-motion: reduce)': {
+          '& .qrme-root-edit-pencil': { transition: 'none' },
+        },
       }}
     >
       {showPerimeterLabel && (
@@ -1245,10 +1210,8 @@ export default function QRme({
       </Box>
       </Box>
 
-      {/* The namespace is edited where it is written: a quiet pencil after the
-          root (the thing being edited) and an underline under that same run,
-          to say "this is a field". The target is the root, not the whole
-          L-shaped label box. */}
+      {/* A pencil after the last glyph of the whole curved label, shown
+          only while the card is hovered or the control is focused. */}
       {editableRoot && rootEditAnchor && (
         editingRoot ? (
           <Box
@@ -1327,31 +1290,9 @@ export default function QRme({
               cursor: 'pointer',
               '&:focus': { outline: 'none' },
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: '4px' },
-              // The pencil is the quiet part until the label is pointed at; it eases in and out slowly, like the underline.
-              '& .qrme-root-edit-pencil': { opacity: 0.5, transition: 'opacity 500ms ease' },
-              '&:hover .qrme-root-edit-pencil, &:focus-visible .qrme-root-edit-pencil': { opacity: 1 },
-              '&:hover .qrme-root-edit-underline, &:focus-visible .qrme-root-edit-underline': { animationPlayState: 'paused' },
             }}
             data-gui-node-id={`${qrBase}.namespace.edit`}
           >
-            <Box
-              aria-hidden="true"
-              className="qrme-root-edit-underline"
-              sx={{
-                position: 'absolute',
-                left: rootEditAnchor.underline.left - rootEditAnchor.hit.left,
-                top: rootEditAnchor.underline.top - rootEditAnchor.hit.top,
-                width: rootEditAnchor.underline.width,
-                height: rootEditAnchor.underline.height,
-                borderRadius: 1,
-                bgcolor: readable(ringAccent, theme.palette.primary.light),
-                // A breath, not a blink: one slow swell and settle (about 5s), never fully off, so it reads as calm
-                // and alive rather than as an alert. Pointing at the name pauses it where it is.
-                animation: 'qrme-root-breathe 5s cubic-bezier(0.37, 0, 0.63, 1) infinite',
-                '@keyframes qrme-root-breathe': { '0%, 100%': { opacity: 0.45 }, '50%': { opacity: 0.85 } },
-                '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 0.6 },
-              }}
-            />
             <Box
               aria-hidden="true"
               className="qrme-root-edit-pencil"
