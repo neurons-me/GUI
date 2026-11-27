@@ -126,6 +126,55 @@ export function pagePlaceUrl(page: { protocol: string; origin?: string; host?: s
   return `${origin}${page.pathname || ''}${page.search || ''}${page.hash || ''}`;
 }
 
+/**
+ * The value of `at=`, readable and exact: `?at=https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n%23Historia`, not
+ * `?at=https%3A%2F%2Fes.wikipedia.org%2F…`.
+ *
+ * Only what would break the query is escaped: `#` (it would become the door's own section), `&` and `+` (they would
+ * split the parameter or turn into a space), `%`, spaces and controls, and every non-ASCII character (as UTF-8 %XX, a
+ * single level: `á` is `%C3%A1`, never `%25C3%25A1`). An escape that means something in the URL (`%2F`, `%23`, `%25`…)
+ * is kept exactly as it was, so `/a%2Fb` never becomes `/a/b`.
+ *
+ * Unbreakable: the result is read back the way the door reads it (URLSearchParams, then new URL) and must give the
+ * very same URL; if it does not, the fully escaped form is used, which always does.
+ */
+export function atParam(place: string): string {
+  let href: string;
+  try {
+    href = new URL(place).href;
+  } catch {
+    return encodeURIComponent(place);
+  }
+  // 1. escapes that only spell a plain character (á, ñ, ~) become that character; meaningful ones stay escaped
+  const iri = href.replace(/(?:%[0-9A-Fa-f]{2})+/g, (run) => {
+    try {
+      const text = decodeURIComponent(run);
+      return /^[^\u0000- \u007f%#&+\/?\[\]@!$'()*,;=:\\"<>^`{|}]+$/u.test(text) ? text : run;
+    } catch {
+      return run; // not UTF-8: keep the bytes as they were
+    }
+  });
+  // 2. escape for the query only what would break it (and every non-ASCII character)
+  let out = '';
+  for (const ch of iri) {
+    if (/^[A-Za-z0-9\-._~:\/?@!$'()*,;=]$/.test(ch)) out += ch;
+    else out += encodeURIComponent(ch).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  }
+  // 3. the door must read back exactly this URL
+  try {
+    const back = new URLSearchParams(`at=${out}`).get('at');
+    if (back !== null && new URL(back).href === href) return out;
+  } catch { /* fall through */ }
+  return encodeURIComponent(href);
+}
+
+/** `link` with `at=<place>` added (atParam), keeping the link's own query and section. */
+export function withAt(link: string, place: string): string {
+  const u = new URL(link);
+  const query = u.search ? `${u.search}&` : '?';
+  return `${u.origin}${u.pathname}${query}at=${atParam(place)}${u.hash}`;
+}
+
 /** A page's location: window.location, a URL, or a plain object with these parts. */
 export type PageLocation = PagePlace & { origin?: string };
 

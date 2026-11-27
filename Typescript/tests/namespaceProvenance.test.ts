@@ -68,7 +68,8 @@ assert.equal(typeof (globalThis as { window?: unknown }).window, 'undefined');
   const wiki = pagePlaceUrl(loc('https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia'));
   assert.equal(wiki, 'https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia');
   const qr = new URL(positionQrValue('ana.cleaker.me', wiki, 'https://cleaker.me'));
-  assert.equal(qr.searchParams.get('at'), wiki, 'at= carries path, query and section');
+  assert.equal(new URL(qr.searchParams.get('at')!).href, wiki, 'at= carries path, query and section (same URL)');
+  assert.equal(qr.toString(), 'https://cleaker.me/?namespace=ana.cleaker.me&at=https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1%23Historia', 'and reads as one');
   assert.equal(new URL(positionQrValue('cleaker.me', pagePlaceUrl(loc('https://neurons-me.github.io/Cleaker/#notes')), 'https://cleaker.me')).searchParams.get('at'), 'https://neurons-me.github.io/Cleaker/#notes');
   // the page IS the namespace's own root: nothing added
   assert.equal(new URL(positionQrValue('cleaker.me', pagePlaceUrl(loc('https://cleaker.me/')), 'https://cleaker.me')).searchParams.get('at'), null);

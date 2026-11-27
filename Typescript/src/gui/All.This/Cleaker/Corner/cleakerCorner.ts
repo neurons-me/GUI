@@ -16,7 +16,7 @@
 // React-free on purpose: `this.gui/cleaker` is the subpath a static page loads before deciding to load React at all.
 import qrcodegen from 'qrcode-generator';
 import { linkQrValue } from '@/react/linkQr';
-import { pagePlaceUrl, unresolvedPosition } from '@/react/positionExpression';
+import { pagePlaceUrl, unresolvedPosition, withAt } from '@/react/positionExpression';
 export { pagePlaceUrl };
 import { probeMonadSurface } from '@/runtime/monads/monadDiscovery.fetch';
 import { CLEAKER_BAR_STATES, barStates, isBarState, readBars, type CleakerBar, type CleakerBarId, type CleakerBarState } from './cleakerBars';
@@ -178,7 +178,7 @@ export function positionQrValue(namespace: string, pageAddress: string, endpoint
   const link = linkQrValue({ endpoint: endpoint || namespaceEndpoint(namespace), namespace });
   try {
     const u = new URL(link);
-    if (pageAddress && !isOriginRoot(pageAddress, u.origin)) u.searchParams.set('at', pageAddress);
+    if (pageAddress && !isOriginRoot(pageAddress, u.origin)) return withAt(u.toString(), pageAddress);
     return u.toString();
   } catch {
     return link;
