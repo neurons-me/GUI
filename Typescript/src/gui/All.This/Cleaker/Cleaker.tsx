@@ -48,6 +48,7 @@ import Box from '@/gui/Atoms/Box/Box';
 import Typography from '@/gui/Atoms/Typography/Typography';
 import { parseCleakerNamespaceExpression } from './namespaceExpression';
 import ArrivedAt from './ArrivedAt';
+import { takeArrival } from './arrivalPlace';
 
 export type CleakerProps = {
   sx?: any;
@@ -110,6 +111,8 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
   // Memoized on the namespace string. Parse errors are not caught: a namespace that was given and is broken deserves a
   // real error, not a silent redirect to somewhere else.
   const namespaceConfig = React.useMemo(() => (namespace ? parseCleakerNamespaceExpression(namespace) : null), [namespace]);
+  // A shared QR's `?at=`: taken before the shell renders, so every "where you are" label is drawn without it.
+  const [arrival] = React.useState(() => takeArrival());
 
   if (!found || !namespaceConfig) {
     return (
@@ -158,7 +161,7 @@ export default function Cleaker({ sx, namespace: namespaceProp, transport, resol
         onOfferDocument={onOfferDocument}
       />
       {/* opened from a shared QR (`?at=<exact place>`): offer to go there, never go on its own */}
-      <ArrivedAt />
+      <ArrivedAt place={arrival} />
     </SeedSessionProvider>
   );
 }

@@ -74,3 +74,59 @@ export function withoutArrival(search: string): string {
   const rest = params.toString();
   return rest ? `?${rest}` : '';
 }
+
+// ── taking it: once, before the shell draws ─────────────────────────────────────────────────────────────────────────
+// `at=` belongs to the arrival, not to where the page is: while it sits in the address bar, every label that writes
+// "where you are" would read `cleaker.me @ cleaker.me?at=https://…` (and a QR made from it would nest one at= in another).
+// So the door takes it before anything renders: the place is kept for the card, the address bar is cleaned at once.
+// The tab's sessionStorage keeps it until the person goes or dismisses, so a reload before deciding does not lose it.
+
+const STORE_KEY = 'cleaker.arrival';
+let taken: { href: string; place: ArrivalPlace | null } | null = null;
+
+type ArrivalEnv = {
+  location: { href: string; pathname: string; search: string; hash: string };
+  history?: { state: unknown; replaceState(data: unknown, unused: string, url?: string): void };
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+};
+
+function browserEnv(): ArrivalEnv | null {
+  if (typeof window === 'undefined') return null;
+  let storage: ArrivalEnv['storage'] = null;
+  try { storage = window.sessionStorage; } catch { storage = null; }
+  return { location: window.location, history: window.history, storage };
+}
+
+/**
+ * The arrival place for this page, taken once: from `at=` (then removed from the address bar, other parameters kept),
+ * else from what this tab kept after an earlier visit with `at=`. Idempotent: a second call returns the same place.
+ */
+export function takeArrival(env: ArrivalEnv | null = browserEnv()): ArrivalPlace | null {
+  if (!env) return null;
+  const { location, history, storage } = env;
+  const hasAt = /[?&]at=/.test(location.search);
+  if (taken && !hasAt) return taken.place;
+  let place = hasAt ? readArrivalPlace(location.search, location.href) : null;
+  if (hasAt) {
+    try { history?.replaceState(history.state, '', `${location.pathname}${withoutArrival(location.search)}${location.hash}`); } catch { /* stays in the bar */ }
+    try { if (place) storage?.setItem(STORE_KEY, place.url); else storage?.removeItem(STORE_KEY); } catch { /* not kept */ }
+  } else {
+    let kept: string | null = null;
+    try { kept = storage?.getItem(STORE_KEY) ?? null; } catch { kept = null; }
+    // what was kept is read back through the same validation as a fresh at=
+    if (kept) place = readArrivalPlace(`?at=${encodeURIComponent(kept)}`, location.href);
+  }
+  taken = { href: location.href, place };
+  return place;
+}
+
+/** The person went or dismissed: nothing is offered again in this tab. */
+export function forgetArrival(env: ArrivalEnv | null = browserEnv()): void {
+  taken = { href: '', place: null };
+  try { env?.storage?.removeItem(STORE_KEY); } catch { /* nothing kept */ }
+}
+
+/** Tests only. */
+export function resetArrivalForTests(): void {
+  taken = null;
+}

@@ -2,25 +2,16 @@
 //
 // A QR.me carries `https://<namespace>/?at=<exact place>` (arrivalPlace.ts). The door shows where that is, in full,
 // and takes the person there only when they choose to (never on its own: see arrivalPlace.ts). Dismissing it, or
-// going, removes `at=` from the address bar so a reload does not ask again.
+// going, forgets it for this tab (the address bar was already cleaned when <Cleaker> took it).
 import * as React from 'react';
 import { Box, Typography } from '@/gui/Atoms';
 import Button from '@/gui/Atoms/Button/Button';
 import Icon from '@/gui/Atoms/Icon/Icon';
-import { readArrivalPlace, withoutArrival, type ArrivalPlace } from './arrivalPlace';
+import { forgetArrival, type ArrivalPlace } from './arrivalPlace';
 
-function forgetArrival() {
-  if (typeof window === 'undefined') return;
-  try {
-    const { pathname, search, hash } = window.location;
-    window.history.replaceState(window.history.state, '', `${pathname}${withoutArrival(search)}${hash}`);
-  } catch { /* the address bar stays as it was */ }
-}
-
-export default function ArrivedAt({ nodeId = 'Cleaker.arrivedAt' }: { nodeId?: string }) {
-  const [place, setPlace] = React.useState<ArrivalPlace | null>(() => (
-    typeof window === 'undefined' ? null : readArrivalPlace(window.location.search, window.location.href)
-  ));
+/** `place` is taken by <Cleaker> before the shell renders (arrivalPlace.ts takeArrival), so no label ever shows `?at=`. */
+export default function ArrivedAt({ place: initial, nodeId = 'Cleaker.arrivedAt' }: { place: ArrivalPlace | null; nodeId?: string }) {
+  const [place, setPlace] = React.useState<ArrivalPlace | null>(initial);
   if (!place) return null;
   const close = () => { forgetArrival(); setPlace(null); };
   return (

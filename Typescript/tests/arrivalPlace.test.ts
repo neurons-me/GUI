@@ -1,6 +1,6 @@
 // The place a shared QR points at (`?at=`): read, validated, never followed on its own (arrivalPlace.ts).
 import assert from 'node:assert/strict';
-import { readArrivalPlace, withoutArrival } from '../src/gui/All.This/Cleaker/arrivalPlace';
+import { forgetArrival, readArrivalPlace, resetArrivalForTests, takeArrival, withoutArrival } from '../src/gui/All.This/Cleaker/arrivalPlace';
 import { atParam, withAt } from '../src/react/positionExpression';
 
 const q = (at: string, extra = '') => `?${extra}at=${encodeURIComponent(at)}`;
@@ -68,6 +68,41 @@ assert.equal(withoutArrival(q('https://x.org')), '');
   }
   // not a URL: fully escaped, still exact as a string
   assert.equal(atParam('not a url & #'), encodeURIComponent('not a url & #'));
+}
+
+// ── taken once, before the shell draws: the address bar is cleaned at once, the tab keeps it until go/dismiss ─────────
+{
+  const fakeEnv = (href: string) => {
+    const store = new Map<string, string>();
+    const env = {
+      location: new URL(href) as unknown as { href: string; pathname: string; search: string; hash: string },
+      history: { state: null as unknown, replaceState(_d: unknown, _u: string, url?: string) { env.location = new URL(url!, env.location.href) as any; } },
+      storage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) },
+      store,
+    };
+    return env;
+  };
+  resetArrivalForTests();
+  const env = fakeEnv('https://cleaker.me/?x=1&at=https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n%23Historia#top');
+  const place = takeArrival(env);
+  assert.equal(place?.url, 'https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n#Historia');
+  assert.equal(env.location.href, 'https://cleaker.me/?x=1#top', 'at= leaves the address bar at once; the rest stays');
+  assert.equal(takeArrival(env)?.url, place?.url, 'taken once: a second call (StrictMode, a re-render) gives the same place');
+  // a reload before deciding: the bar has no at=, the tab kept it
+  resetArrivalForTests();
+  assert.equal(takeArrival(env)?.url, place?.url, 'a reload still offers it');
+  // dismiss / go: nothing is offered again in this tab
+  forgetArrival(env);
+  resetArrivalForTests();
+  assert.equal(takeArrival(env), null);
+  // a bad at= is removed from the bar and offers nothing
+  resetArrivalForTests();
+  const bad = fakeEnv('https://cleaker.me/?at=javascript%3Aalert(1)');
+  assert.equal(takeArrival(bad), null);
+  assert.equal(bad.location.href, 'https://cleaker.me/');
+  // no browser: nothing
+  assert.equal(takeArrival(null), null);
+  resetArrivalForTests();
 }
 
 console.log('arrivalPlace: ok');
