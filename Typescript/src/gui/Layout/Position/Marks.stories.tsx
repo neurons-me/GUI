@@ -34,7 +34,7 @@ const NAV = [{ route: 'home', label: 'Home', icon: 'home' }];
 function MarksPreview({ identityCorner, username }: { identityCorner: MarkCorner; username?: string }) {
   const me = useMemo(() => new ME(DEMO_SEED) as any, []);
   const runtime = useMemo(() => RunMe(me), [me]);
-  const value = `https://cleaker.me/?at=${encodeURIComponent(window.location.origin)}`;
+  const value = `https://cleaker.me/?at=${encodeURIComponent(window.location.href)}`;
   return (
     <AppShell
       app={app}

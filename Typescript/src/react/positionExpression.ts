@@ -115,6 +115,17 @@ export function fileSurface(page: { protocol: string; pathname?: string } | null
   return surfaceOf({ protocol: 'file:', host: '', pathname: page.pathname });
 }
 
+/**
+ * The page's exact place as a URL: scheme, host, path, query and fragment (a file: the whole file, and its fragment).
+ * This is what `at=` carries, so whoever scans the QR lands exactly where the page is -- the same section of the same
+ * page -- not only on its site.
+ */
+export function pagePlaceUrl(page: { protocol: string; origin?: string; host?: string; pathname?: string; search?: string; hash?: string }): string {
+  if (page.protocol === 'file:') return `file://${page.pathname || ''}${page.hash || ''}`;
+  const origin = page.origin || `${page.protocol}//${page.host || ''}`;
+  return `${origin}${page.pathname || ''}${page.search || ''}${page.hash || ''}`;
+}
+
 /** A page's location: window.location, a URL, or a plain object with these parts. */
 export type PageLocation = PagePlace & { origin?: string };
 

@@ -6,6 +6,8 @@ import {
   addressNamespace,
   cornerEndpoint,
   cornerLabel,
+  pagePlaceUrl,
+  positionQrValue,
   resolveCornerNamespace,
 } from '../src/gui/All.This/Cleaker/Corner/cleakerCorner';
 import { parseCleakerNamespaceExpression } from '../src/gui/All.This/Cleaker/namespaceExpression';
@@ -59,5 +61,21 @@ assert.equal(parseCleakerNamespaceExpression('localhost:6006').transport.origin,
 
 // importing the module did not need a browser (this file runs in Node without window)
 assert.equal(typeof (globalThis as { window?: unknown }).window, 'undefined');
+
+// The QR's at= is the page's EXACT place: whoever scans it lands on the same section of the same page.
+{
+  const loc = (href: string) => { const u = new URL(href); return { protocol: u.protocol, origin: u.origin, host: u.host, pathname: u.pathname, search: u.search, hash: u.hash }; };
+  const wiki = pagePlaceUrl(loc('https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia'));
+  assert.equal(wiki, 'https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia');
+  const qr = new URL(positionQrValue('ana.cleaker.me', wiki, 'https://cleaker.me'));
+  assert.equal(qr.searchParams.get('at'), wiki, 'at= carries path, query and section');
+  assert.equal(new URL(positionQrValue('cleaker.me', pagePlaceUrl(loc('https://neurons-me.github.io/Cleaker/#notes')), 'https://cleaker.me')).searchParams.get('at'), 'https://neurons-me.github.io/Cleaker/#notes');
+  // the page IS the namespace's own root: nothing added
+  assert.equal(new URL(positionQrValue('cleaker.me', pagePlaceUrl(loc('https://cleaker.me/')), 'https://cleaker.me')).searchParams.get('at'), null);
+  // inside the namespace's own site: that place is still news
+  assert.equal(new URL(positionQrValue('cleaker.me', pagePlaceUrl(loc('https://cleaker.me/users#keys')), 'https://cleaker.me')).searchParams.get('at'), 'https://cleaker.me/users#keys');
+  // a file: the whole file and its section
+  assert.equal(pagePlaceUrl({ protocol: 'file:', pathname: '/Users/me/notes/page.html', hash: '#p3' }), 'file:///Users/me/notes/page.html#p3');
+}
 
 console.log('namespaceProvenance: ok');

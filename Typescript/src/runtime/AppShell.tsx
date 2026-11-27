@@ -1,3 +1,4 @@
+import { pagePlaceUrl } from '@/react/positionExpression';
 import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { GuiPage, GuiNavProvider, type GuiNav } from '@/gui/All.This/GUI/GuiPages';
 import { flattenGuiDocument, renderGuiDocumentPage, GUI_DOCUMENT } from './guiDocument';
@@ -485,7 +486,7 @@ function AppShellNav({ app, navItems, footerElements, position, brand, identity:
           authenticated={authenticated || Boolean(connected) || Boolean(identityTree)}
           tree={identityTree}
           qr={{
-            value: withQrPath(qrValue || (namespace ? `https://${namespace}/?at=${encodeURIComponent(window.location.origin)}` : (position || window.location.origin)), identityQrPath),
+            value: withQrPath(qrValue || (namespace ? `https://${namespace}/?at=${encodeURIComponent(pagePlaceUrl(window.location))}` : (position || window.location.origin)), identityQrPath),
             username: connectedName ?? (authenticated && session?.semanticNamespace ? String(session.semanticNamespace).split('.')[0] : identityUsername),
             status: identityQrStatus,
             statusLabel: "Connected",

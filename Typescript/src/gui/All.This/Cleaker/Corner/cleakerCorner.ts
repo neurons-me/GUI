@@ -16,7 +16,8 @@
 // React-free on purpose: `this.gui/cleaker` is the subpath a static page loads before deciding to load React at all.
 import qrcodegen from 'qrcode-generator';
 import { linkQrValue } from '@/react/linkQr';
-import { unresolvedPosition } from '@/react/positionExpression';
+import { pagePlaceUrl, unresolvedPosition } from '@/react/positionExpression';
+export { pagePlaceUrl };
 import { probeMonadSurface } from '@/runtime/monads/monadDiscovery.fetch';
 import { CLEAKER_BAR_STATES, barStates, isBarState, readBars, type CleakerBar, type CleakerBarId, type CleakerBarState } from './cleakerBars';
 
@@ -159,15 +160,25 @@ export function qrSvg(value: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" aria-hidden="true"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${path}" fill="#11181c"/></svg>`;
 }
 
+/** The place adds nothing to the namespace's own link: that origin, at its root, with no query or fragment. */
+function isOriginRoot(place: string, origin: string): boolean {
+  try {
+    const p = new URL(place);
+    return p.origin === origin && (p.pathname === '' || p.pathname === '/') && !p.search && !p.hash;
+  } catch {
+    return place === origin;
+  }
+}
+
 /**
- * What the QR says: the same as the label, `me @ where` -- the namespace's link, plus `at=` where the page is (its
- * origin, or for a file the whole file). Nothing is added when the page IS the namespace.
+ * What the QR says: the same as the label, `me @ where` -- the namespace's link, plus `at=` the page's exact place
+ * (pagePlaceUrl). Nothing is added when the page IS the namespace's own root.
  */
 export function positionQrValue(namespace: string, pageAddress: string, endpoint?: string): string {
   const link = linkQrValue({ endpoint: endpoint || namespaceEndpoint(namespace), namespace });
   try {
     const u = new URL(link);
-    if (pageAddress && pageAddress !== u.origin) u.searchParams.set('at', pageAddress);
+    if (pageAddress && !isOriginRoot(pageAddress, u.origin)) u.searchParams.set('at', pageAddress);
     return u.toString();
   } catch {
     return link;
@@ -229,7 +240,8 @@ export function mountCleaker(options: CleakerMountOptions = {}): CleakerHandle {
 
   // The page's own address: its origin, or for a page opened as a file the file itself (`file:///…/page.html`) -- a
   // file's origin is just `file://`, which names no place. Only this device can open it; it is still where you are.
-  const pageAddress = () => (page.protocol === 'file:' ? `file://${page.pathname}` : page.origin);
+  // read on every render: the place changes as the person moves (a #section, a route)
+  const pageAddress = () => pagePlaceUrl(page);
 
   const stored = read(storage, STORE_CORNER);
   let corner: CleakerCorner = isCorner(stored) ? stored : isCorner(options.corner) ? options.corner : 'bottom-right';

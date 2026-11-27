@@ -46,6 +46,7 @@ import {
   defaultProbe,
   isNamespaceName,
   namespaceEndpoint,
+  pagePlaceUrl,
   positionQrValue,
   resolveCornerNamespace,
   type CleakerCorner,
@@ -182,7 +183,8 @@ function CornerSession({ namespace, endpoint, children }: { namespace: string | 
 
 function CornerApp({ options, storage }: { options: CleakerGuiOptions; storage: Storage | null }) {
   const page = window.location;
-  const pageAddress = page.protocol === 'file:' ? `file://${page.pathname}` : page.origin;
+  // the exact place (path, query, section): what the QR's at= carries
+  const pageAddress = pagePlaceUrl(page);
   const probe = options.probe ?? defaultProbe;
 
   const [corner, setCornerState] = React.useState<CleakerCorner>(() => (

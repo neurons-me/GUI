@@ -152,7 +152,7 @@ async function main() {
       await submit('cleaker.me');
       await page.waitForFunction(() => document.querySelector('[data-cleaker]').shadowRoot.querySelector('.dot').getAttribute('data-state') === 'ok', null, { timeout: 8000 }).catch(() => {});
       const chosen = await inShadow(page, `return { label: shadow.querySelector('.label .text').textContent, state: shadow.querySelector('.dot').getAttribute('data-state'), value: shadow.querySelector('.qr').getAttribute('data-value') }`);
-      check('2.2 choosing cleaker.me: `cleaker.me @ <page>`, it answered, the QR says both (namespace + at=<page>)', chosen.label === `cleaker.me @ ${placeOf(page.url())}` && chosen.state === 'ok' && /^https:\/\/cleaker\.me/.test(chosen.value) && new URL(chosen.value).searchParams.get('at') === demo.origin, JSON.stringify(chosen));
+      check('2.2 choosing cleaker.me: `cleaker.me @ <page>`, it answered, the QR says both (namespace + at=<the exact place of the page>)', chosen.label === `cleaker.me @ ${placeOf(page.url())}` && chosen.state === 'ok' && /^https:\/\/cleaker\.me/.test(chosen.value) && new URL(chosen.value).searchParams.get('at') === page.url(), JSON.stringify(chosen));
       const events = await page.evaluate(() => window.__events);
       check('2.3 the page is told which namespace answered (cleaker:namespace event)', events.length >= 1 && events.every((e) => e === 'cleaker.me'), JSON.stringify(events));
       check('2.4 only its public /__surface was asked', cleaker.calls.every((c) => /\/__surface/.test(c.path)) && cleaker.calls.length >= 1, JSON.stringify(cleaker.calls.map((c) => c.path)));

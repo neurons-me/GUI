@@ -158,7 +158,7 @@ function SiteWithGuiPreview({ connect, corner, brandCorner, namespace, brand, us
   const runtime = React.useMemo(() => RunMe(me), [me]);
   const [keysOpen, setKeysOpen] = React.useState(false);
   const [keysPath, setKeysPath] = React.useState<string[]>([]);
-  const value = `https://${namespace || 'cleaker.me'}/?at=${encodeURIComponent(window.location.origin)}`;
+  const value = `https://${namespace || 'cleaker.me'}/?at=${encodeURIComponent(window.location.href)}`;
   const routes = [...Object.values(SHELL_LEFT_ITEMS).map((it: any) => ({ route: it.route, label: it.label, icon: it.icon })), KEYS_ROUTE];
   const identityTree = (
     <Seeded saved={LONG_SAVED} custom={LONG_CUSTOM}>{() => (
