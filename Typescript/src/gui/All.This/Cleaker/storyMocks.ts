@@ -3,6 +3,8 @@
 // does). Everything else in the stories is the real <Cleaker>.
 import * as React from 'react';
 import type { useBeatle } from '@/gui/All.This/NRP/Beatle/useBeatle';
+import type { ResolutionState } from '@/gui/All.This/NRP/Beatle/Beatle.types';
+import type { DoorLayers } from '@/react/session/doorLayers';
 import type { ConnectionSeams } from './useQRConnect';
 
 type Channel = ReturnType<typeof useBeatle>;
@@ -42,4 +44,65 @@ export const NOTHING_ANSWERS: ConnectionSeams = {
 export const NEVER_ANSWERS: ConnectionSeams = {
   fetchImpl: nothingBehind,
   useChannel: mockChannel(() => 'hang'),
+};
+
+
+/** A channel already in this state. Nothing is opened, no timer, no network. */
+export function settledChannel(
+  state: ResolutionState,
+  options?: { raw?: string; error?: string },
+): typeof useBeatle {
+  const raw = options?.raw ?? '';
+  return (() => {
+    const connected = state === 'connected' || state === 'streaming';
+    const channel = {
+      expression: connected && raw
+        ? { raw, ast: { kind: 'namespace' as const, value: raw } }
+        : null,
+      resolved: [] as string[],
+      state,
+      ...(options?.error ? { error: options.error } : {}),
+    };
+    return { channel, open: () => undefined, send: () => undefined, disconnect: () => undefined };
+  }) as unknown as typeof useBeatle;
+}
+
+/** Layers of a door that served a page and has nothing behind it. */
+export const DOOR_OFF_LAYERS: DoorLayers = {
+  nginx: 'up',
+  backend: 'off',
+  monad: 'off',
+  backendReason: 'answered a page (200, text/html), not JSON',
+  monadReason: 'answered a page (200, text/html), not JSON',
+  checkedAt: null,
+};
+
+/** The channel stays idle; stories that need a live door pass doorOff={false} themselves. */
+export const IDLE_SEAMS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: settledChannel('idle'),
+};
+
+/** Nothing answers behind this page: the grey QR. */
+export const OFF_SEAMS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: settledChannel('idle'),
+};
+
+/** The channel is in flight and never finishes. */
+export const CHECKING_SEAMS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: settledChannel('connecting'),
+};
+
+/** Another host already answered (cleaker.me, the public namespace the failure card itself offers). */
+export const CONNECTED_SEAMS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: settledChannel('connected', { raw: 'cleaker.me' }),
+};
+
+/** Another host already refused. */
+export const FAILED_SEAMS: ConnectionSeams = {
+  fetchImpl: nothingBehind,
+  useChannel: settledChannel('error', { error: 'WebSocket error' }),
 };

@@ -321,9 +321,14 @@ export type QRConnectProps = DocumentPageProps & {
    * corner, bars, brand. Omit in stories; the card still renders with defaults.
    */
   qrMenu?: Pick<CleakerQrMenuProps, 'corner' | 'onMoveTo' | 'onMoveBrand' | 'otherCorner' | 'barModes' | 'onChooseBarMode' | 'layout'>;
+  /**
+   * The page's location used for the position label. Production omits it (window.location). A story may pass a
+   * fixture so the Storybook iframe path is not drawn as the place.
+   */
+  pageLocation?: { protocol: string; host: string; hostname: string; origin: string; pathname?: string; search?: string; hash?: string; href?: string } | null;
 };
 
-const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, onNamespaceSelected, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, qrMenu, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
+const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadOrigin, username: declaredUsername, onBeatleNamespaceResolved, onSelectedNamespaceAnswered, onNamespaceSelected, sharedRootStatus = 'checking', sharedRootBinding, semanticPath = '/', namespaceSource = 'declared', doorLayers, doorOff = false, doorChecking = false, probeDoor, compact, qrStatus, qrMenu, pageLocation, 'data-gui-node-id': nodeId = LANDING_ID, 'data-gui-component': nodeComponent = 'Landing' }) => {
   // No useRegisterGuiNode here: the page is declared by the GUI document
   // (GUI.window.layout.content.landing) -- declared is not the same as mounted.
   const view = useMeLauncherView();
@@ -573,7 +578,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
   // separate; only the text is abbreviated (react/positionExpression.ts).
   // No .me has answered: the address alone, as the top bar shows it (unresolvedPosition), not a placeholder.
   const labelBase = !namespaceReady
-    ? (sharedRootStatus === 'error' ? unresolvedPosition(typeof window !== 'undefined' ? window.location : null) : 'resolviendo…')
+    ? (sharedRootStatus === 'error' ? unresolvedPosition(pageLocation !== undefined ? pageLocation : (typeof window !== 'undefined' ? window.location : null)) : 'resolviendo…')
     : authenticated
     ? beatleExpression
     : (username ? `${username}.${namespaceRootLabel}` : namespaceRootLabel);
@@ -582,7 +587,7 @@ const QRConnect: React.FC<QRConnectProps> = ({ sx, cleakerEndpoint, netgetMonadO
     namespace: labelCut < 0 ? String(labelBase || '') : String(labelBase).slice(0, labelCut),
     path: labelCut < 0 ? semanticPath : String(labelBase).slice(labelCut),
     // the page's exact place: path, query and fragment are part of the surface
-    page: typeof window !== 'undefined' ? window.location : null,
+    page: pageLocation !== undefined ? pageLocation : (typeof window !== 'undefined' ? window.location : null),
     root: sharedRootBinding
       ? {
           status: sharedRootStatus,
