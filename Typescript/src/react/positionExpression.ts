@@ -16,9 +16,12 @@
 //     which the parser reads as surface "localhost/netget". A bare surface is a hostname; with a port or scheme it is a
 //     quoted URI.
 //
-// When is `@ surface` left out?  Only when the namespace is BOUND to this very origin AND the page is at that origin's
-// root (no path, query or fragment) -- the surface then says nothing the namespace does not:
-//     cleaker.me @ cleaker.me   ->   cleaker.me        (but cleaker.me @ cleaker.me/users stays: that is where you are)
+// When is `@ surface` left out?  When the namespace is BOUND to this very origin: the host is then the namespace itself,
+// so it is written once, followed by whatever the place adds after the host:
+//     cleaker.me @ cleaker.me          ->   cleaker.me
+//     cleaker.me @ cleaker.me/users    ->   cleaker.me/users      (the place is still all there, the name only once)
+// The one exception: a semantic path is also there (`cleaker.me/profile`) and the page has its own route -- two paths
+// cannot share one name without reading as one, so that case keeps `cleaker.me/profile @ cleaker.me/users`.
 // "Bound" is a checked fact, not a resemblance of names: the origin the page came from (scheme + host + port, exactly)
 // is the transport that was verified for the namespace, AND that transport answered for that namespace (its own
 // /__surface says so). Two hosts that look alike, a different port, `www.`, a handle under a host: none is bound
@@ -187,9 +190,14 @@ export function surfaceToken(pageUrl: PageLocation, forceScheme = false): string
   return surfaceOf(pageUrl, { forceScheme })?.compact ?? '';
 }
 
-/** The page is at its origin's root: no path, query or fragment beyond what the surface drops as noise. */
-function atOriginRoot(page: PageLocation): boolean {
-  return surfaceOf(page)?.compact === surfaceOf({ protocol: page.protocol, host: page.host })?.compact;
+/**
+ * What the place adds after its host (`/users?q=1#keys`; '' at the origin's root), as the surface writes it. Used when
+ * the namespace IS this origin: the host is then the namespace itself, so it is written once.
+ */
+export function placeAfterHost(page: PageLocation): string {
+  const whole = surfaceOf(page)?.compact ?? '';
+  const host = surfaceOf({ protocol: page.protocol, host: page.host })?.compact ?? '';
+  return host && whole.startsWith(host) ? whole.slice(host.length) : '';
 }
 
 export type PositionExpression = {
@@ -229,8 +237,12 @@ export function positionExpression(input: {
   if (!page || !page.host) return { compact: base, full: base, bound: false };
   const full = `${base} @ ${surfaceOf(page)?.full ?? ''}`;
   const bound = isBoundToPage({ namespace: ns, pageOrigin: page.origin, root: input.root });
-  // bound and at the origin's root: the surface adds nothing. Bound but somewhere inside it: that place is still shown.
-  if (bound) return { compact: atOriginRoot(page) ? base : `${base} @ ${surfaceToken(page)}`, full, bound: true };
+  // bound: the host IS the namespace, so it is written once, with what the place adds after it (nothing at the root)
+  if (bound) {
+    const rest = placeAfterHost(page);
+    const compact = !rest ? base : !path ? `${ns}${rest}` : `${base} @ ${surfaceToken(page)}`;
+    return { compact, full, bound: true };
+  }
   // Not collapsed. If the SCHEME is the only reason (same host and port, confirmed for this namespace), it is printed:
   // `x @ x` would show that a difference exists and then hide which one.
   const schemeExplains = confirmationCovers(ns, input.root) && onlySchemeDiffers(page.origin, input.root!.cleakerEndpoint);

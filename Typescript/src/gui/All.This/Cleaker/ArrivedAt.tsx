@@ -53,6 +53,14 @@ export default function ArrivedAt({ place: initial, nodeId = 'Cleaker.arrivedAt'
             rel="noopener noreferrer"
             onClick={() => forgetArrival()}
             data-gui-node-id={`${nodeId}.go`}
+            // an <a>: without this it takes the theme's link colour, which can vanish on the button's own fill
+            sx={{
+              fontWeight: 700,
+              '&, &:hover, &:visited': {
+                color: (t: any) => t.palette.getContrastText(t.palette.primary.main),
+                textDecoration: 'none',
+              },
+            }}
           >
             Go there
           </Button>

@@ -146,8 +146,12 @@ export function cornerLabel(namespace: string | null, page: { host: string; prot
   if (!namespace) return where;
   // an address is shown as one, never as the namespace the page declared
   if (source === 'address') return `${namespace} (address)`;
-  // the page IS the namespace only at its root; anywhere inside it, where you are is still shown
-  return namespace === page.hostname && where === unresolvedPosition({ protocol: page.protocol, host: page.host }) ? namespace : `${namespace} @ ${where}`;
+  // the page's host IS the namespace: name it once, with what the place adds after the host (`cleaker.me/users#keys`)
+  if (namespace === page.hostname) {
+    const host = unresolvedPosition({ protocol: page.protocol, host: page.host });
+    if (where.startsWith(host)) return `${namespace}${where.slice(host.length)}`;
+  }
+  return `${namespace} @ ${where}`;
 }
 
 export function qrSvg(value: string): string {

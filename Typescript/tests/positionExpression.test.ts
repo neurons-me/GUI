@@ -251,11 +251,13 @@ assert.equal((parseNRPExpression('cleaker.me/') as any).canonical, one.canonical
   const wiki = positionExpression({ namespace: 'ana.cleaker.me', page: at('https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia'), root: null });
   assert.equal(wiki.compact, 'ana.cleaker.me @ es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia', 'a section of a page is a place');
   assert.equal(wiki.full, 'ana.cleaker.me @ "https://es.wikipedia.org/wiki/Pastor_alem%C3%A1n?oldid=1#Historia"');
-  // bound: collapses only at the origin's root; a route inside it is still where you are (after the @, not a node)
+  // bound: the namespace is named once, with what the place adds after the host; a semantic path plus a route keeps the @
   assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://cleaker.me/'), root }), 'cleaker.me');
   assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://cleaker.me/index.html'), root }), 'cleaker.me', 'index.html is the root document');
   const inside = positionExpression({ namespace: 'cleaker.me', page: at('https://cleaker.me/users?q=ana'), root });
-  assert.deepEqual(inside, { compact: 'cleaker.me @ cleaker.me/users?q=ana', full: 'cleaker.me @ "https://cleaker.me/users?q=ana"', bound: true });
+  assert.deepEqual(inside, { compact: 'cleaker.me/users?q=ana', full: 'cleaker.me @ "https://cleaker.me/users?q=ana"', bound: true }, 'named once: the host is the namespace');
+  assert.equal(positionLabel({ namespace: 'cleaker.me', page: at('https://cleaker.me/#keys'), root }), 'cleaker.me#keys');
+  assert.equal(positionLabel({ namespace: 'jabellae.cleaker.me', page: at('https://cleaker.me/users'), root }), 'jabellae.cleaker.me/users', 'a handle bound to the root door: named once too');
   assert.equal(positionLabel({ namespace: 'cleaker.me', path: '/profile', page: at('https://cleaker.me/#notes'), root }), 'cleaker.me/profile @ cleaker.me#notes');
   // the route never becomes the namespace's path: the parser reads it as the surface
   const parsed: any = parseNRPExpression('cleaker.me @ neurons-me.github.io/Cleaker');
