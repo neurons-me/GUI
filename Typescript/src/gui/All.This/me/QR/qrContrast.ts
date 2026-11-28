@@ -81,6 +81,15 @@ export function tintsOf(color: string, mode: 'light' | 'dark'): string[] {
   }
 }
 
+/** A background is light when black reads on it better than white does. Unmeasurable: follow nothing (dark). */
+function isLightBackground(background: string): boolean {
+  try { return getContrastRatio('#000000', background) > getContrastRatio('#ffffff', background); } catch { return false; }
+}
+
+function safeContrast(color: string, background: string): number {
+  try { return contrastOn(color, background); } catch { return 0; }
+}
+
 export type QrMeStatus = 'idle' | 'checking' | 'confirmed' | 'error' | 'off';
 
 type QrPalette = Pick<Palette, 'mode' | 'primary' | 'warning' | 'error' | 'text' | 'background'>;
@@ -120,13 +129,21 @@ export function resolveQrMeColors(
           : undefined;
   const statusColor = family?.[0];
   const [base, stepped] = family ?? [palette.primary.main, palette.primary[step]];
-  // Before giving up on colour, the base itself is mixed toward white (dark mode) / black (light mode) 10% at a time,
-  // so the ink keeps the theme's hue (Seafoam dark stays teal instead of turning near-white). text.primary is last.
-  const candidates = [base, stepped, ...tintsOf(base, palette.mode), palette.text.primary];
+  // Before giving up on colour, the base itself is mixed away from the background 10% at a time -- toward white on a
+  // dark background, toward black on a light one -- so the ink keeps the theme's hue. The direction is the BACKGROUND's,
+  // not the mode's: a caller can put a light bg under a dark-mode QR, where mixing toward white could never pass.
+  // Last resort: whichever of text.primary / black / white reads best on that background.
+  const candidatesOn = (background: string) => {
+    const light = isLightBackground(background);
+    const textFirst = light ? ['#000000', palette.text.primary] : [palette.text.primary, '#ffffff'];
+    return [base, stepped, ...tintsOf(base, light ? 'light' : 'dark'), ...textFirst];
+  };
+  const bestText = (background: string) =>
+    [palette.text.primary, '#000000', '#ffffff'].reduce((a, b) => (safeContrast(b, background) > safeContrast(a, background) ? b : a));
 
   const qrBg = bg ?? palette.background.paper;
-  const qrFg = fg ?? firstContrasting(qrBg, QR_INK_MIN_CONTRAST, candidates, palette.text.primary);
+  const qrFg = fg ?? firstContrasting(qrBg, QR_INK_MIN_CONTRAST, candidatesOn(qrBg), bestText(qrBg));
   const pageBg = palette.background.default ?? palette.background.paper;
-  const ringAccent = firstContrasting(pageBg, QR_RING_MIN_CONTRAST, candidates, palette.text.primary);
+  const ringAccent = firstContrasting(pageBg, QR_RING_MIN_CONTRAST, candidatesOn(pageBg), bestText(pageBg));
   return { statusColor, qrBg, qrFg, ringAccent };
 }

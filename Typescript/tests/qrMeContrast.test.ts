@@ -73,8 +73,14 @@ function aContrastingPrimaryIsKeptExactly() {
 }
 
 function seafoamDarkNoLongerDrawsInkItCannotSee() {
-  const { palette } = palettes.find((p) => p.name === 'Seafoam' && p.mode === 'dark')!;
-  assert.ok(getContrastRatio(palette.primary.main, palette.background.paper) < QR_INK_MIN_CONTRAST, 'Seafoam dark primary still needs a QR tint');
+  // Seafoam dark's primary was the weak case (#396C70, 2.7:1) until 2026-11-27, when the theme's primary was lifted to
+  // read as text (#4F959A, themeTextContrast.test.ts): the real theme now keeps its primary as ink, and the tint rule is
+  // checked with that weak primary.
+  const real = palettes.find((p) => p.name === 'Seafoam' && p.mode === 'dark')!.palette;
+  assert.equal(resolveQrMeColors(real, {}).qrFg, real.primary.main, 'Seafoam dark now draws its own primary');
+  const weak = { ...seafoamDark, color: { ...(seafoamDark as any).color, primary: { $type: 'color', $value: '#396C70' } } };
+  const palette = makeMuiTheme(themeTokens, weak, 'dark').palette;
+  assert.ok(getContrastRatio(palette.primary.main, palette.background.paper) < QR_INK_MIN_CONTRAST, 'the weak Seafoam primary needs a QR tint');
   const c = resolveQrMeColors(palette, {});
   assert.notEqual(c.qrFg, palette.primary.main);
   assert.ok(contrastOn(c.qrFg, c.qrBg) >= QR_INK_MIN_CONTRAST);

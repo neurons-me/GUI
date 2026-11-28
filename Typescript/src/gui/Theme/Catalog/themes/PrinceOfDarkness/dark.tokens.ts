@@ -5,7 +5,7 @@ const darkTokens = {
   "id": "PrinceOfDarkness-dark",
   "$description": "Prince Of Darkness Dark Theme — gothic cyber-metal aesthetic for This.GUI, with neutral elegance",
   "color": {
-    "primary": { "$type": "color", "$value": "#7a3b5d" }, // Burdeos tenue, más sofisticado
+    "primary": { "$type": "color", "$value": "#B66892" }, // Burdeos tenue, más sofisticado
     "secondary": { "$type": "color", "$value": "#5a3d9a" }, // Púrpura oscuro gótico
     "accent": { "$type": "color", "$value": "#00d1b2" }, // Verde-azul metálico suave
     "icon": { "$type": "color", "$value": "#c8c8c8" },

@@ -6,7 +6,7 @@ const darkTokens = {
   "id": "Seafoam-dark",
   "$description": "Seafoam Dark Theme — a tranquil, feminine oceanic palette blending deep teal, blush, and warm sand accents for a serene night mood.",
   "color": {
-    "primary": { "$type": "color", "$value": "#396C70" }, // deep sea green, lifted a little so it reads on the night background
+    "primary": { "$type": "color", "$value": "#4F959A" }, // deep sea green, lifted to 4.6:1 on paper so text in primary reads (was #396C70, 2.7:1)
     "secondary": { "$type": "color", "$value": "#529096" }, // misty teal, lifted with the primary
     "accent": { "$type": "color", "$value": "#F0B7A4" }, // soft blush coral
     "icon": { "$type": "color", "$value": "#CBD6D4" }, // soft silver

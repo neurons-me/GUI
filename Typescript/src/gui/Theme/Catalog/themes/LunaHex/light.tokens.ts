@@ -38,7 +38,7 @@ const lightTokens = {
     },
     "link": {
       "$type": "color",
-      "$value": "#a67be9"
+      "$value": "#874DE1"
     },
     "linkVisited": {
       "$type": "color",

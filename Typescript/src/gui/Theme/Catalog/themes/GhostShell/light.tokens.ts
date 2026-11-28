@@ -3,7 +3,7 @@ const lightTokens = {
   "id": "LunaHex-light",
   "extends": "global.tokens.json",
   "color": {
-    "primary": { "$type": "color", "$value": "#00c77f" },
+    "primary": { "$type": "color", "$value": "#008051" },
     "secondary": { "$type": "color", "$value": "#00b8ff" },
     "icon": { "$type": "color", "$value": "#007f73" },
     "default": { "$type": "color", "$value": "#f4f8f6" },
@@ -11,7 +11,7 @@ const lightTokens = {
     "nav": { "$type": "color", "$value": "#f1fef9" },
     "textPrimary": { "$type": "color", "$value": "#061a14" },
     "textSecondary": { "$type": "color", "$value": "#34584f" },
-    "link": { "$type": "color", "$value": "#009f77" },
+    "link": { "$type": "color", "$value": "#008060" },
     "linkVisited": { "$type": "color", "$value": "#007866" },
     "border": { "$type": "color", "$value": "rgba(0,160,120,0.25)" },
     "section": {

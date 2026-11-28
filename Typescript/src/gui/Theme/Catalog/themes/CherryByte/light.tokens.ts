@@ -4,7 +4,7 @@ const lightTokens = {
   "id": "cherryByte-light",
   "extends": "global.tokens.json",
   "color": {
-    "primary": { "$type": "color", "$value": "#d6336c" }, // Vibrant cherry pink
+    "primary": { "$type": "color", "$value": "#CE2963" }, // Vibrant cherry pink
     "secondary": { "$type": "color", "$value": "#a8457a" }, // Muted plum rose
     "accent": { "$type": "color", "$value": "#ff80ab" }, // Luminous magenta accent
     "icon": { "$type": "color", "$value": "#643b4c" },

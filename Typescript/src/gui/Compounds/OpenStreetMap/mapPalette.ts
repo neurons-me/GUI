@@ -22,7 +22,7 @@
  *                 a darker/lighter variant of its own colour
  *   accent        theme.custom.accent (the manifest's `color.accent`) replaces primary for the
  *                 primary / port / highlight roles when primary is under 3:1 on land and the
- *                 accent contrasts better (PrinceOfDarkness dark)
+ *                 accent contrasts better (a primary under the theme's text contrast, e.g. PrinceOfDarkness dark before 2026-11-27)
  *   states        busy = warning, done = success, highlight = primary (+ glow)
  *   attribution   background.paper @ 85 % / text.secondary
  *   overlay       legend / chip surfaces: background.paper @ 90 %, border = divider (or a
